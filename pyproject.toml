@@ -1,0 +1,11 @@
+[project]
+name = "ttc3018-control"
+version = "0.1.0"
+description = "A safety-focused GRBL controller for the Two Trees TTC 3018"
+requires-python = ">=3.14"
+dependencies = ["pyserial==3.5"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
