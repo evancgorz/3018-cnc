@@ -184,6 +184,8 @@ streaming pipeline.
 - [x] Reject crossing overlapping planar height fields while resolving
   consistently lower overlapping faces as occluded surfaces for Wedge-style
   machining.
+- [x] Revalidate serialized loop-parent metadata against projected geometry and
+  reject zero-length projected edges before topology or toolpath planning.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -237,3 +239,4 @@ streaming pipeline.
 | 2026-08-30 | `508be59` | Added physical stock bounds and transformed work-zero display to the Qt preview. |
 | 2026-08-30 | `d910cbe` | Ordered detected-feature paths by validated operation dependencies. |
 | 2026-08-30 | `20d6ec1` | Added fail-closed detection for ambiguous overlapping STEP surface heights. |
+| 2026-08-30 | `ed45647` | Validated serialized STEP topology metadata and rejected degenerate loop edges. |
