@@ -74,7 +74,6 @@ class MachineSession:
             return ActionOutcome(False, str(exc))
         assert self.machine_position is not None
         self.envelope.establish(self.machine_position, self.profile)
-        self.invalidate_work_zero()
         return ActionOutcome(True, "Virtual machine reference established at the current position.")
 
     def invalidate_reference(self, reason: str) -> None:
