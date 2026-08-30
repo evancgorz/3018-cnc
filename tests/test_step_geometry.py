@@ -27,6 +27,23 @@ def _write_box(path: Path, width: float = 40, height: float = 25, depth: float =
     writer.Write(str(path))
 
 
+def _write_compound_boxes(path: Path) -> None:
+    from OCP.BRep import BRep_Builder
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+    from OCP.TopoDS import TopoDS_Compound
+    from OCP.gp import gp_Pnt
+
+    compound = TopoDS_Compound()
+    builder = BRep_Builder()
+    builder.MakeCompound(compound)
+    builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 20, 15, 5).Shape())
+    builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(30, 0, 0), 10, 15, 5).Shape())
+    writer = STEPControl_Writer()
+    writer.Transfer(compound, STEPControl_AsIs)
+    writer.Write(str(path))
+
+
 def _write_rectangular_pocket(path: Path, *, through: bool = False) -> None:
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
     from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
@@ -96,6 +113,31 @@ def test_load_step_isolated_round_trips_model(tmp_path: Path) -> None:
     assert (model.width, model.height, model.thickness) == pytest.approx((40, 5, 25), abs=0.001)
     assert model.surface_patches
     assert all(patch.loops for patch in model.surface_patches)
+
+
+def test_load_step_preserves_disconnected_coplanar_compound_faces(tmp_path: Path) -> None:
+    path = tmp_path / "compound.step"
+    _write_compound_boxes(path)
+
+    model = load_step_isolated(path)
+
+    assert model.width == pytest.approx(40, abs=0.001)
+    assert model.height == pytest.approx(15, abs=0.001)
+    assert len(model.loops) == 2
+    assert model.outer_loop_indices == (0, 1)
+    assert model.resolved_loop_parents == (None, None)
+
+    job = generate_step_gcode(
+        model,
+        mode="Profile cutout",
+        stock_width=42,
+        stock_height=17,
+        tool_diameter=2,
+        stock_thickness=5,
+        tab_count=0,
+    )
+    assert job.stroke_count == 2
+    assert parse_gcode(job.gcode).bounds.maximum.x == pytest.approx(42, abs=0.001)
 
 
 @pytest.mark.parametrize("through", [False, True])

@@ -415,7 +415,25 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         selected = [candidate for candidate in candidates if candidate[1] == requested_axis]
         if not selected:
             raise StepImportError(f"No closed {requested_axis} planar face was found in this STEP file")
-    _face_area, selected_axis, loops, normal, face_coordinate = max(selected, key=lambda candidate: candidate[0])
+    chosen = max(selected, key=lambda candidate: candidate[0])
+    _face_area, selected_axis, _chosen_loops, normal, face_coordinate = chosen
+    axis_index = {"YZ": 0, "XZ": 1, "XY": 2}[selected_axis]
+    chosen_sign = 1 if normal[axis_index] >= 0 else -1
+    # A compound can contain several disconnected solids whose machining
+    # faces are coplanar.  Preserve every face on the selected plane and
+    # normal orientation instead of silently machining only the largest one.
+    matching_faces = [
+        candidate
+        for candidate in selected
+        if candidate[1] == selected_axis
+        and abs(candidate[4] - face_coordinate) <= 1e-6
+        and (1 if candidate[3][axis_index] >= 0 else -1) == chosen_sign
+    ]
+    loops = tuple(
+        loop
+        for candidate in matching_faces
+        for loop in candidate[2]
+    ) or tuple(_chosen_loops)
 
     all_points = [point for loop in loops for point in loop.points]
     min_x = min(point.x for point in all_points)
