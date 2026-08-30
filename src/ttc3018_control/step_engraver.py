@@ -802,6 +802,7 @@ def _planar_surface_paths(
     if not transformed:
         return (), 0.0
     patch_regions = [(_even_odd_region(patch.loops), patch) for patch in transformed]
+    _validate_surface_patch_arrangement(patch_regions)
     current = region.buffer(-tool_diameter / 2, join_style=2)
     if current.is_empty:
         return (), 0.0
@@ -835,6 +836,49 @@ def _planar_surface_paths(
         connected.append(active)
     minimum_depth = min(point[2] for path in connected for point in path)
     return tuple(connected), minimum_depth
+
+
+def _validate_surface_patch_arrangement(
+    patch_regions: Iterable[tuple[object, PlanarSurfacePatch]],
+    tolerance: float = 0.001,
+) -> None:
+    """Reject overlapping patches whose height fields disagree."""
+    entries = tuple(patch_regions)
+    for index, (first_region, first_patch) in enumerate(entries):
+        for second_region, second_patch in entries[index + 1:]:
+            overlap = first_region.intersection(second_region)
+            if overlap.is_empty or overlap.area <= 1e-7:
+                continue
+            differences = [
+                first_patch.height_at(x, y) - second_patch.height_at(x, y)
+                for x, y in _surface_geometry_vertices(overlap)
+            ]
+            if (
+                differences
+                and min(differences) < -tolerance
+                and max(differences) > tolerance
+            ):
+                raise ValueError(
+                    "Overlapping planar STEP surface patches have ambiguous heights"
+                )
+
+
+def _surface_geometry_vertices(geometry) -> tuple[tuple[float, float], ...]:
+    """Return boundary vertices for robust comparison of affine surfaces."""
+    if hasattr(geometry, "geoms"):
+        return tuple(
+            point
+            for child in geometry.geoms
+            for point in _surface_geometry_vertices(child)
+        )
+    if hasattr(geometry, "exterior"):
+        points = list(geometry.exterior.coords)
+        points.extend(point for ring in geometry.interiors for point in ring.coords)
+        return tuple((float(x), float(y)) for x, y in points)
+    if hasattr(geometry, "coords"):
+        return tuple((float(x), float(y)) for x, y in geometry.coords)
+    point = geometry.representative_point()
+    return ((float(point.x), float(point.y)),)
 
 
 def _transformed_surface_patches(

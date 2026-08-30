@@ -7,8 +7,8 @@ import pytest
 from shapely.geometry import Polygon
 
 from ttc3018_control.gcode import parse_gcode
-from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _pocket_path_cost, _pocket_strokes, _schedule_depth_groups, _scheduled_path_cost, generate_step_gcode
-from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
+from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _pocket_path_cost, _pocket_strokes, _planar_surface_paths, _schedule_depth_groups, _scheduled_path_cost, generate_step_gcode
+from ttc3018_control.step_geometry import PlanarLoop, PlanarSurfacePatch, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
 def _model() -> StepPlanarModel:
@@ -244,6 +244,17 @@ def test_wedge_planar_surface_generates_varying_bounded_gcode_without_cliff_brid
         <= max(0.5, 1.75 * math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)) + 0.01
         for segment in cutting_segments
     )
+
+
+def test_planar_surface_rejects_overlapping_patches_with_different_heights() -> None:
+    boundary = PlanarLoop(tuple(Point2D(x, y) for x, y in ((0, 0), (20, 0), (20, 10), (0, 10))))
+    patches = (
+        PlanarSurfacePatch((boundary,), 0, 0, 0),
+        PlanarSurfacePatch((boundary,), -0.1, 0, 1),
+    )
+
+    with pytest.raises(ValueError, match="ambiguous heights"):
+        _planar_surface_paths(patches, "Top (XY)", Polygon(((0, 0), (20, 0), (20, 10), (0, 10))), 3, 0, 0)
 
 
 def test_detected_features_keep_individual_depths() -> None:
