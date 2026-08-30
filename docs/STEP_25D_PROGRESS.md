@@ -32,11 +32,11 @@ streaming pipeline.
 
 ### 1. Dependency and import boundary
 
-- [ ] Select and document the OpenCASCADE/OCP dependency and supported Python
-  versions.
-- [ ] Add a small STEP import adapter; do not implement a STEP parser or
+- [x] Select and document the OpenCASCADE/OCP dependency and supported Python
+  versions (`cadquery-ocp` 7.9.3.1.1; Python 3.14 wheel verified).
+- [x] Add a small STEP import adapter; do not implement a STEP parser or
   geometric kernel in this repository.
-- [ ] Add clear import errors when OCP is unavailable or a STEP file is invalid.
+- [x] Add clear import errors when OCP is unavailable or a STEP file is invalid.
 - [ ] Add representative planar STEP fixtures that are safe to store in the
   repository.
 
@@ -55,7 +55,7 @@ streaming pipeline.
 - [ ] Classify outer boundaries, holes, and islands.
 - [ ] Preserve loop winding and identify open or self-intersecting geometry.
 - [ ] Add a geometry normalization layer independent of OCP objects.
-- [ ] Add deterministic geometry fixtures and unit tests.
+- [x] Add deterministic geometry unit tests using an OCC-generated planar box.
 
 ### 4. 2.5D toolpath generation
 
@@ -117,3 +117,4 @@ streaming pipeline.
 | Date | Commit | Update |
 | --- | --- | --- |
 | 2026-08-29 | `6090a37` | Baseline Qt controller, preview, safety, and agent-running-instance guard. |
+| 2026-08-29 | pending | Added the OCP/Shapely dependency boundary and normalized planar STEP importer. |
