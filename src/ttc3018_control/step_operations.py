@@ -32,11 +32,9 @@ def build_step_operation_plan(
         # Every root loop is a retained-part boundary.  Only contained loops
         # represent internal through-cutouts; disconnected roots must not be
         # mistaken for holes simply because one happens to be smaller.
-        inner = tuple(
-            index
-            for index, parent in enumerate(model.resolved_loop_parents)
-            if parent is not None
-        )
+        roles = model.loop_roles
+        inner = tuple(index for index, role in enumerate(roles) if role == "cutout")
+        outer = tuple(index for index, role in enumerate(roles) if role in {"outer", "island"})
         operations = []
         if inner:
             operations.append(
@@ -53,6 +51,7 @@ def build_step_operation_plan(
                 "outer-profile",
                 "Outer profile",
                 -(stock_thickness + breakthrough),
+                outer,
                 depends_on=("internal-through",) if inner else (),
                 strategy="compensated outer profile with retention tabs",
             )

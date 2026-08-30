@@ -105,4 +105,43 @@ def test_profile_plan_treats_disconnected_roots_as_part_boundaries() -> None:
 
     assert len(operations) == 1
     assert operations[0].operation_id == "outer-profile"
-    assert operations[0].feature_indices == ()
+    assert operations[0].feature_indices == (0, 1)
+
+
+def test_profile_plan_uses_alternating_loop_roles_for_nested_part_and_cutout() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    model = StepPlanarModel(
+        Path("nested-profile.step"),
+        (square(0, 0, 40), square(5, 5, 30), square(10, 10, 20), square(15, 15, 10)),
+        5,
+        5,
+        (0, 0, 0, 40, 40, 5),
+        loop_parents=(None, 0, 1, 2),
+    )
+
+    operations = build_step_operation_plan(
+        model,
+        "Profile cutout",
+        depth=-5.2,
+        stock_thickness=5,
+        breakthrough=0.2,
+    )
+
+    assert [operation.operation_id for operation in operations] == [
+        "internal-through",
+        "outer-profile",
+    ]
+    assert operations[0].feature_indices == (1, 3)
+    assert operations[1].feature_indices == (0, 2)
+    assert operations[1].depends_on == ("internal-through",)
+    validate_operation_plan(operations)
