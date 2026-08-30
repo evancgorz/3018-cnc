@@ -123,8 +123,10 @@ def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
     view_model.stop_live_jog()
     assert connection.realtime[-1] == b"\x85"
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
+    # The machine reports a later position after decelerating, but the target
+    # must remain the nearest whole millimeter captured at release (X10).
+    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:11.40,0,0>", datetime.now()))
+    assert connection.lines[-1] == b"$J=G91 G21 X-1.4 F500\n"
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
 
     view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
@@ -136,3 +138,8 @@ def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
     view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))
     assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
+
+    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
+    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10, 0, 0)))
+    view_model.jog("X", 0.1)
+    assert connection.lines[-1] == b"$J=G91 G21 X0.1 F500\n"

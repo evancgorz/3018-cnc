@@ -84,6 +84,7 @@ class ControllerViewModel(QObject):
         self._live_jog_direction = 0.0
         self._live_jog_first_distance: float | None = None
         self._live_jog_position: Position | None = None
+        self._live_jog_stop_target: float | None = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
         self._wifi_connecting = False
@@ -841,6 +842,7 @@ class ControllerViewModel(QObject):
         self._live_jog_direction = direction
         self._live_jog_first_distance = distance
         self._live_jog_position = position
+        self._live_jog_stop_target = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
         self._send_next_live_jog()
@@ -849,6 +851,16 @@ class ControllerViewModel(QObject):
     def stop_live_jog(self) -> None:
         if self._live_jog_axis is None:
             return
+        position = self.session.virtual_position if self.session.envelope.trusted else self.session.machine_position
+        if position is None:
+            self._clear_live_jog()
+            self._set_notice("Live jog stopped; release position was unavailable")
+            return
+        axis = self._live_jog_axis
+        current = getattr(position, axis.lower())
+        # Latch the requested endpoint before cancellation/deceleration. The
+        # later GRBL Idle report may be farther along than the release instant.
+        self._live_jog_stop_target = math.floor(current + 0.5)
         self._live_jog_axis_last = self._live_jog_axis
         self._live_jog_axis = None
         self._live_jog_first_distance = None
@@ -1331,10 +1343,11 @@ class ControllerViewModel(QObject):
             return
         axis = self._live_jog_axis_last or "X"
         current = getattr(position, axis.lower())
-        # Finish at the nearest whole millimeter after the realtime jog is
-        # cancelled. The correction is intentionally small and may be either
-        # direction because the requested endpoint is the nearest integer.
-        target = math.floor(current + 0.5)
+        target = self._live_jog_stop_target
+        if target is None:
+            self._clear_live_jog()
+            self._set_notice("Live jog stopped; release target was unavailable")
+            return
         distance = target - current
         if abs(distance) <= 0.001:
             self._clear_live_jog()
@@ -1362,6 +1375,7 @@ class ControllerViewModel(QObject):
         self._live_jog_direction = 0.0
         self._live_jog_first_distance = None
         self._live_jog_position = None
+        self._live_jog_stop_target = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
 
