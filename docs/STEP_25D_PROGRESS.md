@@ -74,6 +74,8 @@ streaming pipeline.
 - [x] Use centered compensated-pocket scan bands so small circular and slot
   features do not lose a tangent crescent at the first or last scanline; keep
   the swept-cutter simulation as the acceptance gate.
+- [x] Reject non-finite stock, depth, feed, tool, surface-height, and feature
+  metadata before STEP geometry or G-code generation.
 - [x] Build and serialize deterministic projected-loop containment metadata,
   attach parent indices to detected features, and reject partial overlaps or
   self-intersecting loops before machining.
@@ -261,3 +263,4 @@ streaming pipeline.
 | 2026-08-30 | `9ca8e32` | Exposed STEP operation feature and strategy metadata in Qt. |
 | 2026-08-30 | `188ae74` | Added exact-program rapid XY safe-height validation. |
 | 2026-08-30 | `bcb4026` | Fixed small-pocket scan coverage with centered lanes and added removed-cylinder tool-size regressions. |
+| 2026-08-30 | `d7b783b` | Added fail-closed validation for non-finite STEP settings and normalized metadata. |
