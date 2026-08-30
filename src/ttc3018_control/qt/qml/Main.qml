@@ -59,6 +59,7 @@ ApplicationWindow {
     }
 
     component MutedLabel: Label {
+        Layout.fillWidth: true
         color: window.palette.muted
         font.pixelSize: 12
         wrapMode: Text.Wrap
@@ -182,8 +183,8 @@ ApplicationWindow {
                     Label { text: "CONTROL"; color: window.palette.subtle; font.pixelSize: 11; font.letterSpacing: 1.5; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Item { Layout.fillWidth: true }
-                Pill { label: appViewModel.connection; tone: window.palette.warning }
-                Pill { label: appViewModel.grbl_state; tone: window.palette.muted }
+                Pill { label: appViewModel ? appViewModel.connection : "Disconnected"; tone: window.palette.warning }
+                Pill { label: appViewModel ? appViewModel.grbl_state : "Unknown"; tone: window.palette.muted }
                 SecondaryButton { text: "Connect"; onClicked: appViewModel.show_connection_notice() }
             }
 
@@ -225,12 +226,12 @@ ApplicationWindow {
             anchors.leftMargin: 22
             anchors.rightMargin: 22
             spacing: 26
-            StatusMetric { name: "Machine"; value: appViewModel.machine_position; tone: window.palette.text }
-            StatusMetric { name: "Work"; value: appViewModel.work_position; tone: window.palette.text }
-            StatusMetric { name: "Reference"; value: appViewModel.reference; tone: window.palette.warning }
-            StatusMetric { name: "Work zero"; value: appViewModel.work_zero; tone: window.palette.warning }
+            StatusMetric { name: "Machine"; value: appViewModel ? appViewModel.machine_position : "X—  Y—  Z—"; tone: window.palette.text }
+            StatusMetric { name: "Work"; value: appViewModel ? appViewModel.work_position : "X—  Y—  Z—"; tone: window.palette.text }
+            StatusMetric { name: "Reference"; value: appViewModel ? appViewModel.reference : "Position unknown"; tone: window.palette.warning }
+            StatusMetric { name: "Work zero"; value: appViewModel ? appViewModel.work_zero : "Not confirmed"; tone: window.palette.warning }
             Item { Layout.fillWidth: true }
-            StatusMetric { name: "Spindle"; value: appViewModel.spindle; tone: window.palette.muted }
+            StatusMetric { name: "Spindle"; value: appViewModel ? appViewModel.spindle : "Off"; tone: window.palette.muted }
         }
     }
 
@@ -242,7 +243,7 @@ ApplicationWindow {
         // Prepare
         Item {
             RowLayout { anchors.fill: parent; spacing: 14
-                Panel { Layout.preferredWidth: 210; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 210; Layout.minimumWidth: 210; Layout.maximumWidth: 210; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 10
                         SectionTitle { text: "Create or load" }
                         MutedLabel { text: "Start with an existing G-code file or create a centerline engraving." }
@@ -262,7 +263,7 @@ ApplicationWindow {
                 Panel { Layout.fillWidth: true; Layout.fillHeight: true
                     ToolpathCanvas { anchors.fill: parent; anchors.margins: 18; modeLabel: "PREPARE" }
                 }
-                Panel { Layout.preferredWidth: 310; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 310; Layout.minimumWidth: 310; Layout.maximumWidth: 310; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 13
                         SectionTitle { text: "Job inspector" }
                         MutedLabel { text: "Select a job source to edit its settings and see the exact centerline toolpath." }
@@ -282,7 +283,7 @@ ApplicationWindow {
                 Panel { Layout.fillWidth: true; Layout.fillHeight: true
                     ToolpathCanvas { anchors.fill: parent; anchors.margins: 18; modeLabel: "PREVIEW"; showJob: true }
                 }
-                Panel { Layout.preferredWidth: 355; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 355; Layout.minimumWidth: 355; Layout.maximumWidth: 355; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 13
                         SectionTitle { text: "Preflight" }
                         Pill { label: "No validated job loaded"; tone: window.palette.warning }
@@ -309,7 +310,7 @@ ApplicationWindow {
         // Machine
         Item {
             RowLayout { anchors.fill: parent; spacing: 14
-                Panel { Layout.preferredWidth: 210; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 210; Layout.minimumWidth: 210; Layout.maximumWidth: 210; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 8
                         SectionTitle { text: "Machine" }
                         Repeater { model: ["Status", "Connection", "Machine profile", "Coordinates", "Console"]
@@ -323,7 +324,8 @@ ApplicationWindow {
                     ToolpathCanvas { anchors.fill: parent; anchors.margins: 18; modeLabel: "MACHINE"; showEnvelope: true }
                 }
                 Panel { Layout.preferredWidth: 365; Layout.minimumWidth: 365; Layout.maximumWidth: 365; Layout.fillHeight: true
-                    ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 12
+                    ScrollView { anchors.fill: parent; anchors.margins: 18; clip: true; contentWidth: availableWidth
+                    ColumnLayout { width: parent.width; spacing: 12
                         SectionTitle { text: "Position the machine" }
                         MutedLabel { text: "Jogging remains disabled until a shared motion service is connected to this Qt workspace." }
                         RowLayout { Layout.fillWidth: true
@@ -363,6 +365,7 @@ ApplicationWindow {
                             delegate: SecondaryButton { Layout.fillWidth: true; text: modelData; enabled: false }
                         }
                     }
+                    }
                 }
             }
         }
@@ -370,7 +373,7 @@ ApplicationWindow {
         // Guided setup
         Item {
             RowLayout { anchors.fill: parent; spacing: 14
-                Panel { Layout.preferredWidth: 265; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 265; Layout.minimumWidth: 265; Layout.maximumWidth: 265; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 6
                         SectionTitle { text: "Guided setup" }
                         MutedLabel { text: "A clear, safety-gated path from connection to engraving." }
@@ -405,7 +408,7 @@ ApplicationWindow {
         // Commissioning
         Item {
             RowLayout { anchors.fill: parent; spacing: 14
-                Panel { Layout.preferredWidth: 300; Layout.fillHeight: true
+                Panel { Layout.preferredWidth: 300; Layout.minimumWidth: 300; Layout.maximumWidth: 300; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 10
                         SectionTitle { text: "Commissioning" }
                         MutedLabel { text: "Optional hardware setup for switches, homing, limits, and a touch probe." }
