@@ -18,7 +18,7 @@ def _model() -> StepPlanarModel:
     return StepPlanarModel(Path("plate.step"), (outer, hole), 5, 5, (0, 0, 0, 40, 25, 5))
 
 
-@pytest.mark.parametrize("mode", ["Engraving", "Outside contour", "Inside contour", "Pocket", "Hole"])
+@pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole"])
 def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     job = generate_step_gcode(
         _model(), mode=mode, stock_width=50, stock_height=35, zero_location="Center", depth=-1, passes=2
@@ -26,10 +26,54 @@ def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
 
     program = parse_gcode(job.gcode)
 
-    assert program.bounds.minimum.z == pytest.approx(-1)
+    expected_depth = -5.2 if mode == "Profile cutout" else -1
+    assert program.bounds.minimum.z == pytest.approx(expected_depth)
     assert program.bounds.maximum.z == pytest.approx(3)
     assert job.stroke_count > 0
-    assert job.gcode.count("G1 Z") == job.stroke_count * 2
+    if mode == "Profile cutout":
+        assert job.gcode.count("G1 Z") >= job.stroke_count * 2
+    else:
+        assert job.gcode.count("G1 Z") == job.stroke_count * 2
+
+
+def test_profile_cutout_orders_inner_first_and_leaves_outer_tabs() -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode="Profile cutout",
+        stock_width=50,
+        stock_height=35,
+        zero_location="Center",
+        tool_diameter=3,
+        stock_thickness=5,
+        breakthrough=0.2,
+        passes=3,
+        tab_count=4,
+        tab_width=4,
+        tab_height=0.8,
+    )
+    program = parse_gcode(job.gcode)
+
+    inner_x = [point[0] for point in job.strokes[0]]
+    outer_x = [point[0] for point in job.strokes[-1]]
+    assert max(inner_x) - min(inner_x) == pytest.approx(5, abs=0.05)
+    assert max(outer_x) - min(outer_x) == pytest.approx(43, abs=0.05)
+    assert program.bounds.minimum.z == pytest.approx(-5.2)
+    assert "G1 Z-4.2 F100" in job.gcode
+    assert job.stock_thickness == 5
+    assert job.breakthrough == pytest.approx(0.2)
+    assert job.tab_count == 4
+
+
+def test_profile_cutout_rejects_invalid_through_cut_and_tabs() -> None:
+    with pytest.raises(ValueError, match="Stock thickness"):
+        generate_step_gcode(_model(), mode="Profile cutout", stock_thickness=0)
+    with pytest.raises(ValueError, match="Tab height"):
+        generate_step_gcode(_model(), mode="Profile cutout", stock_thickness=2, tab_height=2)
+    with pytest.raises(ValueError, match="too short"):
+        generate_step_gcode(
+            _model(), mode="Profile cutout", stock_width=50, stock_height=35,
+            zero_location="Center", stock_thickness=5, tab_count=12, tab_width=20,
+        )
 
 
 def test_outside_contour_rejects_stock_that_cannot_contain_tool_offset() -> None:

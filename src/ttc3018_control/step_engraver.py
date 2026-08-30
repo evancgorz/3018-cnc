@@ -6,14 +6,14 @@ from dataclasses import dataclass
 import math
 from typing import Iterable
 
-from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Polygon
+from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
 from .step_geometry import Point2D, PlanarLoop, StepPlanarModel
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Engraving", "Outside contour", "Inside contour", "Pocket", "Hole")
+STEP_MODES = ("Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -31,6 +31,11 @@ class StepMachining:
     passes: int
     stroke_count: int
     strokes: tuple[Stroke, ...]
+    stock_thickness: float | None = None
+    breakthrough: float = 0.0
+    tab_count: int = 0
+    tab_width: float = 0.0
+    tab_height: float = 0.0
 
 
 def generate_step_gcode(
@@ -48,8 +53,20 @@ def generate_step_gcode(
     cut_feed: float = 300.0,
     plunge_feed: float = 100.0,
     spindle_rpm: int | None = None,
+    stock_thickness: float | None = None,
+    breakthrough: float = 0.2,
+    tab_count: int = 4,
+    tab_width: float = 4.0,
+    tab_height: float = 0.8,
 ) -> StepMachining:
-    _validate_settings(model, mode, orientation, zero_location, tool_diameter, depth, passes, safe_z, cut_feed, plunge_feed, spindle_rpm)
+    resolved_thickness = float(stock_thickness) if stock_thickness is not None else float(model.thickness)
+    if mode == "Profile cutout":
+        depth = -(resolved_thickness + breakthrough)
+    _validate_settings(
+        model, mode, orientation, zero_location, tool_diameter, depth, passes,
+        safe_z, cut_feed, plunge_feed, spindle_rpm,
+        resolved_thickness, breakthrough, tab_count, tab_width, tab_height,
+    )
     loops = tuple(_transform_loop(loop, orientation) for loop in model.loops)
     loop_bounds = _loop_bounds(loops)
     model_width, model_height = loop_bounds[4], loop_bounds[5]
@@ -64,7 +81,8 @@ def generate_step_gcode(
     offset_y = 0.0 if zero_location == "Lower-left" else (resolved_stock_height - model_height) / 2
     loops = tuple(_translate_loop(loop, offset_x, offset_y) for loop in loops)
     region = _even_odd_region(loops)
-    strokes = _toolpaths(model, loops, region, mode, tool_diameter)
+    profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
+    strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
@@ -78,12 +96,22 @@ def generate_step_gcode(
     if spindle_rpm is not None:
         commands.append(f"M3 S{spindle_rpm}")
     commands.append(f"G0 Z{safe_z:g}")
+    if mode == "Profile cutout":
+        commands.append(
+            f"; Through cut: stock {resolved_thickness:g} mm + breakthrough {breakthrough:g} mm; "
+            f"outer tabs {tab_count} x {tab_width:g} mm, height {tab_height:g} mm"
+        )
     for pass_index in range(1, passes + 1):
         pass_depth = depth * pass_index / passes
-        for stroke in strokes:
+        paths = profile_paths if mode == "Profile cutout" else [(stroke, False) for stroke in strokes]
+        for stroke, is_outer in paths:
             first = stroke[0]
             commands.extend((f"G0 X{_fmt(first[0])} Y{_fmt(first[1])}", f"G1 Z{_fmt(pass_depth)} F{plunge_feed:g}"))
-            commands.extend(f"G1 X{_fmt(x)} Y{_fmt(y)} F{cut_feed:g}" for x, y in stroke[1:])
+            if is_outer and tab_count:
+                tab_floor = -(resolved_thickness - tab_height)
+                commands.extend(_tabbed_profile_commands(stroke, pass_depth, tab_floor, tab_count, tab_width, cut_feed, plunge_feed))
+            else:
+                commands.extend(f"G1 X{_fmt(x)} Y{_fmt(y)} F{cut_feed:g}" for x, y in stroke[1:])
             commands.append(f"G0 Z{safe_z:g}")
     commands.extend((f"G0 Z{safe_z:g}", "G0 X0 Y0", "M5", "M2"))
     return StepMachining(
@@ -98,6 +126,11 @@ def generate_step_gcode(
         passes,
         len(strokes),
         tuple(strokes),
+        resolved_thickness if mode == "Profile cutout" else None,
+        breakthrough if mode == "Profile cutout" else 0.0,
+        tab_count if mode == "Profile cutout" else 0,
+        tab_width if mode == "Profile cutout" else 0.0,
+        tab_height if mode == "Profile cutout" else 0.0,
     )
 
 
@@ -113,6 +146,11 @@ def _validate_settings(
     cut_feed: float,
     plunge_feed: float,
     spindle_rpm: int | None,
+    stock_thickness: float,
+    breakthrough: float,
+    tab_count: int,
+    tab_width: float,
+    tab_height: float,
 ) -> None:
     if not model.loops:
         raise ValueError("The imported model contains no planar loops")
@@ -141,6 +179,17 @@ def _validate_settings(
         raise ValueError("Cut feed must be 1–3000 and plunge feed 1–1000 mm/min")
     if spindle_rpm is not None and not 1 <= spindle_rpm <= 24000:
         raise ValueError("Spindle RPM must be between 1 and 24000")
+    if mode == "Profile cutout":
+        if not 0.1 <= stock_thickness <= 20:
+            raise ValueError("Stock thickness must be between 0.1 and 20 mm")
+        if not 0 <= breakthrough <= 2:
+            raise ValueError("Breakthrough must be between 0 and 2 mm")
+        if not isinstance(tab_count, int) or not 0 <= tab_count <= 12:
+            raise ValueError("Tab count must be a whole number from 0 to 12")
+        if tab_count and not 0.5 <= tab_width <= 20:
+            raise ValueError("Tab width must be between 0.5 and 20 mm")
+        if tab_count and not 0.1 <= tab_height < stock_thickness:
+            raise ValueError("Tab height must be at least 0.1 mm and less than stock thickness")
 
 
 def _transform_loop(loop: PlanarLoop, orientation: str) -> PlanarLoop:
@@ -185,6 +234,61 @@ def _toolpaths(model: StepPlanarModel, loops: tuple[PlanarLoop, ...], region, mo
     if mode == "Hole":
         return _hole_strokes(loops, tool_diameter)
     return []
+
+
+def _profile_cutout_paths(region, tool_diameter: float) -> list[tuple[Stroke, bool]]:
+    """Return compensated inner paths first and outer profiles last."""
+    radius = tool_diameter / 2
+    polygons = [region] if isinstance(region, Polygon) else list(region.geoms) if isinstance(region, MultiPolygon) else []
+    inner_paths: list[tuple[Stroke, bool]] = []
+    outer_paths: list[tuple[Stroke, bool]] = []
+    for polygon in polygons:
+        for ring in polygon.interiors:
+            cutout = Polygon(ring)
+            compensated = cutout.buffer(-radius, join_style=2)
+            if compensated.is_empty:
+                raise ValueError("An inner cutout is too small for the selected tool diameter")
+            inner_paths.extend((stroke, False) for stroke in _strokes_from_geometry(compensated.boundary))
+        compensated_outer = Polygon(polygon.exterior).buffer(radius, join_style=2)
+        outer_paths.extend((stroke, True) for stroke in _strokes_from_geometry(compensated_outer.boundary))
+    return inner_paths + outer_paths
+
+
+def _tabbed_profile_commands(
+    stroke: Stroke,
+    pass_depth: float,
+    tab_floor: float,
+    tab_count: int,
+    tab_width: float,
+    cut_feed: float,
+    plunge_feed: float,
+) -> list[str]:
+    """Cut a closed outer profile while leaving evenly distributed tabs."""
+    line = LineString(stroke)
+    length = line.length
+    if length <= tab_count * tab_width:
+        raise ValueError("Outer profile is too short for the requested tab count and width")
+    intervals = [
+        ((index + 0.5) * length / tab_count - tab_width / 2, (index + 0.5) * length / tab_count + tab_width / 2)
+        for index in range(tab_count)
+    ]
+    distances = {0.0, length}
+    distances.update(min(length, max(0.0, value)) for interval in intervals for value in interval)
+    for coordinate in stroke[1:-1]:
+        distances.add(float(line.project(Point(coordinate))))
+    ordered = sorted(distances)
+    current_depth = pass_depth
+    commands: list[str] = []
+    for start, end in zip(ordered, ordered[1:]):
+        midpoint = (start + end) / 2
+        over_tab = any(low <= midpoint <= high for low, high in intervals)
+        segment_depth = max(pass_depth, tab_floor) if over_tab else pass_depth
+        if not math.isclose(segment_depth, current_depth, abs_tol=1e-6):
+            commands.append(f"G1 Z{_fmt(segment_depth)} F{plunge_feed:g}")
+            current_depth = segment_depth
+        endpoint = line.interpolate(end)
+        commands.append(f"G1 X{_fmt(endpoint.x)} Y{_fmt(endpoint.y)} F{cut_feed:g}")
+    return commands
 
 
 def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]:
