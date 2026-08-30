@@ -40,6 +40,39 @@ def test_qt_shell_loads(qapp) -> None:
     assert view_model.connection_text == "Disconnected"
 
 
+def test_guided_setup_is_state_gated_and_advances_in_order(qapp) -> None:
+    _engine, view_model = build_engine()
+
+    assert view_model.guided_step == 0
+    assert view_model.guided_step_count == 9
+    assert view_model.guided_step_names[0] == "Safety"
+    assert view_model.guided_step_ready
+
+    view_model.guided_next()
+    assert view_model.guided_step == 1
+    assert not view_model.guided_step_ready
+    assert "Connect" in view_model.guided_step_reason
+
+    view_model.guided_next()
+    assert view_model.guided_step == 1
+
+    view_model.guided_previous()
+    assert view_model.guided_step == 0
+    view_model.guided_reset()
+    assert view_model.guided_step == 0
+    assert not view_model.guided_preflight_confirmed
+
+
+def test_production_launcher_has_no_legacy_tk_presentation() -> None:
+    root = Path(__file__).parents[1]
+    source = root / "src" / "ttc3018_control"
+    assert not list(source.glob("*window.py"))
+    assert not (source / "app.py").exists()
+    assert "ttkbootstrap" not in (root / "pyproject.toml").read_text(encoding="utf-8")
+    build_script = (root / "packaging" / "build.ps1").read_text(encoding="utf-8")
+    assert "pyside6-deploy.exe" in build_script
+
+
 def test_reference_controls_follow_operator_workflow_order() -> None:
     qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
         encoding="utf-8"
