@@ -22,7 +22,7 @@ ApplicationWindow {
         success: Qt.color("#40C4D9")
     })
 
-    property int workspace: 0
+    property int workspace: 2
     property string toastText: ""
     property real jogStep: 1.0
     property string selectedTransport: "USB serial"
@@ -120,7 +120,7 @@ ApplicationWindow {
             spacing: 12
             Label { text: "Choose how TTC 3018 should reach GRBL."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             Label { text: "Transport"; color: window.palette.subtle; font.pixelSize: 11 }
-            ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP"]; currentIndex: 0; onActivated: window.selectedTransport = currentText }
+            ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP"]; currentIndex: appViewModel && appViewModel.preferred_transport === "Wi-Fi TCP" ? 1 : 0; onActivated: window.selectedTransport = currentText }
 
             ColumnLayout {
                 visible: transportCombo.currentText === "USB serial"
@@ -141,8 +141,8 @@ ApplicationWindow {
                 Label { text: "Controller address"; color: window.palette.subtle; font.pixelSize: 11 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Field { id: wifiHostField; Layout.fillWidth: true; text: "192.168.4.1"; placeholderText: "IP address or host name" }
-                    Field { id: wifiPortField; Layout.preferredWidth: 82; text: "23"; validator: IntValidator { bottom: 1; top: 65535 } }
+                    Field { id: wifiHostField; Layout.fillWidth: true; text: appViewModel ? appViewModel.saved_wifi_host : "192.168.4.1"; placeholderText: "IP address or host name" }
+                    Field { id: wifiPortField; Layout.preferredWidth: 82; text: appViewModel ? String(appViewModel.saved_wifi_port) : "23"; validator: IntValidator { bottom: 1; top: 65535 } }
                 }
                 MutedLabel { text: "You can remove USB and connect over the controller's Wi-Fi TCP endpoint." }
             }

@@ -256,6 +256,18 @@ class ControllerViewModel(QObject):
     def connected(self) -> bool:
         return self.connection is not None and self.connection.connected
 
+    @Property(str, notify=state_changed)
+    def preferred_transport(self) -> str:
+        return self.transport
+
+    @Property(str, notify=state_changed)
+    def saved_wifi_host(self) -> str:
+        return self.wifi_host
+
+    @Property(int, notify=state_changed)
+    def saved_wifi_port(self) -> int:
+        return self.wifi_port
+
     @Property(bool, notify=state_changed)
     def at_reference(self) -> bool:
         position = self.session.virtual_position
