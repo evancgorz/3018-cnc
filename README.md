@@ -137,19 +137,31 @@ Choose one of these operations:
 - Engraving: follows the imported closed loops.
 - Detected feature: uses face topology to distinguish a recessed/removed region
   from a raised boss. It clears inside a recess or clears the surrounding base
-  face to leave a boss, using the feature depth measured from the STEP solid.
+  face to leave a boss, using each feature's own measured depth from the STEP
+  solid.
+- Planar surface: follows accessible flat and tilted planar faces as a bounded
+  varying-Z raster, including ramp-like parts such as `examples/wedge.step`.
+  Abrupt vertical cliffs are split into separate safe paths rather than crossed
+  by a diagonal cut.
 - Profile cutout: cuts inner loops first and the compensated outer profile last,
   with stock-based through depth, breakthrough allowance, and holding tabs.
 - Outside contour or Inside contour: applies the selected tool radius.
-- Pocket: clears simple planar regions with nested rings.
+- Pocket: clears planar regions with connected alternating scanlines, staying
+  down only when the link remains inside the cleared region; holes and islands
+  cause safe retracts.
 - Hole: cuts circular inner loops with a tool-center path.
 
 The dialog also supports XY/YX orientation, centered or lower-left work zero,
 stock width and height, tool diameter, negative depth, multiple depth passes,
-safe Z, cut/plunge feeds, and optional `M3` spindle startup. The preview and
-review summary show the transformed path bounds. **Generate and load** sends the
-result through the same metric parser, bounds checks, preflight, save, and
-streaming pipeline as imported G-code; generation itself never moves the machine.
+safe Z, cut/plunge feeds, and optional `M3` spindle startup. For lower-left
+outside/profile jobs, work `X0 Y0` is the lower-left extreme of the compensated
+cutter envelope; the raw part boundary is inset/up-right by the tool radius and
+no generated XY motion is allowed below work zero. The preview draws the raw
+part boundary separately from the cutter path and reports cut distance, rapid
+distance, and retract count. Clearing jobs pass a deterministic reachable-area
+verification gate before loading. **Generate and load** sends the result through
+the same metric parser, bounds checks, preflight, save, and streaming pipeline as
+imported G-code; generation itself never moves the machine.
 
 The `examples/removed-cylinder.step` and `examples/extruded-circle.step` fixtures
 exercise the topology distinction. They have the same top-view rectangle and
