@@ -6,11 +6,8 @@ import time
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from ..application.machine_session import MachineSession
-from ..application.connection_service import ConnectionService
-from ..application.job_service import JobService
-from ..application.generation_service import GenerationService
-from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
+from ..application.controller import ApplicationController
+from ..connection_settings import ConnectionSettings
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError, GCodeProgram, load_gcode, parse_gcode
 from ..plaque_engraver import BORDER_STYLES
@@ -23,21 +20,16 @@ from ..grbl import (
     REALTIME_SOFT_RESET,
     REALTIME_STATUS,
     make_setting,
-    make_jog,
     make_work_zero,
     parse_setting,
     parse_status,
 )
-from ..job import JobStreamer
-from ..machine_state import MachineProfile, ProfileStore, check_job_bounds
-from ..application.motion_service import MotionService
-from ..serial_connection import GrblConnection, SerialEvent, available_ports
+from ..machine_state import MachineProfile, check_job_bounds
+from ..serial_connection import SerialEvent, available_ports
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
-from ..tcp_connection import TcpGrblConnection
 from ..text_engraver import FONT_NAMES
 from ..wifi_setup import make_station_commands
-from ..wifi_discovery import discover_grbl_hosts
 
 
 class ControllerViewModel(QObject):
@@ -52,37 +44,22 @@ class ControllerViewModel(QObject):
     def __init__(self) -> None:
         super().__init__()
         root = Path.cwd()
-        self.profile_store = ProfileStore(root / "config" / "machine-profile.json")
-        self.connection_store = ConnectionSettingsStore(root / "config" / "connection.json")
         self.commissioning_store = CommissioningStore(root / "config" / "commissioning.json")
-        try:
-            profile = self.profile_store.load()
-        except (OSError, ValueError, TypeError):
-            profile = MachineProfile()
-        try:
-            settings = self.connection_store.load()
-        except (OSError, ValueError, TypeError):
-            settings = ConnectionSettings()
-
-        self.session = MachineSession(profile=profile)
+        self.application = ApplicationController(
+            root,
+            on_notice=self._set_notice,
+            on_change=self._emit_state,
+            on_position_complete=self._on_motion_position_complete,
+            on_ready_to_return=self.return_to_work_zero,
+        )
         try:
             self.commissioning_profile = self.commissioning_store.load()
         except (OSError, ValueError, TypeError):
             self.commissioning_profile = CommissioningProfile()
         self._commissioning_tracker = InputTestTracker()
         self._commissioning_settings: dict[int, float] = {}
-        self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
         self.connection = None
         self.status: GrblStatus | None = None
-        self.job_service = JobService(
-            self._send_job_line,
-            self._send_realtime,
-            on_notice=self._set_notice,
-            on_change=self._emit_state,
-            on_ready_to_return=self.return_to_work_zero,
-        )
-        self.job = self.job_service.streamer
-        self.generation_service = GenerationService()
         self.program: GCodeProgram | None = None
         self._pending_manual_acks = 0
         self._close_after_return_pending = False
@@ -112,23 +89,47 @@ class ControllerViewModel(QObject):
         self._log_lines: list[str] = []
         self._commissioning_pins_text = "Active inputs: none"
         self._commissioning_status_text = "No commissioning checks recorded"
-        self.transport = settings.preferred_transport
+        self.transport = self.application.settings.preferred_transport
         self.port = ""
-        self.wifi_host = settings.wifi_host
-        self.wifi_port = settings.wifi_port
+        self.wifi_host = self.application.settings.wifi_host
+        self.wifi_port = self.application.settings.wifi_port
         self._refresh_ports()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(50)
-        self.motion = MotionService(
-            self.session,
-            self._send_motion_line,
-            self._send_realtime,
-            on_notice=self._set_notice,
-            on_change=self._emit_state,
-            on_position_complete=self._on_motion_position_complete,
-        )
+
+    @property
+    def session(self):
+        return self.application.session
+
+    @property
+    def profile_store(self):
+        return self.application.profile_store
+
+    @property
+    def connection_store(self):
+        return self.application.connection_store
+
+    @property
+    def connection_service(self):
+        return self.application.connection_service
+
+    @property
+    def motion(self):
+        return self.application.motion
+
+    @property
+    def job_service(self):
+        return self.application.job
+
+    @property
+    def job(self):
+        return self.application.job.streamer
+
+    @property
+    def generation_service(self):
+        return self.application.generation_service
 
     @property
     def connection(self):
@@ -773,7 +774,7 @@ class ControllerViewModel(QObject):
 
     @Slot(str, str)
     def configure_wifi(self, ssid: str, password: str) -> None:
-        if not isinstance(self.connection, GrblConnection) or not self.connected:
+        if self.transport != "USB serial" or not self.connected:
             self._set_notice("Wi-Fi setup requires an active USB connection")
             return
         if self.status is None or not self.status.can_jog:
