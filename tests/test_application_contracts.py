@@ -11,7 +11,8 @@ from ttc3018_control.application.generation_service import GenerationService
 from ttc3018_control.application.job_service import JobService
 from ttc3018_control.application.machine_session import MachineSession
 from ttc3018_control.application.state import ApplicationState, ConnectionMode, JobSnapshot
-from ttc3018_control.grbl import GrblStatus
+from ttc3018_control.grbl import GrblStatus, Position
+from ttc3018_control.machine_state import MachineProfile
 
 
 def test_application_state_is_immutable_and_qt_independent() -> None:
@@ -39,6 +40,22 @@ def test_application_controller_exposes_a_qt_independent_state_snapshot(tmp_path
     assert not snapshot.connected
     assert snapshot.job.state == "idle"
     assert snapshot.program is None
+
+
+def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    controller.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
+    controller.set_transport_for_testing(_Transport())
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
+
+    assert controller.establish_reference().accepted
+    controller.handle_transport_response("Grbl 1.1h", preserve_reference=True)
+    assert controller.reference_trusted
+
+    controller.handle_transport_response("Grbl 1.1h")
+    assert not controller.reference_trusted
 
 
 def test_events_are_typed_data() -> None:
