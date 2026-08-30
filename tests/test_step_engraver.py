@@ -64,6 +64,69 @@ def test_profile_cutout_orders_inner_first_and_leaves_outer_tabs() -> None:
     assert job.tab_count == 4
 
 
+@pytest.mark.parametrize("mode", ["Outside contour", "Profile cutout"])
+def test_lower_left_cutout_anchors_compensated_envelope_at_work_zero(mode: str) -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode=mode,
+        zero_location="Lower-left",
+        tool_diameter=3,
+        stock_width=43,
+        stock_height=28,
+        stock_thickness=5 if mode == "Profile cutout" else None,
+        tab_count=0,
+        depth=-1,
+    )
+
+    points = [point for stroke in job.strokes for point in stroke]
+    assert min(point[0] for point in points) == pytest.approx(0)
+    assert min(point[1] for point in points) == pytest.approx(0)
+    assert job.placement_offset_x == pytest.approx(1.5)
+    assert job.placement_offset_y == pytest.approx(1.5)
+    assert "G0 X0 Y0" in job.gcode
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.x >= -0.001
+    assert program.bounds.minimum.y >= -0.001
+
+
+def test_lower_left_profile_applies_placement_to_emitted_profile_commands() -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode="Profile cutout",
+        zero_location="Lower-left",
+        tool_diameter=3,
+        stock_width=43,
+        stock_height=28,
+        stock_thickness=5,
+        tab_count=0,
+    )
+
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.x == pytest.approx(0, abs=0.001)
+    assert program.bounds.minimum.y == pytest.approx(0, abs=0.001)
+    assert program.bounds.maximum.x == pytest.approx(43, abs=0.001)
+    assert program.bounds.maximum.y == pytest.approx(28, abs=0.001)
+
+
+def test_centered_cutout_retains_existing_explicit_placement() -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode="Profile cutout",
+        zero_location="Center",
+        tool_diameter=3,
+        stock_width=43,
+        stock_height=28,
+        stock_thickness=5,
+        tab_count=0,
+    )
+
+    assert job.placement_offset_x == 0
+    assert job.placement_offset_y == 0
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.x == pytest.approx(0, abs=0.001)
+    assert program.bounds.minimum.y == pytest.approx(0, abs=0.001)
+
+
 def test_profile_cutout_rejects_invalid_through_cut_and_tabs() -> None:
     with pytest.raises(ValueError, match="Stock thickness"):
         generate_step_gcode(_model(), mode="Profile cutout", stock_thickness=0)

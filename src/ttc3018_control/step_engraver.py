@@ -37,6 +37,8 @@ class StepMachining:
     tab_width: float = 0.0
     tab_height: float = 0.0
     feature_summary: str = ""
+    placement_offset_x: float = 0.0
+    placement_offset_y: float = 0.0
 
 
 def generate_step_gcode(
@@ -93,6 +95,15 @@ def generate_step_gcode(
         strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
+    placement_offset_x, placement_offset_y = _cutout_placement_offset(
+        strokes, mode, zero_location
+    )
+    if placement_offset_x or placement_offset_y:
+        strokes = [_translate_stroke(stroke, placement_offset_x, placement_offset_y) for stroke in strokes]
+        profile_paths = [
+            (_translate_stroke(stroke, placement_offset_x, placement_offset_y), is_outer)
+            for stroke, is_outer in profile_paths
+        ]
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
 
     commands = [
@@ -141,6 +152,8 @@ def generate_step_gcode(
         tab_height if mode == "Profile cutout" else 0.0,
         ", ".join(f"{feature.kind} {feature.depth:.2f} mm" for feature in model.features)
         if mode == "Detected feature" else "",
+        placement_offset_x,
+        placement_offset_y,
     )
 
 
@@ -210,6 +223,34 @@ def _transform_loop(loop: PlanarLoop, orientation: str) -> PlanarLoop:
 
 def _translate_loop(loop: PlanarLoop, offset_x: float, offset_y: float) -> PlanarLoop:
     return PlanarLoop(tuple(Point2D(point.x + offset_x, point.y + offset_y) for point in loop.points))
+
+
+def _translate_stroke(stroke: Stroke, offset_x: float, offset_y: float) -> Stroke:
+    return tuple((x + offset_x, y + offset_y) for x, y in stroke)
+
+
+def _cutout_placement_offset(
+    strokes: Iterable[Stroke], mode: str, zero_location: str
+) -> tuple[float, float]:
+    """Anchor compensated outside-cut paths at the nonnegative work origin.
+
+    The raw STEP loops are normalized independently from cutter compensation.
+    For an outer contour/profile, compensation expands the cutter-center path
+    outside the part, so a part starting at (0, 0) would otherwise generate
+    negative XY coordinates.  The physical work-zero convention for these
+    operations is the lower-left of the completed compensated envelope.  Other
+    modes retain their existing part-relative placement because their cutter
+    paths are inside the raw geometry and shifting them would move the part
+    outside the declared stock.
+    """
+    if zero_location != "Lower-left" or mode not in {"Outside contour", "Profile cutout"}:
+        return 0.0, 0.0
+    points = [point for stroke in strokes for point in stroke]
+    if not points:
+        return 0.0, 0.0
+    min_x = min(point[0] for point in points)
+    min_y = min(point[1] for point in points)
+    return max(0.0, -min_x), max(0.0, -min_y)
 
 
 def _loop_bounds(loops: Iterable[PlanarLoop]) -> tuple[float, float, float, float, float, float]:
