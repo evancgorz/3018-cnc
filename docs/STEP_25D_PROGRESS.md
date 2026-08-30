@@ -27,6 +27,9 @@ streaming pipeline.
   G-code parser.
 - [x] Use connected alternating scanlines for broad pocket regions and retain
   safe retracts around holes, islands, and disconnected material.
+- [x] Schedule independent paths by nearest endpoint with deterministic open-
+  path reversal and closed-loop start rotation while preserving inner-before-
+  outer profile ordering.
 - [x] Preserve individual detected-feature depth targets and avoid applying the
   deepest recess depth to shallower recesses.
 - [x] Expose exact cut distance, rapid XY distance, and retract count for each
