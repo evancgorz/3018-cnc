@@ -84,6 +84,8 @@ streaming pipeline.
   deterministically.
 - [x] Regression-test nested profile cutouts with retained islands, inner-first
   ordering, and swept-cutter simulation with no retained-material gouge.
+- [x] Subtract nested retained islands from parent detected-recess clearing
+  regions and verify the parent floor simulation reports no island gouge.
 - [x] Expose a deterministic STEP duration estimate in the review summary and
   generated G-code, including its explicit 3000 mm/min rapid-rate assumption.
 - [x] Build and serialize deterministic projected-loop containment metadata,
@@ -278,3 +280,4 @@ streaming pipeline.
 | 2026-08-30 | `94b1b9c` | Restricted axial feature recognition to contained loops and stabilized feature ordering. |
 | 2026-08-30 | `ff6c30e` | Added deterministic STEP duration estimates to job metadata and Qt review. |
 | 2026-08-30 | `ebbe89a` | Added nested profile simulation coverage for islands and alternating cutout boundaries. |
+| 2026-08-30 | `72299f5` | Preserved nested islands during detected parent-recess clearing and added simulation coverage. |
