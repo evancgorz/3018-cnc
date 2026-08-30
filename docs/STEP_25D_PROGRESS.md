@@ -165,6 +165,11 @@ streaming pipeline.
 - [x] Test preview geometry against generated G-code bounds.
 - [x] Verify the compensated lower-left cutout envelope reaches work X0/Y0 and
   actual emitted profile commands use the same placement translation.
+- [x] Apply one shared nonnegative work-XY gate to translated STEP paths and
+  the parsed final program, including exact cardinal extrema of I/J arcs; keep
+  negative Z valid only as intentional cutting depth.
+- [x] Shift translated STEP geometry as one authoritative transform so paths,
+  preview geometry, and stock simulation cannot disagree about work zero.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -211,3 +216,5 @@ streaming pipeline.
 | 2026-08-30 | `cb9e5f9` | Exposed the validated STEP operation plan and blocked stale/rejected previews in Qt. |
 | 2026-08-30 | `dc0bd44` | Connected safe concentric pocket rings into stay-down paths. |
 | 2026-08-30 | `7ba66c8` | Fixed final path orientation after bounded 2-opt optimization. |
+| 2026-08-30 | `e6e6bef` | Clarified the hard nonnegative work-XY contract in the production plan. |
+| 2026-08-30 | `100803e` | Enforced nonnegative STEP work XY across translated paths and parsed G-code. |
