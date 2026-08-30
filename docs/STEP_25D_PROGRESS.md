@@ -54,20 +54,20 @@ streaming pipeline.
 - [ ] Extract closed top-view loops from the selected top face.
 - [ ] Classify outer boundaries, holes, and islands.
 - [ ] Preserve loop winding and identify open or self-intersecting geometry.
-- [ ] Add a geometry normalization layer independent of OCP objects.
+- [x] Add a geometry normalization layer independent of OCP objects.
 - [x] Add deterministic geometry unit tests using an OCC-generated planar box.
 
 ### 4. 2.5D toolpath generation
 
-- [ ] Add a machining-mode selector: engraving, outside contour, inside contour,
+- [x] Add a machining-mode selector: engraving, outside contour, inside contour,
   pocket, and hole.
-- [ ] Implement tool-radius offsets for inside and outside contours.
+- [x] Implement tool-radius offsets for inside and outside contours.
 - [ ] Define behavior for internal corners, tight radii, islands, and offset
   failures.
-- [ ] Implement pocket clearing paths for simple planar regions.
-- [ ] Implement hole paths with a documented minimum diameter rule.
-- [ ] Implement multiple Z depth passes ending at the requested machining depth.
-- [ ] Keep all generated moves within the supported metric command subset.
+- [x] Implement pocket clearing paths for simple planar regions.
+- [x] Implement hole paths with a documented minimum diameter rule.
+- [x] Implement multiple Z depth passes ending at the requested machining depth.
+- [x] Keep all generated moves within the supported metric command subset.
 
 ### 5. UI and shared job pipeline
 
@@ -118,3 +118,4 @@ streaming pipeline.
 | --- | --- | --- |
 | 2026-08-29 | `6090a37` | Baseline Qt controller, preview, safety, and agent-running-instance guard. |
 | 2026-08-29 | pending | Added the OCP/Shapely dependency boundary and normalized planar STEP importer. |
+| 2026-08-29 | pending | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
