@@ -4,9 +4,10 @@ import math
 from pathlib import Path
 
 import pytest
+from shapely.geometry import Polygon
 
 from ttc3018_control.gcode import parse_gcode
-from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _scheduled_path_cost, generate_step_gcode
+from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _pocket_path_cost, _pocket_strokes, _scheduled_path_cost, generate_step_gcode
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
@@ -135,6 +136,14 @@ def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:
     assert job.retract_count == 1
     program = parse_gcode(job.gcode)
     assert program.bounds.minimum.z == pytest.approx(-1)
+
+
+def test_pocket_strategy_selector_prefers_lower_weighted_cost() -> None:
+    region = Polygon(((0, 0), (40, 0), (40, 25), (0, 25)))
+    selected = _pocket_strokes(region, 1.5, 3)
+
+    assert _pocket_path_cost(selected) < math.inf
+    assert len(selected) == 1
 
 
 def test_pocket_does_not_stay_down_across_an_inner_hole() -> None:

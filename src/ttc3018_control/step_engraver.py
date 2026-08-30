@@ -664,7 +664,39 @@ def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]
     current = region.buffer(-radius, join_style=2)
     if current.is_empty:
         return []
-    return _connected_scanline_strokes(current, max(0.25, tool_diameter * 0.7))
+    stepover = max(0.25, tool_diameter * 0.7)
+    candidates = (
+        _connected_scanline_strokes(current, stepover),
+        _offset_pocket_strokes(current, stepover),
+    )
+    valid = [candidate for candidate in candidates if candidate]
+    return min(valid, key=_pocket_path_cost) if valid else []
+
+
+def _offset_pocket_strokes(region, stepover: float) -> list[Stroke]:
+    """Generate the bounded offset candidate used for strategy selection."""
+    strokes: list[Stroke] = []
+    current = region
+    for _index in range(500):
+        if current.is_empty:
+            break
+        strokes.extend(_strokes_from_geometry(current.boundary))
+        current = current.buffer(-stepover, join_style=2)
+    return strokes
+
+
+def _pocket_path_cost(strokes: Iterable[Stroke]) -> float:
+    """Weight retracts heavily while comparing valid pocket candidates."""
+    paths = tuple(strokes)
+    if not paths:
+        return math.inf
+    cut = sum(
+        math.dist(start, end)
+        for stroke in paths
+        for start, end in zip(stroke, stroke[1:])
+    )
+    rapid = _path_metrics(paths, 1)[1]
+    return cut + rapid * 2 + len(paths) * 100
 
 
 def _connected_scanline_strokes(region, stepover: float) -> list[Stroke]:
