@@ -148,7 +148,8 @@ Choose one of these operations:
 - Outside contour or Inside contour: applies the selected tool radius.
 - Pocket: clears planar regions with connected alternating scanlines, staying
   down only when the link remains inside the cleared region; holes and islands
-  cause safe retracts.
+  cause safe retracts. Round pockets can use connected offset rings when the
+  radial links are proven safe.
 - Hole: cuts circular inner loops with a tool-center path.
 
 The dialog also supports XY/YX orientation, centered or lower-left work zero,

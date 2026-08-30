@@ -134,7 +134,9 @@ def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:
 
     assert job.stroke_count == 1
     assert len(job.strokes[0]) > 20
-    assert job.cutting_distance > 500
+    # The selector may now choose a connected offset path when it is cheaper
+    # than the scanline candidate; retain a broad-clearing sanity bound.
+    assert job.cutting_distance > 400
     assert job.rapid_xy_distance < 100
     assert job.retract_count == 1
     assert job.simulation is not None
@@ -151,6 +153,19 @@ def test_pocket_strategy_selector_prefers_lower_weighted_cost() -> None:
 
     assert _pocket_path_cost(selected) < math.inf
     assert len(selected) == 1
+
+
+def test_pocket_connects_safe_concentric_rings_for_a_round_region() -> None:
+    region = Polygon(tuple(
+        (20 + 12 * math.cos(index * math.tau / 64), 15 + 12 * math.sin(index * math.tau / 64))
+        for index in range(64)
+    ))
+
+    selected = _pocket_strokes(region, 1.5, 3)
+
+    assert len(selected) == 1
+    assert len(selected[0]) > 100
+    assert _pocket_path_cost(selected) < 500
 
 
 def test_pocket_does_not_stay_down_across_an_inner_hole() -> None:

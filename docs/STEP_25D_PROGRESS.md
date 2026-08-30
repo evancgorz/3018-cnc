@@ -27,6 +27,9 @@ streaming pipeline.
   G-code parser.
 - [x] Use connected alternating scanlines for broad pocket regions and retain
   safe retracts around holes, islands, and disconnected material.
+- [x] Connect concentric offset rings into stay-down paths when their links are
+  contained by the compensated removal region, retaining retracts where they
+  are not safe.
 - [x] Schedule independent paths by nearest endpoint with deterministic open-
   path reversal and closed-loop start rotation while preserving inner-before-
   outer profile ordering.

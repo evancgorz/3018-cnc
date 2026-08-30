@@ -896,14 +896,50 @@ def _pocket_candidate_is_covered(region, strokes: Iterable[Stroke], radius: floa
 
 def _offset_pocket_strokes(region, stepover: float) -> list[Stroke]:
     """Generate the bounded offset candidate used for strategy selection."""
-    strokes: list[Stroke] = []
+    rings: list[Stroke] = []
     current = region
     for _index in range(500):
         if current.is_empty:
             break
-        strokes.extend(_strokes_from_geometry(current.boundary))
+        rings.extend(_strokes_from_geometry(current.boundary))
         current = current.buffer(-stepover, join_style=2)
-    return strokes
+    return _connect_offset_rings(region, rings)
+
+
+def _connect_offset_rings(region, rings: Iterable[Stroke]) -> list[Stroke]:
+    """Join offset rings only when their stay-down link is safe."""
+    remaining = list(rings)
+    connected: list[Stroke] = []
+    current = (0.0, 0.0)
+    while remaining:
+        choices = [
+            (_best_stroke_orientation(stroke, current), index)
+            for index, stroke in enumerate(remaining)
+        ]
+        oriented, index = min(
+            choices,
+            key=lambda item: (math.dist(current, item[0][0]), item[1]),
+        )
+        remaining.pop(index)
+        active = oriented
+        current = active[-1]
+        while remaining:
+            safe_choices = [
+                (_best_stroke_orientation(stroke, current), next_index)
+                for next_index, stroke in enumerate(remaining)
+                if _safe_stay_down_link(region, current, _best_stroke_orientation(stroke, current)[0])
+            ]
+            if not safe_choices:
+                break
+            next_stroke, next_index = min(
+                safe_choices,
+                key=lambda item: (math.dist(current, item[0][0]), item[1]),
+            )
+            remaining.pop(next_index)
+            active = active + (next_stroke[0],) + next_stroke[1:]
+            current = active[-1]
+        connected.append(active)
+    return connected
 
 
 def _pocket_path_cost(strokes: Iterable[Stroke]) -> float:
