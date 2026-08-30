@@ -730,19 +730,19 @@ ApplicationWindow {
                                 height: 214
 
                                 Rectangle { anchors.fill: parent; radius: 18; color: "#1D2025"; border.color: window.palette.divider; border.width: 1 }
-                                Label { anchors.centerIn: parent; text: "XY\n1 mm"; color: window.palette.muted; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter }
+                                Label { anchors.centerIn: parent; text: "XY"; color: window.palette.muted; font.pixelSize: 10; font.weight: Font.DemiBold }
 
                                 // Outer ring: press and hold for live jogging; release stops at a whole mm.
-                                JogArrowButton { x: 76; y: 7; width: 62; height: 45; glyph: "▲\nY+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 7; y: 84; width: 62; height: 45; glyph: "◀\nX−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 145; y: 84; width: 62; height: 45; glyph: "▶\nX+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 76; y: 161; width: 62; height: 45; glyph: "▼\nY−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 76; y: 6; width: 62; height: 42; glyph: "▲\nY+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 7; y: 86; width: 58; height: 42; glyph: "◀\nX−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 149; y: 86; width: 58; height: 42; glyph: "▶\nX+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 76; y: 166; width: 62; height: 42; glyph: "▼\nY−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
 
                                 // Inner ring: one click moves the selected step.
-                                JogArrowButton { x: 84; y: 59; width: 46; height: 28; glyph: "▲"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", window.jogStep) }
-                                JogArrowButton { x: 59; y: 93; width: 28; height: 46; glyph: "◀"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -window.jogStep) }
-                                JogArrowButton { x: 127; y: 93; width: 28; height: 46; glyph: "▶"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", window.jogStep) }
-                                JogArrowButton { x: 84; y: 145; width: 46; height: 28; glyph: "▼"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -window.jogStep) }
+                                JogArrowButton { x: 86; y: 58; width: 42; height: 24; glyph: "▲"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", window.jogStep) }
+                                JogArrowButton { x: 72; y: 91; width: 24; height: 32; glyph: "◀"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -window.jogStep) }
+                                JogArrowButton { x: 118; y: 91; width: 24; height: 32; glyph: "▶"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", window.jogStep) }
+                                JogArrowButton { x: 86; y: 132; width: 42; height: 24; glyph: "▼"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -window.jogStep) }
                             }
 
                             ColumnLayout { Layout.alignment: Qt.AlignVCenter; spacing: 7
