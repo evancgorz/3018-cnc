@@ -43,6 +43,7 @@ class ControllerViewModel(QObject):
     toast_requested = Signal(str)
     ports_changed = Signal()
     unreferenced_jog_requested = Signal()
+    close_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -74,6 +75,7 @@ class ControllerViewModel(QObject):
         self._position_queue: list[tuple[str, float, float]] = []
         self._position_move_active = False
         self._return_after_job_pending = False
+        self._close_after_return_pending = False
         self._wifi_connecting = False
         self._wifi_results: queue.Queue[tuple[TcpGrblConnection | None, str, int]] = queue.Queue()
         self._last_status_poll = 0.0
@@ -253,6 +255,19 @@ class ControllerViewModel(QObject):
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
         return self.connection is not None and self.connection.connected
+
+    @Property(bool, notify=state_changed)
+    def at_reference(self) -> bool:
+        position = self.session.virtual_position
+        return bool(self.connected and position is not None and self._is_reference_position(position))
+
+    @Property(bool, notify=state_changed)
+    def requires_exit_prompt(self) -> bool:
+        return bool(self.connected and not self.at_reference)
+
+    @Property(bool, notify=state_changed)
+    def can_return_to_reference(self) -> bool:
+        return bool(self.connected and self.session.envelope.trusted and self.session.can_move and not self.job_active and not self._pending_manual_acks and not self._position_move_active)
 
     @Property(bool, notify=state_changed)
     def can_jog(self) -> bool:
@@ -731,6 +746,14 @@ class ControllerViewModel(QObject):
         self.move_to(0.0, 0.0, 0.0, 500.0)
 
     @Slot()
+    def return_to_reference_and_close(self) -> None:
+        if not self.can_return_to_reference:
+            self._set_notice("Return to reference is unavailable until GRBL is Idle with a trusted position")
+            return
+        self._close_after_return_pending = True
+        self.return_to_reference()
+
+    @Slot()
     def load_gcode(self) -> None:
         if self.job_active:
             self._set_notice("G-code load ignored — a job is active")
@@ -945,6 +968,9 @@ class ControllerViewModel(QObject):
             if self._return_after_job_pending and status.can_jog and not self._pending_manual_acks:
                 self._return_after_job_pending = False
                 self.return_to_work_zero()
+            if self._close_after_return_pending and self.at_reference:
+                self._close_after_return_pending = False
+                self.close_requested.emit()
             self._project_status(status)
         if text.startswith("Grbl ") or "[MSG:Reset" in text:
             if self.job.state in {"running", "paused"}:
@@ -1053,6 +1079,9 @@ class ControllerViewModel(QObject):
         if not self._position_queue:
             self._position_move_active = False
             self._set_notice("Position move complete")
+            if self._close_after_return_pending and self.at_reference:
+                self._close_after_return_pending = False
+                self.close_requested.emit()
             self._emit_state()
             return
         axis, distance, feed = self._position_queue.pop(0)
@@ -1092,6 +1121,7 @@ class ControllerViewModel(QObject):
         self._position_queue = []
         self._position_move_active = False
         self._return_after_job_pending = False
+        self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False
         self._preserve_references_on_next_reset = False
         self._connection_text = "Disconnected"
@@ -1119,3 +1149,7 @@ class ControllerViewModel(QObject):
         if position is None:
             return "X—  Y—  Z—"
         return f"X{position.x:.2f}  Y{position.y:.2f}  Z{position.z:.2f}"
+
+    @staticmethod
+    def _is_reference_position(position: Position) -> bool:
+        return abs(position.x) <= 0.001 and abs(position.y) <= 0.001 and abs(position.z) <= 0.001

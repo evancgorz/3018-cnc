@@ -26,6 +26,18 @@ ApplicationWindow {
     property string toastText: ""
     property real jogStep: 1.0
     property string selectedTransport: "USB serial"
+    property bool exitBypass: false
+
+    onClosing: function(closeEvent) {
+        if (exitBypass) {
+            exitBypass = false
+            return
+        }
+        if (appViewModel && appViewModel.requires_exit_prompt) {
+            closeEvent.accepted = false
+            exitDialog.open()
+        }
+    }
 
     Connections {
         target: appViewModel
@@ -34,6 +46,32 @@ ApplicationWindow {
             toastTimer.restart()
         }
         function onUnreferenced_jog_requested() { unreferencedJogDialog.open() }
+        function onClose_requested() { window.exitBypass = true; window.close() }
+    }
+
+    Dialog {
+        id: exitDialog
+        modal: true
+        title: "Machine is not at reference"
+        width: 560
+        height: 320
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 12
+            Label { text: "The controller is still away from the trusted reference position."; color: window.palette.text; font.pixelSize: 16; font.weight: Font.DemiBold; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            MutedLabel { text: "Returning first raises Z, moves X/Y to virtual zero, then lowers Z to reference. This uses the configured jog speed and is available only while GRBL is Idle." }
+            Label { text: appViewModel ? "Current: " + appViewModel.machine_position : ""; color: window.palette.muted; font.family: "Cascadia Mono" }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: exitDialog.close() }
+                SecondaryButton { text: "Close without moving"; onClicked: { window.exitBypass = true; exitDialog.close(); window.close() } }
+                PrimaryButton { text: "Move to reference, then close"; enabled: appViewModel && appViewModel.can_return_to_reference; onClicked: { appViewModel.return_to_reference_and_close(); exitDialog.close() } }
+            }
+        }
     }
 
     Dialog {
