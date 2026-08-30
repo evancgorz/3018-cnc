@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import queue
-from typing import Callable
+from typing import Callable, Iterable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
@@ -19,6 +19,7 @@ from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
+from .ports import ConnectionSettingsStorePort, ProfileStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 
 
@@ -33,9 +34,15 @@ class ApplicationController:
         on_change: Callable[[], None] | None = None,
         on_position_complete: Callable[[], None] | None = None,
         on_ready_to_return: Callable[[], None] | None = None,
+        profile_store: ProfileStorePort | None = None,
+        connection_store: ConnectionSettingsStorePort | None = None,
+        usb_factory: Callable[[], object] | None = None,
+        wifi_factory: Callable[[], object] | None = None,
+        discover_hosts: Callable[[int], Iterable[str]] | None = None,
+        usb_ports: Callable[[], list[tuple[str, str]]] | None = None,
     ) -> None:
-        self.profile_store = ProfileStore(root / "config" / "machine-profile.json")
-        self.connection_store = ConnectionSettingsStore(root / "config" / "connection.json")
+        self.profile_store = profile_store or ProfileStore(root / "config" / "machine-profile.json")
+        self.connection_store = connection_store or ConnectionSettingsStore(root / "config" / "connection.json")
         try:
             profile = self.profile_store.load()
         except (OSError, ValueError, TypeError):
@@ -52,7 +59,12 @@ class ApplicationController:
         self._events: queue.Queue[ApplicationEvent] = queue.Queue()
         self._on_notice = on_notice or (lambda _message: None)
         self._on_change = on_change or (lambda: None)
-        self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
+        self._usb_ports = usb_ports or available_ports
+        self.connection_service = ConnectionService(
+            usb_factory or GrblConnection,
+            wifi_factory or TcpGrblConnection,
+            discover_hosts or discover_grbl_hosts,
+        )
         self.generation_service = GenerationService()
         self.motion = MotionService(
             self.session,
@@ -228,7 +240,7 @@ class ApplicationController:
 
     def usb_ports(self) -> list[tuple[str, str]]:
         """Return currently enumerated USB serial endpoints for the adapter."""
-        return available_ports()
+        return self._usb_ports()
 
     def set_transport_for_testing(self, transport) -> None:
         """Inject a fake transport without exposing service internals to Qt tests."""
