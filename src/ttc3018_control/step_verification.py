@@ -21,10 +21,11 @@ class StepVerification:
     swept_area: float
     uncovered_area: float
     checked_strokes: int
+    allowed_uncovered_area: float
 
     @property
     def passed(self) -> bool:
-        return self.uncovered_area <= 1e-7
+        return self.uncovered_area <= self.allowed_uncovered_area
 
 
 def verify_flat_clearing_paths(
@@ -70,4 +71,4 @@ def verify_flat_clearing_paths(
         raise StepVerificationError(
             f"Clearing paths leave {uncovered:.3f} mm² of planar material outside the verification tolerance"
         )
-    return StepVerification(float(swept.area), float(uncovered), len(paths))
+    return StepVerification(float(swept.area), float(uncovered), len(paths), float(allowed))

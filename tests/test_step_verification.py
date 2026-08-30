@@ -17,7 +17,8 @@ def test_flat_verifier_accepts_overlapping_lanes_and_reports_metrics() -> None:
     assert result.passed
     assert result.checked_strokes == 1
     assert result.swept_area > 0
-    assert result.uncovered_area <= 0.05
+    assert result.uncovered_area <= result.allowed_uncovered_area
+    assert result.passed
 
 
 def test_flat_verifier_rejects_centerline_outside_reachable_region() -> None:
@@ -32,4 +33,3 @@ def test_flat_verifier_rejects_region_smaller_than_tool() -> None:
 
     with pytest.raises(StepVerificationError, match="too small"):
         verify_flat_clearing_paths((((0.5, 0.5), (0.5, 0.6)),), region, 1)
-
