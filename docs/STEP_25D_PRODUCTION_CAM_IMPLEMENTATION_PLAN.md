@@ -25,17 +25,27 @@ This plan extends, but does not invalidate, the completed foundation tracked in
 - The preview origin marker is machine work `X0 Y0` exactly. The same transform
   used by the preview must be used by simulation and G-code generation; no
   renderer-only translation is permitted.
-- **Part lower-left** is the default XY origin convention. After orientation,
-  the imported part silhouette's minimum X and minimum Y map exactly to work
-  `(0, 0)`. Do not add a hidden centering, margin, stock, or tool-radius offset.
-- **Stock lower-left** and **Part center** may be offered as explicit alternate
-  origin conventions, but the selected convention and resulting coordinates
-  must be visible before generation.
-- Cutter compensation does not redefine work zero. An inside pocket's first
-  cutter-center point can legitimately be up/right by the cutter radius, and an
-  outside profile can require negative work coordinates. The preview must show
-  part geometry, physical stock, work zero, and cutter centerline separately so
-  this cannot look like an unexplained origin shift.
+- **Machining-envelope lower-left** is the default and required-safe XY origin
+  convention. After orientation and cutter compensation, translate the union of
+  every generated cutting and linking path so its minimum X and minimum Y are
+  exactly work `0`. No generated XY move may be negative of work zero.
+- For an outside cutout, the compensated cutter-center envelope reaches work
+  `X0` at its leftmost extreme and work `Y0` at its bottommost extreme. The raw
+  part silhouette is therefore inset/up-right, normally by the tool radius.
+- **Stock lower-left** and **Part center** may be offered only when they still
+  produce no negative generated coordinates. The selected convention,
+  placement translation, and resulting coordinates must be visible before
+  generation.
+- Cutter compensation participates in calculating the machining envelope but
+  does not move the machine's established work zero. An inside pocket's first
+  cutter-center point can legitimately be up/right, while an outside profile is
+  translated so its compensated left/bottom extremes are not negative. The
+  preview must show part geometry, physical stock, work zero, and cutter
+  centerline separately so this cannot look like an unexplained origin shift.
+- Envelope alignment does not require the first emitted cutting command to be
+  `(0, 0)`. Start-point optimization, lead-ins, and tabs may choose another
+  point; the complete generated path must have `minX = 0`, `minY = 0`, and no
+  negative XY segment.
 - The operator-confirmed stock width, height, and thickness are authoritative.
 - Stock width and height must contain the transformed model footprint plus any
   cutter-compensated outside path. Importing a model never proves that the
@@ -85,8 +95,9 @@ quietly generate plausible-looking G-code.
 1. Import STEP in the existing isolated OCP worker.
 2. Select or confirm machining direction and model orientation.
 3. Enter physical stock width, height, and thickness and stock placement;
-   select the work-zero convention. Default the part's lower-left to work
-   `X0 Y0` and show the resulting stock/part bounds numerically.
+   select the work-zero convention. Default the compensated machining
+   envelope's lower-left bounds to work `X0 Y0` and show the resulting
+   stock/part/path bounds numerically.
 4. Select a tool from an explicit tool definition.
 5. Analyze machinability and show supported operations, warnings, and rejected
    geometry before generating paths.
@@ -342,9 +353,10 @@ parser results disagree.
 - Draw and independently label the part boundary, stock boundary, uncompensated
   feature geometry, and compensated cutter centerline. Do not imply that the
   first toolpath point is the origin.
-- Default to **Part lower-left at work X0 Y0**. Show transformed part and stock
-  min/max coordinates; warn rather than silently translating when an outside
-  compensated path extends into negative work coordinates.
+- Default to **Machining envelope at work X0 Y0**. Show transformed part, stock,
+  and cutter-path min/max coordinates. Apply one visible placement translation
+  after compensation so all generated XY coordinates are nonnegative; never
+  hide or defer this correction to G-code emission.
 - Highlight model depth and physical through depth separately.
 - Color preview paths by operation/depth and allow isolation of rapids,
   stay-down links, roughing, finishing, tabs, and through cuts.
@@ -497,20 +509,26 @@ every shipped example has a reviewed expected operation plan.
   simulator, metrics, and emitted comments.
 - Stock XY equal to model footprint, larger stock, centered origin, lower-left
   origin, swapped XY orientation, and compensated outer path beyond stock.
-- For every orientation and translated source model, **Part lower-left** maps
-  the transformed silhouette bounds to `minX = 0` and `minY = 0` exactly within
-  formatter tolerance.
+- For every orientation and translated source model, **Machining-envelope
+  lower-left** maps the union of compensated generated paths to `minX = 0` and
+  `minY = 0` exactly within formatter tolerance.
 - Preview, normalized operation geometry, simulator, parsed G-code, and emitted
   comments all report the same work-coordinate bounds and origin transform.
-- No default tool-radius, stock-margin, or auto-centering translation changes
-  `(0, 0)` under **Part lower-left**.
-- Inside compensation may place the first cutting point up/right while keeping
-  the part boundary anchored at `(0, 0)`; verify this is visibly distinct in
-  preview and numerically correct.
-- Outside compensation around a part anchored at `(0, 0)` produces negative
-  cutter-center coordinates. Accept it only when the declared stock bounds and
-  trusted machine envelope contain that path; otherwise provide an actionable
-  placement error instead of shifting it automatically.
+- Compensation and placement are calculated before preview and scheduling.
+  Their single explicit translation anchors the final machining envelope at
+  `(0, 0)` and is recorded in job metadata.
+- Inside compensation may place the first cutting point up/right; verify this is
+  visibly distinct from work zero and numerically correct.
+- Outside compensation shifts the raw part boundary up/right so the compensated
+  cutter-center path has no negative coordinate. For a simple outer profile,
+  the nominal inset is one tool radius on the left and bottom, subject to
+  corner/lead-in geometry.
+- Parameterize every supported mode, orientation, tool diameter, origin option,
+  and operation combination and assert all parsed G-code endpoints satisfy
+  `X >= 0` and `Y >= 0` within formatter tolerance.
+- Reject any lead-in, arc, ramp, tab transition, stay-down link, rapid, or
+  optimizer rewrite that crosses negative X or Y even when its endpoints are
+  nonnegative.
 - Missing/unconfirmed stock thickness blocks through paths.
 - Blind depth below physical stock bottom is rejected.
 - Stepdown division has no shallow duplicate pass and lands exactly on target.
@@ -598,9 +616,10 @@ every shipped example has a reviewed expected operation plan.
 - Preview origin remains fixed at work `(0, 0)` through resize, zoom, pan,
   orientation changes, tool changes, and regeneration; screen-space panning
   never mutates machining coordinates.
-- A preview click/inspection at the part's lower-left reports work `(0, 0)` for
-  **Part lower-left**, while the first compensated path point reports its true,
-  potentially nonzero coordinate.
+- A preview inspection of a cutout reports the cutter envelope's left/bottom
+  extremes at zero and the raw part's lower-left inset/up-right by the computed
+  compensation. The first scheduled cut reports its true, potentially nonzero
+  coordinate.
 - Rapid/retract, roughing, finish, tab, and operation filtering work without
   changing generated output.
 - Qt shell starts and closes in tests without interacting with a user-owned app.
@@ -644,6 +663,8 @@ compound fixtures; cut through-features using confirmed physical stock
 thickness; preserve blind floors and retained geometry; reject inaccessible or
 ambiguous shapes; meet the travel/retract optimization thresholds; and pass the
 entire comprehensive test suite without weakening existing machine-safety
-checks. With **Part lower-left** selected, the slicer origin marker, part
-lower-left, preview coordinate, and generated work `X0 Y0` must be the same
-physical point with no implicit offset.
+checks. With **Machining-envelope lower-left** selected, the slicer origin
+marker and compensated path's left/bottom limits must represent machine work
+`X0 Y0`; every generated rapid, link, lead-in, arc, and cutting segment must
+remain at or above work X0 and Y0. The raw part boundary is visibly inset as
+required by cutter compensation.
