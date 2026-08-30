@@ -76,6 +76,9 @@ streaming pipeline.
   the swept-cutter simulation as the acceptance gate.
 - [x] Reject non-finite stock, depth, feed, tool, surface-height, and feature
   metadata before STEP geometry or G-code generation.
+- [x] Verify real removed-cylinder, extruded-boss, and Wedge jobs are
+  reproducible across repeated generation and retain nonnegative parsed XY
+  bounds.
 - [x] Build and serialize deterministic projected-loop containment metadata,
   attach parent indices to detected features, and reject partial overlaps or
   self-intersecting loops before machining.
@@ -264,3 +267,4 @@ streaming pipeline.
 | 2026-08-30 | `188ae74` | Added exact-program rapid XY safe-height validation. |
 | 2026-08-30 | `bcb4026` | Fixed small-pocket scan coverage with centered lanes and added removed-cylinder tool-size regressions. |
 | 2026-08-30 | `d7b783b` | Added fail-closed validation for non-finite STEP settings and normalized metadata. |
+| 2026-08-30 | `c3338cb` | Added deterministic real-fixture job and work-zero bound regressions. |
