@@ -135,7 +135,7 @@ streaming pipeline.
 | 2026-08-29 | `9707c0c` | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
 | 2026-08-29 | `1e9a983` | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |
 | 2026-08-29 | `bb211a8` | Added explicit STEP review bounds/settings and malformed-loop validation. |
-| 2026-08-30 | pending | Added Auto/XY/XZ/YZ planar-face selection and verified the real Test Bracket STEP file. |
+| 2026-08-30 | `68ea9a8` | Added Auto/XY/XZ/YZ planar-face selection and verified the real Test Bracket STEP file. |
 | 2026-08-30 | `2f642b6` | Added compensated inner-first profile cutouts, through depth, breakthrough, and outer tabs. |
-| 2026-08-30 | pending | Added Qt profile-cutout controls and live preview/review details. |
-| 2026-08-30 | pending | Added paired STEP feature fixtures plus automatic recess/boss detection and slicing. |
+| 2026-08-30 | `2922670` | Added Qt profile-cutout controls and live preview/review details. |
+| 2026-08-30 | `479edb7` | Added paired STEP feature fixtures plus automatic recess/boss detection and slicing. |
