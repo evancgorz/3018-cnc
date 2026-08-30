@@ -306,7 +306,12 @@ Use a two-step pattern:
 Do not pass executable callbacks, GRBL strings, or arbitrary Python objects into
 QML as confirmation payloads.
 
-## Phased implementation plan
+## Phased implementation plan (historical execution checklist)
+
+The phase list below is retained as the original handoff decomposition. The
+checked **Shipped checklist** above is authoritative for the implementation;
+work was completed through equivalent smaller commits rather than one commit
+per phase.
 
 ### Phase 0 — Baseline and characterization
 
