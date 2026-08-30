@@ -407,6 +407,11 @@ ApplicationWindow {
                 Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
             }
             Label { text: appViewModel ? appViewModel.step_model_summary : "Import a planar STEP model to begin."; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            RowLayout { Layout.fillWidth: true; spacing: 10
+                Label { text: "Machining face"; color: window.palette.muted }
+                ComboBox { id: planeCombo; Layout.preferredWidth: 250; model: appViewModel ? appViewModel.step_planes : ["Auto (largest planar face)"]; onActivated: appViewModel.set_step_plane(currentText) }
+                Label { text: appViewModel && appViewModel.step_loaded ? "Select a planar face, then use path rotation below if needed." : "Choose a planar face when the CAD model is standing on its side."; color: window.palette.muted; elide: Text.ElideRight; Layout.fillWidth: true }
+            }
             RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
                 Panel { Layout.fillWidth: true; Layout.fillHeight: true
                     ToolpathCanvas { anchors.fill: parent; anchors.margins: 12; modeLabel: "STEP PREVIEW" }
@@ -417,7 +422,7 @@ ApplicationWindow {
                             SectionTitle { text: "Model and stock" }
                             Label { text: "Machining mode"; color: window.palette.muted; font.pixelSize: 11 }
                             ComboBox { id: modeCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_modes : ["Engraving"]; onActivated: stepDialog.refreshPreview() }
-                            Label { text: "Top-face orientation"; color: window.palette.muted; font.pixelSize: 11 }
+                            Label { text: "Path rotation"; color: window.palette.muted; font.pixelSize: 11 }
                             ComboBox { id: orientationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_orientations : ["Top (XY)"]; onActivated: stepDialog.refreshPreview() }
                             Label { text: "Work zero"; color: window.palette.muted; font.pixelSize: 11 }
                             ComboBox { id: zeroLocationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_zero_locations : ["Center"]; currentIndex: 1; onActivated: stepDialog.refreshPreview() }

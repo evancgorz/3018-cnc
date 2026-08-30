@@ -16,6 +16,14 @@ class StepImportError(ValueError):
     """A STEP file could not be imported into a supported planar model."""
 
 
+STEP_PLANES = (
+    "Auto (largest planar face)",
+    "XY (top/bottom)",
+    "XZ (front/back)",
+    "YZ (left/right)",
+)
+
+
 @dataclass(frozen=True)
 class Point2D:
     x: float
@@ -54,14 +62,18 @@ class StepPlanarModel:
     top_z: float
     thickness: float
     source_bounds: tuple[float, float, float, float, float, float]
+    face_plane: str = "XY"
+    face_normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
 
     @property
     def width(self) -> float:
-        return self.source_bounds[3] - self.source_bounds[0]
+        points = [point for loop in self.loops for point in loop.points]
+        return max(point.x for point in points) - min(point.x for point in points)
 
     @property
     def height(self) -> float:
-        return self.source_bounds[4] - self.source_bounds[1]
+        points = [point for loop in self.loops for point in loop.points]
+        return max(point.y for point in points) - min(point.y for point in points)
 
     @property
     def outer_loop(self) -> PlanarLoop:
@@ -73,15 +85,17 @@ class StepPlanarModel:
         return tuple(loop for loop in self.loops if loop is not outer)
 
 
-def load_step(path: Path) -> StepPlanarModel:
-    """Load a STEP file and normalize its highest horizontal planar face.
+def load_step(path: Path, plane: str = STEP_PLANES[0]) -> StepPlanarModel:
+    """Load a STEP file and normalize a supported orthogonal planar face.
 
-    The initial supported slice deliberately rejects tilted faces, open wires,
-    and files without a horizontal top face.  OCC import errors are translated
-    into user-facing ``StepImportError`` messages at this boundary.
+    Auto selects the largest usable planar face.  This is a useful default for
+    parts such as brackets whose intended machining face is vertical in the
+    source CAD coordinate system.
     """
 
     path = Path(path)
+    if plane not in STEP_PLANES:
+        raise StepImportError("Choose Auto, XY, XZ, or YZ for the STEP face orientation")
     if path.suffix.lower() not in {".step", ".stp"}:
         raise StepImportError("Choose a STEP file with a .step or .stp extension")
     if not path.exists() or not path.is_file():
@@ -102,7 +116,7 @@ def load_step(path: Path) -> StepPlanarModel:
         raise StepImportError(f"STEP import failed: {exc}") from exc
 
     try:
-        return _normalize_shape(path, shape, modules)
+        return _normalize_shape(path, shape, modules, plane)
     except StepImportError:
         raise
     except Exception as exc:
@@ -118,7 +132,7 @@ def _ocp_modules() -> dict[str, Any]:
         from OCP.GeomAbs import GeomAbs_Line, GeomAbs_Plane
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_Reader
-        from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED, TopAbs_WIRE
+        from OCP.TopAbs import TopAbs_FACE, TopAbs_WIRE
         from OCP.TopExp import TopExp_Explorer
         from OCP.TopoDS import TopoDS
     except ImportError as exc:
@@ -128,27 +142,41 @@ def _ocp_modules() -> dict[str, Any]:
     return locals()
 
 
-def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any]) -> StepPlanarModel:
+def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str) -> StepPlanarModel:
     explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
-    candidates: list[tuple[float, Any, Any]] = []
+    candidates: list[tuple[float, str, list[PlanarLoop], tuple[float, float, float], float]] = []
     while explorer.More():
         face = modules["TopoDS"].Face_s(explorer.Current())
         surface = modules["BRepAdaptor_Surface"](face, True)
         if surface.GetType() == modules["GeomAbs_Plane"]:
             normal = surface.Plane().Axis().Direction()
-            normal_z = normal.Z()
-            if face.Orientation() == modules["TopAbs_REVERSED"]:
-                normal_z = -normal_z
-            if normal_z > 0.999:
-                candidates.append((surface.Plane().Location().Z(), face, surface))
+            axis = _plane_axis(normal.X(), normal.Y(), normal.Z())
+            if axis is not None:
+                try:
+                    loops = _extract_loops(face, modules, axis)
+                except StepImportError:
+                    loops = []
+                if loops:
+                    candidates.append(
+                        (
+                            max(loop.area for loop in loops),
+                            axis,
+                            loops,
+                            (float(normal.X()), float(normal.Y()), float(normal.Z())),
+                            _plane_coordinate(surface.Plane().Location(), axis),
+                        )
+                    )
         explorer.Next()
     if not candidates:
-        raise StepImportError("No upward horizontal planar top face was found")
+        raise StepImportError("No closed orthogonal planar face was found; tilted or open geometry is not supported")
 
-    top_z, face, _surface = max(candidates, key=lambda candidate: candidate[0])
-    loops = _extract_loops(face, modules)
-    if not loops:
-        raise StepImportError("The selected top face has no closed wire loops")
+    selected = candidates
+    if plane != STEP_PLANES[0]:
+        requested_axis = plane[:2]
+        selected = [candidate for candidate in candidates if candidate[1] == requested_axis]
+        if not selected:
+            raise StepImportError(f"No closed {requested_axis} planar face was found in this STEP file")
+    _face_area, selected_axis, loops, normal, face_coordinate = max(selected, key=lambda candidate: candidate[0])
 
     all_points = [point for loop in loops for point in loop.points]
     min_x = min(point.x for point in all_points)
@@ -160,11 +188,33 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any]) -> StepPla
     box = modules["Bnd_Box"]()
     modules["BRepBndLib"].Add_s(shape, box)
     bounds = box.Get()
-    thickness = max(0.0, bounds[5] - bounds[2])
-    return StepPlanarModel(path, normalized, top_z, thickness, bounds)
+    thickness = _plane_thickness(bounds, selected_axis)
+    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal)
 
 
-def _extract_loops(face: Any, modules: dict[str, Any]) -> list[PlanarLoop]:
+def _plane_axis(x: float, y: float, z: float) -> str | None:
+    components = {"XY": abs(z), "XZ": abs(y), "YZ": abs(x)}
+    axis, strength = max(components.items(), key=lambda item: item[1])
+    return axis if strength > 0.999 else None
+
+
+def _plane_coordinate(point: Any, plane: str) -> float:
+    if plane == "XY":
+        return float(point.Z())
+    if plane == "XZ":
+        return float(point.Y())
+    return float(point.X())
+
+
+def _plane_thickness(bounds: tuple[float, float, float, float, float, float], plane: str) -> float:
+    if plane == "XY":
+        return max(0.0, bounds[5] - bounds[2])
+    if plane == "XZ":
+        return max(0.0, bounds[4] - bounds[1])
+    return max(0.0, bounds[3] - bounds[0])
+
+
+def _extract_loops(face: Any, modules: dict[str, Any], plane: str) -> list[PlanarLoop]:
     wires = modules["TopExp_Explorer"](face, modules["TopAbs_WIRE"])
     loops: list[PlanarLoop] = []
     while wires.More():
@@ -180,25 +230,45 @@ def _extract_loops(face: Any, modules: dict[str, Any]) -> list[PlanarLoop]:
             edge_explorer.Next()
         if not segments:
             raise StepImportError("Top-face wire contains no edges")
-        loop = _polygonize_segments(segments)
+        loop = _polygonize_segments(
+            [[_project_point(point, plane) for point in segment] for segment in segments]
+        )
         if loop is not None:
             loops.append(loop)
         wires.Next()
     return loops
 
 
-def _sample_curve(curve: Any, modules: dict[str, Any]) -> list[Point2D]:
+@dataclass(frozen=True)
+class _Point3D:
+    x: float
+    y: float
+    z: float
+
+
+def _sample_curve(curve: Any, modules: dict[str, Any]) -> list[_Point3D]:
     first = curve.FirstParameter()
     last = curve.LastParameter()
     count = 2 if curve.GetType() == modules["GeomAbs_Line"] else 48
-    points: list[Point2D] = []
+    points: list[_Point3D] = []
     for index in range(count):
         parameter = first + (last - first) * index / (count - 1)
         point = curve.Value(parameter)
-        candidate = Point2D(float(point.X()), float(point.Y()))
-        if not points or math.hypot(candidate.x - points[-1].x, candidate.y - points[-1].y) > 1e-7:
+        candidate = _Point3D(float(point.X()), float(point.Y()), float(point.Z()))
+        if not points or math.dist(
+            (candidate.x, candidate.y, candidate.z),
+            (points[-1].x, points[-1].y, points[-1].z),
+        ) > 1e-7:
             points.append(candidate)
     return points
+
+
+def _project_point(point: _Point3D, plane: str) -> Point2D:
+    if plane == "XY":
+        return Point2D(point.x, point.y)
+    if plane == "XZ":
+        return Point2D(point.x, point.z)
+    return Point2D(point.y, point.z)
 
 
 def _polygonize_segments(segments: list[list[Point2D]]) -> PlanarLoop | None:

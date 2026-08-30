@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.step_geometry import StepImportError, load_step
+from ttc3018_control.step_geometry import STEP_PLANES, StepImportError, load_step
 
 
 def _write_box(path: Path, width: float = 40, height: float = 25, depth: float = 5) -> None:
@@ -28,6 +28,30 @@ def test_load_step_normalizes_highest_horizontal_face(tmp_path: Path) -> None:
     assert len(model.loops) == 1
     assert model.outer_loop.area == pytest.approx(1000, abs=0.01)
     assert model.outer_loop.bounds == pytest.approx((0, 0, 40, 25), abs=0.001)
+
+
+def test_load_step_can_select_each_orthogonal_face(tmp_path: Path) -> None:
+    path = tmp_path / "plate.step"
+    _write_box(path)
+
+    auto = load_step(path)
+    front = load_step(path, STEP_PLANES[2])
+    side = load_step(path, STEP_PLANES[3])
+
+    assert auto.face_plane == "XY"
+    assert (auto.width, auto.height, auto.thickness) == pytest.approx((40, 25, 5), abs=0.001)
+    assert front.face_plane == "XZ"
+    assert (front.width, front.height, front.thickness) == pytest.approx((40, 5, 25), abs=0.001)
+    assert side.face_plane == "YZ"
+    assert (side.width, side.height, side.thickness) == pytest.approx((25, 5, 40), abs=0.001)
+
+
+def test_load_step_rejects_unknown_face_orientation(tmp_path: Path) -> None:
+    path = tmp_path / "plate.step"
+    _write_box(path)
+
+    with pytest.raises(StepImportError, match="Auto, XY, XZ, or YZ"):
+        load_step(path, "angled")
 
 
 def test_load_step_rejects_non_step_extension(tmp_path: Path) -> None:

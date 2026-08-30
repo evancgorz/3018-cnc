@@ -113,10 +113,12 @@ font outlines and filled/pocketed lettering are outside the current text MVP.
 ## Creating a STEP / 2.5D job
 
 Select **STEP / 2.5D** in the **Prepare** workspace and choose **Import STEP…**.
-The current bounded workflow imports the highest upward horizontal planar face
-from a `.step` or `.stp` file, normalizes its closed top-face loops, and shows a
-top-view preview. Tilted, open, unreadable, or otherwise unsupported geometry is
-rejected with an explanation.
+The bounded workflow imports a `.step` or `.stp` file, selects the largest usable
+orthogonal planar face by default, normalizes its closed loops, and shows a
+top-view preview. Use **Machining face** to choose XY (top/bottom), XZ
+(front/back), or YZ (left/right) when the CAD model is standing on its side;
+then use **Path rotation** for the in-plane XY/YX direction. Tilted, open,
+unreadable, or otherwise unsupported geometry is rejected with an explanation.
 
 Choose one of these operations:
 

@@ -99,7 +99,7 @@ streaming pipeline.
 ## Deferred deliberately
 
 - [ ] General-purpose 3D STEP surface machining.
-- [ ] Reliable arbitrary-face orientation and complex B-rep topology.
+- [ ] Reliable arbitrary-angle face orientation and complex B-rep topology.
 - [ ] 3D adaptive clearing, waterline, raster, or rest machining.
 - [ ] Automatic stock collision simulation.
 - [ ] Full CAM-grade cutter compensation and lead-in/lead-out strategies.
@@ -125,3 +125,4 @@ streaming pipeline.
 | 2026-08-29 | `9707c0c` | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
 | 2026-08-29 | `1e9a983` | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |
 | 2026-08-29 | `bb211a8` | Added explicit STEP review bounds/settings and malformed-loop validation. |
+| 2026-08-30 | pending | Added Auto/XY/XZ/YZ planar-face selection and verified the real Test Bracket STEP file. |

@@ -32,7 +32,7 @@ from ..job import JobStreamer
 from ..machine_state import MachineProfile, ProfileStore, check_job_bounds
 from ..serial_connection import GrblConnection, SerialEvent, available_ports
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS, generate_step_gcode
-from ..step_geometry import StepImportError, StepPlanarModel, load_step
+from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step
 from ..tcp_connection import TcpGrblConnection
 from ..text_engraver import FONT_NAMES, generate_text_gcode
 from ..wifi_setup import make_station_commands
@@ -109,6 +109,7 @@ class ControllerViewModel(QObject):
         self._preview_strokes: list[list[list[float]]] = []
         self._preview_summary = ""
         self._step_model: StepPlanarModel | None = None
+        self._step_path: Path | None = None
         self._step_source_text = "No STEP model imported"
         self._log_lines: list[str] = []
         self._commissioning_pins_text = "Active inputs: none"
@@ -195,6 +196,10 @@ class ControllerViewModel(QObject):
     def step_zero_locations(self) -> list[str]:
         return list(STEP_ZERO_LOCATIONS)
 
+    @Property("QStringList", constant=True)
+    def step_planes(self) -> list[str]:
+        return list(STEP_PLANES)
+
     @Property(str, notify=state_changed)
     def step_source(self) -> str:
         return self._step_source_text
@@ -204,7 +209,7 @@ class ControllerViewModel(QObject):
         if self._step_model is None:
             return "Import a planar STEP model to begin."
         model = self._step_model
-        return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · thickness {model.thickness:.2f} mm"
+        return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · {model.face_plane} face · thickness {model.thickness:.2f} mm"
 
     @Property(bool, notify=state_changed)
     def step_loaded(self) -> bool:
@@ -580,10 +585,26 @@ class ControllerViewModel(QObject):
             QMessageBox.critical(None, "STEP import rejected", str(exc))
             return
         self._step_model = model
+        self._step_path = model.path
         self._step_source_text = model.path.name
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Imported planar STEP model {model.path.name}")
+        self._emit_state()
+
+    @Slot(str)
+    def set_step_plane(self, plane: str) -> None:
+        if self._step_path is None:
+            return
+        try:
+            model = load_step(self._step_path, plane)
+        except StepImportError as exc:
+            self._set_notice(f"STEP face unavailable — {exc}")
+            return
+        self._step_model = model
+        self._preview_strokes = self._strokes_for_step_model(model)
+        self._preview_summary = self.step_model_summary
+        self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
 
     @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
