@@ -474,6 +474,21 @@ ApplicationWindow {
     }
 
     PlatformDialogs.FileDialog {
+        id: gcodeFileDialog
+        title: "Load pre-sliced G-code"
+        nameFilters: ["G-code files (*.nc *.gcode *.tap *.cnc *.txt)", "All files (*.*)"]
+        onAccepted: appViewModel.load_gcode_file(selectedFile)
+    }
+
+    PlatformDialogs.FileDialog {
+        id: saveGcodeDialog
+        title: "Save validated G-code"
+        fileMode: PlatformDialogs.FileDialog.SaveFile
+        nameFilters: ["G-code files (*.gcode *.nc)", "All files (*.*)"]
+        onAccepted: appViewModel.save_gcode_file(selectedFile)
+    }
+
+    PlatformDialogs.FileDialog {
         id: stepFileDialog
         title: "Import planar STEP model"
         nameFilters: ["STEP files (*.step *.stp)", "All files (*.*)"]
@@ -720,7 +735,7 @@ ApplicationWindow {
                             delegate: SecondaryButton {
                                 Layout.fillWidth: true
                                 text: modelData
-                                onClicked: index === 0 ? appViewModel.load_gcode() : index === 1 ? textDialog.open() : index === 2 ? plaqueDialog.open() : stepDialog.open()
+                                onClicked: index === 0 ? gcodeFileDialog.open() : index === 1 ? textDialog.open() : index === 2 ? plaqueDialog.open() : stepDialog.open()
                             }
                         }
                         Divider {}
@@ -743,7 +758,7 @@ ApplicationWindow {
                         Label { text: appViewModel ? appViewModel.job_file : "No job selected"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
                         MutedLabel { text: appViewModel ? appViewModel.job_summary : "Load G-code, create text, or build a plaque. The canvas remains the single source of visual context."; Layout.fillWidth: true }
                         Item { Layout.fillHeight: true }
-                        SecondaryButton { Layout.fillWidth: true; text: "Save validated G-code"; enabled: appViewModel && appViewModel.job_file !== "No G-code loaded"; onClicked: appViewModel.save_gcode() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Save validated G-code"; enabled: appViewModel && appViewModel.job_file !== "No G-code loaded"; onClicked: saveGcodeDialog.open() }
                         PrimaryButton { Layout.fillWidth: true; text: "Review & run"; onClicked: window.workspace = 1 }
                     }
                 }

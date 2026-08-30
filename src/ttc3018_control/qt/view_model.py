@@ -4,7 +4,7 @@ from pathlib import Path
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from ..application.controller import ApplicationController
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
@@ -666,17 +666,12 @@ class ControllerViewModel(QObject):
             self._step_job_summary(job.result),
         )
 
-    @Slot()
-    def save_gcode(self) -> None:
+    @Slot(QUrl)
+    def save_gcode_file(self, selected_file: QUrl) -> None:
         if self.program is None:
             self._set_notice("Save ignored — no validated G-code is loaded")
             return
-        path_text, _ = QFileDialog.getSaveFileName(
-            None,
-            "Save validated G-code",
-            self.program.path.name,
-            "G-code (*.gcode *.nc);;All files (*.*)",
-        )
+        path_text = selected_file.toLocalFile()
         if not path_text:
             return
         try:
@@ -863,17 +858,12 @@ class ControllerViewModel(QObject):
         self._close_after_return_pending = True
         self.return_to_reference()
 
-    @Slot()
-    def load_gcode(self) -> None:
+    @Slot(QUrl)
+    def load_gcode_file(self, selected_file: QUrl) -> None:
         if self.job_active:
             self._set_notice("G-code load ignored — a job is active")
             return
-        path_text, _ = QFileDialog.getOpenFileName(
-            None,
-            "Load pre-sliced G-code",
-            "",
-            "G-code (*.nc *.gcode *.tap *.cnc *.txt);;All files (*.*)",
-        )
+        path_text = selected_file.toLocalFile()
         if not path_text:
             return
         try:
