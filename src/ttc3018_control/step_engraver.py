@@ -103,8 +103,11 @@ def generate_step_gcode(
         if not -20 <= depth < 0:
             raise ValueError("The imported planar surface exceeds the supported 20 mm machining depth")
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
+    depth_paths: list[float] = []
     if mode == "Detected feature":
-        strokes = _detected_feature_paths(model, loops, region, tool_diameter)
+        detected_paths = _detected_feature_paths(model, loops, region, tool_diameter)
+        strokes = [stroke for stroke, _depth in detected_paths]
+        depth_paths = [-feature_depth for _stroke, feature_depth in detected_paths]
     elif mode == "Planar surface":
         strokes = [tuple((x, y) for x, y, _z in path) for path in surface_paths]
     else:
@@ -116,6 +119,7 @@ def generate_step_gcode(
     )
     if placement_offset_x or placement_offset_y:
         strokes = [_translate_stroke(stroke, placement_offset_x, placement_offset_y) for stroke in strokes]
+        depth_paths = list(depth_paths)
         profile_paths = [
             (_translate_stroke(stroke, placement_offset_x, placement_offset_y), is_outer)
             for stroke, is_outer in profile_paths
@@ -150,12 +154,14 @@ def generate_step_gcode(
                 commands.append(f"G0 Z{safe_z:g}")
             continue
         paths = profile_paths if mode == "Profile cutout" else [(stroke, False) for stroke in strokes]
-        for stroke, is_outer in paths:
+        for path_index, (stroke, is_outer) in enumerate(paths):
+            target_depth = depth_paths[path_index] if mode == "Detected feature" else depth
+            path_pass_depth = target_depth * pass_index / passes
             first = stroke[0]
-            commands.extend((f"G0 X{_fmt(first[0])} Y{_fmt(first[1])}", f"G1 Z{_fmt(pass_depth)} F{plunge_feed:g}"))
+            commands.extend((f"G0 X{_fmt(first[0])} Y{_fmt(first[1])}", f"G1 Z{_fmt(path_pass_depth)} F{plunge_feed:g}"))
             if is_outer and tab_count:
                 tab_floor = -(resolved_thickness - tab_height)
-                commands.extend(_tabbed_profile_commands(stroke, pass_depth, tab_floor, tab_count, tab_width, cut_feed, plunge_feed))
+                commands.extend(_tabbed_profile_commands(stroke, path_pass_depth, tab_floor, tab_count, tab_width, cut_feed, plunge_feed))
             else:
                 commands.extend(f"G1 X{_fmt(x)} Y{_fmt(y)} F{cut_feed:g}" for x, y in stroke[1:])
             commands.append(f"G0 Z{safe_z:g}")
@@ -367,20 +373,23 @@ def _detected_feature_paths(
     loops: tuple[PlanarLoop, ...],
     region,
     tool_diameter: float,
-) -> list[Stroke]:
+) -> list[tuple[Stroke, float]]:
     """Generate removal paths that reproduce detected boss/recess topology."""
     radius = tool_diameter / 2
-    recess_polygons = [
-        Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
-        for feature in model.features
-        if feature.kind == "Recess"
-    ]
-    strokes: list[Stroke] = []
-    if recess_polygons:
-        strokes.extend(_pocket_strokes(unary_union(recess_polygons), radius, tool_diameter))
+    recess_groups: dict[float, list[object]] = {}
+    for feature in model.features:
+        if feature.kind != "Recess":
+            continue
+        recess_groups.setdefault(round(feature.depth, 7), []).append(
+            Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
+        )
+    paths: list[tuple[Stroke, float]] = []
+    for feature_depth, polygons in sorted(recess_groups.items()):
+        paths.extend((stroke, feature_depth) for stroke in _pocket_strokes(unary_union(polygons), radius, tool_diameter))
     if any(feature.kind == "Raised boss" for feature in model.features):
-        strokes.extend(_pocket_strokes(region, radius, tool_diameter))
-    return strokes
+        boss_depth = max(feature.depth for feature in model.features if feature.kind == "Raised boss")
+        paths.extend((stroke, boss_depth) for stroke in _pocket_strokes(region, radius, tool_diameter))
+    return paths
 
 
 def _planar_surface_paths(

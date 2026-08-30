@@ -7,7 +7,7 @@ import pytest
 
 from ttc3018_control.gcode import parse_gcode
 from ttc3018_control.step_engraver import generate_step_gcode
-from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel, load_step_isolated
+from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
 def _model() -> StepPlanarModel:
@@ -176,6 +176,27 @@ def test_wedge_planar_surface_generates_varying_bounded_gcode_without_cliff_brid
         <= max(0.5, 1.75 * math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)) + 0.01
         for segment in cutting_segments
     )
+
+
+def test_detected_features_keep_individual_depths() -> None:
+    outer = PlanarLoop(tuple(Point2D(x, y) for x, y in ((0, 0), (50, 0), (50, 30), (0, 30))))
+    holes = tuple(
+        PlanarLoop(
+            tuple(Point2D(cx + 5 * math.cos(index * math.tau / 32), 15 + 5 * math.sin(index * math.tau / 32)) for index in range(32))
+        )
+        for cx in (15, 35)
+    )
+    model = StepPlanarModel(
+        Path("multi-depth.step"), (outer, *holes), 5, 5, (0, 0, 0, 50, 30, 5),
+        features=(StepFeature("Recess", 1, 1), StepFeature("Recess", 2, 3)),
+    )
+
+    job = generate_step_gcode(model, mode="Detected feature", tool_diameter=3, passes=2)
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.z == pytest.approx(-3)
+    assert "G1 Z-0.5 F100" in job.gcode
+    assert "G1 Z-1.5 F100" in job.gcode
+    assert "G1 Z-3 F100" in job.gcode
 
 
 def test_centered_cutout_retains_existing_explicit_placement() -> None:
