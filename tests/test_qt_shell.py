@@ -70,7 +70,8 @@ def test_production_launcher_has_no_legacy_tk_presentation() -> None:
     assert not (source / "app.py").exists()
     assert "ttkbootstrap" not in (root / "pyproject.toml").read_text(encoding="utf-8")
     build_script = (root / "packaging" / "build.ps1").read_text(encoding="utf-8")
-    assert "pyside6-deploy.exe" in build_script
+    assert "-m nuitka" in build_script
+    assert "--enable-plugin=pyside6" in build_script
 
 
 def test_reference_controls_follow_operator_workflow_order() -> None:
