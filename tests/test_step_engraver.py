@@ -208,6 +208,10 @@ def test_detected_features_keep_individual_depths() -> None:
     assert "G1 Z-0.5 F100" in job.gcode
     assert "G1 Z-1.5 F100" in job.gcode
     assert "G1 Z-3 F100" in job.gcode
+    assert job.gcode.index("G1 Z-1.5 F100") < job.gcode.index("G1 Z-0.5 F100")
+    assert job.operations[0].target_depth == pytest.approx(-3)
+    assert job.operations[1].target_depth == pytest.approx(-1)
+    assert job.gcode.index("; Operation feature-depth-0:") < job.gcode.index("; Operation feature-depth-1:")
 
 
 def test_scheduler_reverses_open_path_to_use_nearest_endpoint() -> None:

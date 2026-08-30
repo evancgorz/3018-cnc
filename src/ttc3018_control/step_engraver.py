@@ -390,18 +390,23 @@ def _schedule_strokes(strokes: Iterable[Stroke]) -> list[Stroke]:
 def _schedule_depth_paths(
     paths: Iterable[tuple[Stroke, float]],
 ) -> list[tuple[Stroke, float]]:
-    remaining = list(paths)
+    grouped: dict[float, list[tuple[Stroke, float]]] = {}
+    for stroke, depth in paths:
+        grouped.setdefault(round(depth, 7), []).append((stroke, depth))
     result: list[tuple[Stroke, float]] = []
     current = (0.0, 0.0)
-    while remaining:
-        choices = [
-            (_best_stroke_orientation(stroke, current), index, depth)
-            for index, (stroke, depth) in enumerate(remaining)
-        ]
-        oriented, index, depth = min(choices, key=lambda item: (math.dist(current, item[0][0]), item[1]))
-        result.append((oriented, depth))
-        current = oriented[-1]
-        remaining.pop(index)
+    # Keep the deepest feature group first; only reorder paths within a group.
+    for depth in sorted(grouped):
+        remaining = grouped[depth]
+        while remaining:
+            choices = [
+                (_best_stroke_orientation(stroke, current), index, path_depth)
+                for index, (stroke, path_depth) in enumerate(remaining)
+            ]
+            oriented, index, path_depth = min(choices, key=lambda item: (math.dist(current, item[0][0]), item[1]))
+            result.append((oriented, path_depth))
+            current = oriented[-1]
+            remaining.pop(index)
     return result
 
 
@@ -512,7 +517,7 @@ def _detected_feature_paths(
             Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
         )
     paths: list[tuple[Stroke, float]] = []
-    for feature_depth, polygons in sorted(recess_groups.items()):
+    for feature_depth, polygons in sorted(recess_groups.items(), reverse=True):
         paths.extend((stroke, feature_depth) for stroke in _pocket_strokes(unary_union(polygons), radius, tool_diameter))
     if any(feature.kind == "Raised boss" for feature in model.features):
         boss_depth = max(feature.depth for feature in model.features if feature.kind == "Raised boss")
