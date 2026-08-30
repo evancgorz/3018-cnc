@@ -50,6 +50,9 @@ streaming pipeline.
   results, review summaries, and G-code metadata.
 - [x] Validate generated operation IDs, target depths, dependency references,
   and acyclic ordering before G-code emission.
+- [x] Derive detected-feature parent/child dependencies from loop containment,
+  topologically order nested groups inner-first, and reject later dependencies
+  in the emitted operation sequence.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Run flat pocket paths through a deterministic swept-cutter stock

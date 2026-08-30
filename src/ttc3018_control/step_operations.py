@@ -46,15 +46,46 @@ def build_step_operation_plan(
         grouped: dict[float, list[int]] = {}
         for index, feature in enumerate(model.features):
             grouped.setdefault(round(feature.depth, 7), []).append(index)
-        return tuple(
-            StepOperation(
-                f"feature-depth-{index}",
-                "Detected feature group",
-                -feature_depth,
-                tuple(feature_indices),
+        sorted_groups = sorted(grouped.items(), reverse=True)
+        operation_ids_by_feature: dict[int, str] = {}
+        for index, (_feature_depth, feature_indices) in enumerate(sorted_groups):
+            operation_id = f"feature-depth-{index}"
+            for feature_index in feature_indices:
+                operation_ids_by_feature[feature_index] = operation_id
+        dependencies_by_operation: dict[str, set[str]] = {
+            f"feature-depth-{index}": set()
+            for index in range(len(sorted_groups))
+        }
+        for child_feature_index, child_feature in enumerate(model.features):
+            parent_feature_indices = {
+                parent_feature_index
+                for parent_feature_index, parent_feature in enumerate(model.features)
+                if parent_feature.loop_index == child_feature.parent_loop_index
+            }
+            child_operation_id = operation_ids_by_feature.get(child_feature_index)
+            for parent_feature_index in parent_feature_indices:
+                parent_operation_id = operation_ids_by_feature.get(parent_feature_index)
+                if (
+                    child_operation_id is not None
+                    and parent_operation_id is not None
+                    and child_operation_id != parent_operation_id
+                ):
+                    # Finish nested work before the containing feature so an
+                    # island or support volume is not detached prematurely.
+                    dependencies_by_operation[parent_operation_id].add(child_operation_id)
+
+        operations = []
+        for index, (feature_depth, feature_indices) in enumerate(sorted_groups):
+            operations.append(
+                StepOperation(
+                    f"feature-depth-{index}",
+                    "Detected feature group",
+                    -feature_depth,
+                    tuple(feature_indices),
+                    tuple(sorted(dependencies_by_operation[f"feature-depth-{index}"])),
+                )
             )
-            for index, (feature_depth, feature_indices) in enumerate(sorted(grouped.items(), reverse=True))
-        )
+        return _topological_operation_order(tuple(operations))
     if mode == "Planar surface":
         return (StepOperation("planar-surface", "Planar surface raster", depth),)
     return (StepOperation(mode.lower().replace(" ", "-"), mode, depth),)
@@ -68,6 +99,7 @@ def validate_operation_plan(operations: tuple[StepOperation, ...]) -> None:
     if any(not math.isfinite(operation.target_depth) for operation in operations):
         raise ValueError("STEP operation plan contains a non-finite target depth")
     known = set(ids)
+    seen: set[str] = set()
     for operation in operations:
         missing = set(operation.depends_on) - known
         if missing:
@@ -76,6 +108,12 @@ def validate_operation_plan(operations: tuple[StepOperation, ...]) -> None:
             )
         if operation.operation_id in operation.depends_on:
             raise ValueError(f"STEP operation {operation.operation_id} depends on itself")
+        if not set(operation.depends_on) <= seen:
+            raise ValueError(
+                f"STEP operation {operation.operation_id} has a dependency that executes later; "
+                "the emitted order contains a dependency cycle or is not topological"
+            )
+        seen.add(operation.operation_id)
     pending = {operation.operation_id: set(operation.depends_on) for operation in operations}
     resolved: set[str] = set()
     while pending:
@@ -85,6 +123,29 @@ def validate_operation_plan(operations: tuple[StepOperation, ...]) -> None:
         for operation_id in ready:
             resolved.add(operation_id)
             pending.pop(operation_id)
+
+
+def _topological_operation_order(
+    operations: tuple[StepOperation, ...],
+) -> tuple[StepOperation, ...]:
+    """Return a stable operation order that satisfies every dependency."""
+    by_id = {operation.operation_id: operation for operation in operations}
+    pending = {operation.operation_id: set(operation.depends_on) for operation in operations}
+    result: list[StepOperation] = []
+    while pending:
+        ready = [
+            operation_id
+            for operation_id in by_id
+            if operation_id in pending and not pending[operation_id]
+        ]
+        if not ready:
+            raise ValueError("STEP operation plan contains a dependency cycle")
+        for operation_id in ready:
+            result.append(by_id[operation_id])
+            pending.pop(operation_id)
+            for dependencies in pending.values():
+                dependencies.discard(operation_id)
+    return tuple(result)
 
 
 def _outer_index(model: StepPlanarModel) -> int:
