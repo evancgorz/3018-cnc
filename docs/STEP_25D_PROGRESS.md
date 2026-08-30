@@ -44,6 +44,8 @@ streaming pipeline.
   containment and tool-reachable planar coverage before generated G-code loads.
 - [x] Attach the current STEP operation groups and dependencies to generated
   results, review summaries, and G-code metadata.
+- [x] Validate generated operation IDs, target depths, dependency references,
+  and acyclic ordering before G-code emission.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Preview the generated centerline toolpath before running.
