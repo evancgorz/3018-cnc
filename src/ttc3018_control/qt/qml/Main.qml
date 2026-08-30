@@ -132,16 +132,16 @@ ApplicationWindow {
         modal: true
         title: "Text engraving"
         width: 650
-        height: 620
+        height: 700
         x: Math.round((window.width - width) / 2)
         y: Math.round((window.height - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
-            if (appViewModel) appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(rpmField.text))
+            if (appViewModel) appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
         }
         onOpened: refreshPreview()
-        onClosed: { if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0) }
+        onClosed: { if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0) }
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 20; spacing: 11
             Label { text: "Create a centerline engraving from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -165,6 +165,14 @@ ApplicationWindow {
                 Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
                 Field { id: plungeField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
                     onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Letter spacing"; color: window.palette.muted }
+                Field { id: letterSpacingField; Layout.fillWidth: true; text: "0.18"; validator: DoubleValidator { bottom: 0; top: 2 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Line spacing"; color: window.palette.muted }
+                Field { id: lineSpacingField; Layout.fillWidth: true; text: "1.4"; validator: DoubleValidator { bottom: 1; top: 3 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Alignment"; color: window.palette.muted }
+                ComboBox { id: alignmentCombo; Layout.fillWidth: true; model: ["Left", "Center", "Right"]; onActivated: textDialog.refreshPreview() }
                 Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
                 Field { id: rpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
                     onTextChanged: textDialog.refreshPreview() }
@@ -175,7 +183,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Cancel"; onClicked: textDialog.close() }
-                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(rpmField.text)); textDialog.close(); window.workspace = 1 } }
+                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text)); textDialog.close(); window.workspace = 1 } }
             }
         }
     }

@@ -443,12 +443,13 @@ class ControllerViewModel(QObject):
             return
         self._set_notice("Hard and soft limits enable requested")
 
-    @Slot(str, str, float, float, float, float, float, int)
-    def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, float, float, float, float, float, str, int)
+    def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
             engraving = generate_text_gcode(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
+                letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
             )
         except (ValueError, TypeError):
@@ -477,12 +478,13 @@ class ControllerViewModel(QObject):
             self._preview_summary = f"{plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes · {border}"
         self._emit_state()
 
-    @Slot(str, str, float, float, float, float, float, int)
-    def create_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, float, float, float, float, float, str, int)
+    def create_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
             engraving = generate_text_gcode(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
+                letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
             )
         except (ValueError, TypeError) as exc:

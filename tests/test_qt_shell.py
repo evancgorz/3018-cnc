@@ -38,7 +38,7 @@ def test_qt_view_model_projects_grbl_status(qapp) -> None:
 def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
     _engine, view_model = build_engine()
 
-    view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0)
+    view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Center", 0)
     assert view_model.preview_strokes
     assert "strokes" in view_model.preview_summary
 
