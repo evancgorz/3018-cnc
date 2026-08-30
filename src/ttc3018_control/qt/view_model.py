@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import queue
 import threading
@@ -76,6 +77,13 @@ class ControllerViewModel(QObject):
         self._position_move_active = False
         self._return_after_job_pending = False
         self._close_after_return_pending = False
+        self._live_jog_axis: str | None = None
+        self._live_jog_axis_last: str | None = None
+        self._live_jog_direction = 0.0
+        self._live_jog_first_distance: float | None = None
+        self._live_jog_position: Position | None = None
+        self._live_jog_stop_pending = False
+        self._live_jog_alignment_pending = False
         self._wifi_connecting = False
         self._wifi_results: queue.Queue[tuple[TcpGrblConnection | None, str, int]] = queue.Queue()
         self._last_status_poll = 0.0
@@ -283,7 +291,27 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def can_jog(self) -> bool:
-        return self.connected and self.session.can_move and not self.job_active and not self._position_move_active and not self._pending_manual_acks
+        return bool(
+            self.connected
+            and self.session.can_move
+            and not self.job_active
+            and not self._position_move_active
+            and not self._pending_manual_acks
+            and not self._live_jog_stop_pending
+            and not self._live_jog_alignment_pending
+        )
+
+    @Property(bool, notify=state_changed)
+    def can_live_jog(self) -> bool:
+        return bool(
+            self.connected
+            and self.session.can_move
+            and not self.job_active
+            and not self._position_move_active
+            and not self._live_jog_stop_pending
+            and not self._live_jog_alignment_pending
+            and (not self._pending_manual_acks or self._live_jog_axis is not None)
+        )
 
     @Property(bool, notify=state_changed)
     def unreferenced_jog_allowed(self) -> bool:
@@ -658,6 +686,59 @@ class ControllerViewModel(QObject):
         except (RuntimeError, ValueError) as exc:
             self._set_notice(f"Jog not sent — {exc}")
 
+    @Slot(str, float)
+    def start_live_jog(self, axis: str, direction: float) -> None:
+        axis = axis.upper()
+        direction = 1.0 if direction > 0 else -1.0
+        if axis not in {"X", "Y", "Z"}:
+            self._set_notice("Live jog ignored — axis must be X, Y, or Z")
+            return
+        if self._live_jog_axis is not None:
+            return
+        if not self.can_live_jog:
+            self._set_notice("Live jog ignored — machine is not ready or GRBL is not Idle")
+            return
+        if not self.session.envelope.trusted and not self._unreferenced_jog_allowed:
+            self.unreferenced_jog_requested.emit()
+            return
+        position = self.session.virtual_position if self.session.envelope.trusted else self.session.machine_position
+        if position is None:
+            self._set_notice("Live jog ignored — current position is unavailable")
+            return
+        current = getattr(position, axis.lower())
+        if direction > 0:
+            distance = math.ceil(current - 0.001) - current
+            if distance <= 0.001:
+                distance = 1.0
+        else:
+            distance = math.floor(current + 0.001) - current
+            if distance >= -0.001:
+                distance = -1.0
+        self._live_jog_axis = axis
+        self._live_jog_axis_last = axis
+        self._live_jog_direction = direction
+        self._live_jog_first_distance = distance
+        self._live_jog_position = position
+        self._live_jog_stop_pending = False
+        self._live_jog_alignment_pending = False
+        self._send_next_live_jog()
+
+    @Slot()
+    def stop_live_jog(self) -> None:
+        if self._live_jog_axis is None:
+            return
+        self._live_jog_axis_last = self._live_jog_axis
+        self._live_jog_axis = None
+        self._live_jog_first_distance = None
+        self._live_jog_stop_pending = True
+        try:
+            self._send_realtime(REALTIME_JOG_CANCEL)
+        except RuntimeError as exc:
+            self._clear_live_jog()
+            self._set_notice(f"Live jog stop failed — {exc}")
+            return
+        self._last_status_poll = 0.0
+
     @Slot(int)
     def start_spindle(self, rpm: int) -> None:
         if not self.can_jog:
@@ -877,6 +958,7 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def cancel_jog(self) -> None:
+        self._clear_live_jog()
         try:
             self._send_realtime(REALTIME_JOG_CANCEL)
         except RuntimeError as exc:
@@ -961,10 +1043,21 @@ class ControllerViewModel(QObject):
             self._pending_manual_acks -= 1
             if lowered == "ok" and self._position_move_active:
                 self._send_next_position_move()
+            elif lowered == "ok" and self._live_jog_axis is not None:
+                self._send_next_live_jog()
+            elif lowered == "ok" and self._live_jog_alignment_pending:
+                self._clear_live_jog()
+                self._set_notice("Live jog stopped at a whole millimeter")
             elif lowered != "ok" and self._position_move_active:
                 self._position_queue = []
                 self._position_move_active = False
                 self._set_notice(f"Position move stopped — GRBL replied: {text}")
+            elif lowered != "ok" and self._live_jog_axis is not None:
+                self._clear_live_jog()
+                self._set_notice(f"Live jog stopped — GRBL replied: {text}")
+            elif lowered != "ok" and self._live_jog_alignment_pending:
+                self._clear_live_jog()
+                self._set_notice(f"Whole-millimeter stop correction rejected — {text}")
         elif self.job.handle_response(text):
             if self.job.state == "complete":
                 self._return_after_job_pending = True
@@ -980,6 +1073,8 @@ class ControllerViewModel(QObject):
             if self._return_after_job_pending and status.can_jog and not self._pending_manual_acks:
                 self._return_after_job_pending = False
                 self.return_to_work_zero()
+            if self._live_jog_stop_pending and status.can_jog and not self._pending_manual_acks:
+                self._finish_live_jog_stop()
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
@@ -1075,6 +1170,82 @@ class ControllerViewModel(QObject):
         self.connection.send_line(command)
         self._pending_manual_acks += 1
 
+    def _send_next_live_jog(self) -> None:
+        if self._live_jog_axis is None or self._live_jog_stop_pending or self._live_jog_alignment_pending:
+            return
+        axis = self._live_jog_axis
+        distance = self._live_jog_first_distance
+        if distance is None:
+            distance = self._live_jog_direction
+        else:
+            self._live_jog_first_distance = None
+        current = self._live_jog_position
+        if current is None:
+            self._clear_live_jog()
+            return
+        proposed = self._position_with_axis_delta(current, axis, distance)
+        if self.session.envelope.trusted:
+            maximum = self.session.profile.travel_for(axis)
+            proposed_value = getattr(proposed, axis.lower())
+            if proposed_value < -0.001 or proposed_value > maximum + 0.001:
+                self._clear_live_jog()
+                self._set_notice(f"Live jog stopped at the {axis} travel limit")
+                return
+        try:
+            self._send_manual(make_jog(axis, distance, 500.0))
+        except (RuntimeError, ValueError) as exc:
+            self._clear_live_jog()
+            self._set_notice(f"Live jog stopped — {exc}")
+            return
+        self._live_jog_position = proposed
+
+    def _finish_live_jog_stop(self) -> None:
+        if not self._live_jog_stop_pending or self._pending_manual_acks:
+            return
+        position = self.session.virtual_position if self.session.envelope.trusted else self.session.machine_position
+        if position is None:
+            self._clear_live_jog()
+            self._set_notice("Live jog stopped; final position was unavailable")
+            return
+        axis = self._live_jog_axis_last or "X"
+        current = getattr(position, axis.lower())
+        target = math.floor(current + 0.5)
+        distance = target - current
+        if abs(distance) <= 0.001:
+            self._clear_live_jog()
+            self._set_notice("Live jog stopped at a whole millimeter")
+            return
+        if self.session.envelope.trusted:
+            maximum = self.session.profile.travel_for(axis)
+            if target < -0.001 or target > maximum + 0.001:
+                self._clear_live_jog()
+                self._set_notice("Live jog stopped; nearest whole-millimeter position is outside the travel envelope")
+                return
+        try:
+            self._send_manual(make_jog(axis, distance, 500.0))
+        except (RuntimeError, ValueError) as exc:
+            self._clear_live_jog()
+            self._set_notice(f"Whole-millimeter stop correction failed — {exc}")
+            return
+        self._live_jog_stop_pending = False
+        self._live_jog_alignment_pending = True
+
+    def _clear_live_jog(self) -> None:
+        if self._live_jog_axis is not None:
+            self._live_jog_axis_last = self._live_jog_axis
+        self._live_jog_axis = None
+        self._live_jog_direction = 0.0
+        self._live_jog_first_distance = None
+        self._live_jog_position = None
+        self._live_jog_stop_pending = False
+        self._live_jog_alignment_pending = False
+
+    @staticmethod
+    def _position_with_axis_delta(position: Position, axis: str, distance: float) -> Position:
+        values = {"X": position.x, "Y": position.y, "Z": position.z}
+        values[axis] += distance
+        return Position(values["X"], values["Y"], values["Z"])
+
     def _send_realtime(self, command: bytes) -> None:
         if self.connection is None:
             raise RuntimeError("Not connected")
@@ -1129,6 +1300,7 @@ class ControllerViewModel(QObject):
     def _disconnected(self, reason: str) -> None:
         self.session.invalidate_reference(reason)
         self.status = None
+        self._clear_live_jog()
         self._pending_manual_acks = 0
         self._position_queue = []
         self._position_move_active = False
