@@ -340,9 +340,19 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def can_live_jog(self) -> bool:
+        # GRBL reports ``Jog`` as soon as the first held-jog segment starts.
+        # Keep the pressed QML button enabled for that expected transition;
+        # disabling a pressed Button emits ``canceled`` and would immediately
+        # invoke stop_live_jog after the first segment. Other non-Idle states
+        # (Hold, Alarm, Run, and so on) must still disable live jogging.
+        controller_accepts_live_jog = self.session.can_move or bool(
+            self._live_jog_axis is not None
+            and self.status is not None
+            and self.status.state == "Jog"
+        )
         return bool(
             self.connected
-            and self.session.can_move
+            and controller_accepts_live_jog
             and not self.job_active
             and not self._position_move_active
             and not self._live_jog_stop_pending
