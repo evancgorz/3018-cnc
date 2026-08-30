@@ -622,17 +622,22 @@ def _detect_axial_features(
                         continue
                     if not _vertical_wall_matches_loop(projected, loops[match].bounds):
                         continue
+                    outward = (high - face_coordinate) if sign > 0 else (face_coordinate - low)
                     inward = (face_coordinate - low) if sign > 0 else (high - face_coordinate)
-                    feature_bottom = low if sign > 0 else high
-                    if inward <= 0.001:
-                        continue
-                    unique[("Recess", match)] = StepFeature(
-                        "Recess",
-                        match,
-                        inward,
-                        loop_parents[match] if len(loop_parents) == len(loops) else None,
-                        machine_bottom is not None and abs(feature_bottom - machine_bottom) <= 0.1,
-                    )
+                    parent_index = loop_parents[match] if len(loop_parents) == len(loops) else None
+                    if outward > 0.001 and inward <= 0.001:
+                        unique[("Raised boss", match)] = StepFeature(
+                            "Raised boss", match, outward, parent_index, False
+                        )
+                    elif inward > 0.001 and outward <= 0.001:
+                        feature_bottom = low if sign > 0 else high
+                        unique[("Recess", match)] = StepFeature(
+                            "Recess",
+                            match,
+                            inward,
+                            parent_index,
+                            machine_bottom is not None and abs(feature_bottom - machine_bottom) <= 0.1,
+                        )
                     break
         wall_explorer.Next()
     return tuple(unique.values())

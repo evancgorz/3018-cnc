@@ -42,6 +42,20 @@ def _write_rectangular_pocket(path: Path, *, through: bool = False) -> None:
     writer.Write(str(path))
 
 
+def _write_rectangular_boss(path: Path) -> None:
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+    from OCP.gp import gp_Pnt
+
+    base = BRepPrimAPI_MakeBox(40, 25, 5).Shape()
+    boss = BRepPrimAPI_MakeBox(gp_Pnt(10, 7, 5), 12, 8, 3).Shape()
+    result = BRepAlgoAPI_Fuse(base, boss).Shape()
+    writer = STEPControl_Writer()
+    writer.Transfer(result, STEPControl_AsIs)
+    writer.Write(str(path))
+
+
 def test_load_step_normalizes_highest_horizontal_face(tmp_path: Path) -> None:
     path = tmp_path / "plate.step"
     _write_box(path)
@@ -109,6 +123,18 @@ def test_load_step_detects_planar_walled_rectangular_recess(tmp_path: Path, thro
     program = parse_gcode(job.gcode)
     assert job.feature_simulations and job.feature_simulations[0].passed
     assert program.bounds.minimum.z == pytest.approx(-5.2 if through else -3, abs=0.01)
+
+
+def test_load_step_detects_planar_walled_rectangular_boss(tmp_path: Path) -> None:
+    path = tmp_path / "boss.step"
+    _write_rectangular_boss(path)
+
+    model = load_step_isolated(path)
+
+    bosses = [feature for feature in model.features if feature.kind == "Raised boss"]
+    assert bosses
+    assert bosses[0].depth == pytest.approx(3, abs=0.01)
+    assert not bosses[0].is_through
 
 
 def test_wedge_import_preserves_tilted_planar_surface_patch() -> None:
