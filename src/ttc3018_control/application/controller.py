@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
+from ..grbl import GrblStatus
 from ..machine_state import MachineProfile, ProfileStore
 from ..serial_connection import GrblConnection
 from ..tcp_connection import TcpGrblConnection
@@ -42,6 +43,8 @@ class ApplicationController:
 
         self.session = MachineSession(profile=profile)
         self.settings = settings
+        self.status: GrblStatus | None = None
+        self.manual_pending_acks = 0
         self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
         self.generation_service = GenerationService()
         self.motion = MotionService(
@@ -67,3 +70,35 @@ class ApplicationController:
 
     def close(self) -> None:
         self.connection_service.disconnect()
+        self.motion.reset()
+        self.job.reset()
+        self.manual_pending_acks = 0
+
+    def send_manual(self, command: bytes) -> None:
+        self.connection_service.send_line(command)
+        self.manual_pending_acks += 1
+
+    def send_realtime(self, command: bytes) -> None:
+        self.connection_service.send_realtime(command)
+
+    def apply_status(self, status: GrblStatus) -> None:
+        self.status = status
+        self.session.update_status(status)
+        self.job.observe_status(status)
+        self.motion.observe_status(status)
+
+    def handle_response(self, response: str, feed: float = 500.0) -> bool:
+        """Dispatch one controller response to the owning application service."""
+        text = response.strip()
+        lowered = text.lower()
+        if self.motion.handle_response(text, feed):
+            return True
+        if self.manual_pending_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
+            self.manual_pending_acks -= 1
+            return True
+        return self.job.handle_response(text)
+
+    def reset(self) -> None:
+        self.manual_pending_acks = 0
+        self.motion.reset()
+        self.job.reset()

@@ -59,8 +59,6 @@ class ControllerViewModel(QObject):
         self._commissioning_tracker = InputTestTracker()
         self._commissioning_settings: dict[int, float] = {}
         self.connection = None
-        self.status: GrblStatus | None = None
-        self._pending_manual_acks = 0
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
         self._unreferenced_jog_allowed = False
@@ -101,6 +99,22 @@ class ControllerViewModel(QObject):
     @property
     def session(self):
         return self.application.session
+
+    @property
+    def status(self):
+        return self.application.status
+
+    @status.setter
+    def status(self, value) -> None:
+        self.application.status = value
+
+    @property
+    def _pending_manual_acks(self):
+        return self.application.manual_pending_acks
+
+    @_pending_manual_acks.setter
+    def _pending_manual_acks(self, value) -> None:
+        self.application.manual_pending_acks = value
 
     @property
     def profile_store(self):
@@ -399,8 +413,7 @@ class ControllerViewModel(QObject):
 
     def apply_status(self, status: GrblStatus) -> None:
         """Apply a status report directly for tests and non-transport adapters."""
-        self.status = status
-        self.session.update_status(status)
+        self.application.apply_status(status)
         self._project_status(status)
 
     @Slot(str)
@@ -1112,26 +1125,17 @@ class ControllerViewModel(QObject):
         if setting is not None:
             self._commissioning_settings[setting[0]] = setting[1]
             self._emit_state()
-        motion_handled = self.motion.handle_response(text, 500.0)
-        if not motion_handled and self._pending_manual_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
-            self._pending_manual_acks -= 1
-        elif self.job_service.handle_response(text):
-            pass
+        self.application.handle_response(text, 500.0)
         status = parse_status(text)
         if status is not None:
-            self.status = status
-            self.session.update_status(status)
+            self.application.apply_status(status)
             self._update_commissioning(status)
-            self.job_service.observe_status(status)
-            self.motion.observe_status(status)
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
             self._project_status(status)
         if text.startswith("Grbl ") or "[MSG:Reset" in text:
-            self.job_service.reset()
-            self._pending_manual_acks = 0
-            self.motion.reset()
+            self.application.reset()
             if self._preserve_references_on_next_reset:
                 self._preserve_references_on_next_reset = False
             else:
@@ -1212,17 +1216,16 @@ class ControllerViewModel(QObject):
         return False
 
     def _send_manual(self, command: bytes) -> None:
-        self.connection_service.send_line(command)
-        self._pending_manual_acks += 1
+        self.application.send_manual(command)
 
     def _send_realtime(self, command: bytes) -> None:
-        self.connection_service.send_realtime(command)
+        self.application.send_realtime(command)
 
     def _send_job_line(self, command: bytes) -> None:
-        self.connection_service.send_line(command)
+        self.application.connection_service.send_line(command)
 
     def _send_motion_line(self, command: bytes) -> None:
-        self.connection_service.send_line(command)
+        self.application.connection_service.send_line(command)
 
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:
@@ -1255,6 +1258,7 @@ class ControllerViewModel(QObject):
         )
 
     def _disconnected(self, reason: str) -> None:
+        self.application.close()
         self.session.invalidate_reference(reason)
         self.status = None
         self.motion.reset()
