@@ -123,10 +123,19 @@ font outlines and filled/pocketed lettering are outside the current text MVP.
 
 ## Creating a STEP / 2.5D job
 
-Select **STEP / 2.5D** in the **Prepare** workspace and choose **Import STEP…**.
+Select **Guided STEP setup** in the **Prepare** workspace for the recommended
+four-step flow: import the model, understand the detected geometry, confirm the
+automatically suggested stock/tool setup, and review the validated 3D proposal.
+Reusable cutting defaults (tool diameter, orientation, work-zero convention,
+passes/stepdown, feeds, safe Z, spindle RPM, breakthrough, and tab settings)
+persist between application sessions. Model-specific stock width, height, and
+thickness are suggested from each newly imported STEP file and are deliberately
+not reused for the next part. **Advanced STEP / 2.5D** exposes the same planner
+in one detailed dialog when direct control is preferable.
+
 The bounded workflow imports a `.step` or `.stp` file, selects the largest usable
 orthogonal planar face by default, normalizes its closed loops, and shows a
-top-view preview. Use **Machining face** to choose XY (top/bottom), XZ
+live isometric model and toolpath preview. Use **Machining face** to choose XY (top/bottom), XZ
 (front/back), or YZ (left/right) when the CAD model is standing on its side;
 then use **Path rotation** for the in-plane XY/YX direction. Tilted, open,
 unreadable, or otherwise unsupported geometry is rejected with an explanation.
@@ -136,6 +145,10 @@ and self-intersections fail closed.
 
 Choose one of these operations:
 
+- Automatic part: recognizes supported recesses, raised bosses, and accessible
+  planar/ramp surfaces, machines those features first, then cuts the compensated
+  outer profile through the confirmed stock thickness with holding tabs. This
+  is the wizard default.
 - Engraving: follows the imported closed loops.
 - Detected feature: uses face topology to distinguish a recessed/removed region
   from a raised boss. It clears inside a recess or clears the surrounding base
@@ -171,7 +184,8 @@ uncovered reachable area. **Generate and load** sends the result through
 the same metric parser, bounds checks, preflight, save, and streaming pipeline as
 imported G-code; generation itself never moves the machine.
 
-The STEP dialog shows the validated operation plan, target depths, and
+The STEP review shows an isometric model, stock volume, varying-Z toolpaths,
+final compensated profile, validated operation plan, target depths, and
 dependencies from the same records embedded in the generated G-code. The
 generate button stays disabled until the current settings have produced a
 valid preview and simulation result.
@@ -265,9 +279,11 @@ transmitted-command and echoed-response logs. After the controller restarts,
 the application reads its new address from the DLC32 connection/startup messages,
 places it in the Wi-Fi host field, and saves it for subsequent launches. A
 successful Wi-Fi connection also becomes the preferred startup transport.
-If the saved address is missing or DHCP changes it, selecting **Wi-Fi TCP** and
-**Connect** automatically scans the PC's local `/24` network for a port-23 GRBL
-status response, saves the verified address, and connects without requiring USB.
+When connecting over Wi-Fi, the application tries the saved/configured address
+first so a known controller is not delayed by subnet discovery. If that direct
+probe fails because the address is missing or DHCP changed it, **Connect** scans
+the PC's local `/24` network for a port-23 GRBL startup banner or status response,
+saves the verified address, and connects without requiring USB.
 USB is still required once to place a controller into station mode and provide
 credentials for a reachable 2.4 GHz network.
 

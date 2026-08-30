@@ -172,6 +172,12 @@ streaming pipeline.
 ### 5. UI and shared job pipeline
 
 - [x] Add a STEP/2.5D job dialog with live settings and toolpath preview.
+- [x] Add an optional four-step guided STEP preparation wizard with automatic
+  per-model stock suggestions and session-persistent reusable cutting defaults.
+- [x] Add a live isometric model/toolpath/stock preview for planar features,
+  raised bosses, removed features, and varying-Z wedge surfaces.
+- [x] Add an automatic-part strategy that machines detected features or planar
+  surfaces first and schedules the compensated tabbed outer profile last.
 - [x] Reuse the existing generated-program loading and parser validation path.
 - [x] Reuse existing bounds checks, preflight, spindle controls, and job
   streaming.
