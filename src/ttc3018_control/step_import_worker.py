@@ -28,6 +28,10 @@ def main() -> int:
                 "source_bounds": list(model.source_bounds),
                 "face_plane": model.face_plane,
                 "face_normal": list(model.face_normal),
+                "features": [
+                    {"kind": feature.kind, "loop_index": feature.loop_index, "depth": feature.depth}
+                    for feature in model.features
+                ],
             }
         )
     )

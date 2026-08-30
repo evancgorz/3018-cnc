@@ -13,7 +13,7 @@ from .step_geometry import Point2D, PlanarLoop, StepPlanarModel
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
+STEP_MODES = ("Engraving", "Detected feature", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -36,6 +36,7 @@ class StepMachining:
     tab_count: int = 0
     tab_width: float = 0.0
     tab_height: float = 0.0
+    feature_summary: str = ""
 
 
 def generate_step_gcode(
@@ -62,6 +63,10 @@ def generate_step_gcode(
     resolved_thickness = float(stock_thickness) if stock_thickness is not None else float(model.thickness)
     if mode == "Profile cutout":
         depth = -(resolved_thickness + breakthrough)
+    elif mode == "Detected feature":
+        if not model.features:
+            raise ValueError("No raised boss or recessed feature was detected on the selected machining face")
+        depth = -max(feature.depth for feature in model.features)
     _validate_settings(
         model, mode, orientation, zero_location, tool_diameter, depth, passes,
         safe_z, cut_feed, plunge_feed, spindle_rpm,
@@ -82,7 +87,10 @@ def generate_step_gcode(
     loops = tuple(_translate_loop(loop, offset_x, offset_y) for loop in loops)
     region = _even_odd_region(loops)
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
-    strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
+    if mode == "Detected feature":
+        strokes = _detected_feature_paths(model, loops, region, tool_diameter)
+    else:
+        strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
@@ -131,6 +139,8 @@ def generate_step_gcode(
         tab_count if mode == "Profile cutout" else 0,
         tab_width if mode == "Profile cutout" else 0.0,
         tab_height if mode == "Profile cutout" else 0.0,
+        ", ".join(f"{feature.kind} {feature.depth:.2f} mm" for feature in model.features)
+        if mode == "Detected feature" else "",
     )
 
 
@@ -252,6 +262,27 @@ def _profile_cutout_paths(region, tool_diameter: float) -> list[tuple[Stroke, bo
         compensated_outer = Polygon(polygon.exterior).buffer(radius, join_style=2)
         outer_paths.extend((stroke, True) for stroke in _strokes_from_geometry(compensated_outer.boundary))
     return inner_paths + outer_paths
+
+
+def _detected_feature_paths(
+    model: StepPlanarModel,
+    loops: tuple[PlanarLoop, ...],
+    region,
+    tool_diameter: float,
+) -> list[Stroke]:
+    """Generate removal paths that reproduce detected boss/recess topology."""
+    radius = tool_diameter / 2
+    recess_polygons = [
+        Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
+        for feature in model.features
+        if feature.kind == "Recess"
+    ]
+    strokes: list[Stroke] = []
+    if recess_polygons:
+        strokes.extend(_pocket_strokes(unary_union(recess_polygons), radius, tool_diameter))
+    if any(feature.kind == "Raised boss" for feature in model.features):
+        strokes.extend(_pocket_strokes(region, radius, tool_diameter))
+    return strokes
 
 
 def _tabbed_profile_commands(

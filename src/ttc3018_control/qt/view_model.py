@@ -29,6 +29,7 @@ class ControllerViewModel(QObject):
     unreferenced_jog_requested = Signal()
     close_requested = Signal()
     step_import_completed = Signal(object, str)
+    step_model_imported = Signal(str)
 
     def __init__(self, application: ApplicationController | None = None) -> None:
         super().__init__()
@@ -197,11 +198,19 @@ class ControllerViewModel(QObject):
         if self._step_model is None:
             return self._step_import_status
         model = self._step_model
-        return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · {model.face_plane} face · thickness {model.thickness:.2f} mm"
+        feature_text = ""
+        if model.features:
+            descriptions = ", ".join(f"{feature.kind} {feature.depth:.2f} mm" for feature in model.features)
+            feature_text = f" · detected {descriptions}"
+        return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · {model.face_plane} face · thickness {model.thickness:.2f} mm{feature_text}"
 
     @Property(bool, notify=state_changed)
     def step_loaded(self) -> bool:
         return self._step_model is not None
+
+    @Property(bool, notify=state_changed)
+    def step_feature_detected(self) -> bool:
+        return bool(self._step_model and self._step_model.features)
 
     @Property(bool, notify=state_changed)
     def step_importing(self) -> bool:
@@ -481,6 +490,7 @@ class ControllerViewModel(QObject):
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Imported planar STEP model {model.path.name}")
         self._emit_state()
+        self.step_model_imported.emit("Detected feature" if model.features else "Engraving")
 
     @Slot(str)
     def set_step_plane(self, plane: str) -> None:
@@ -496,6 +506,7 @@ class ControllerViewModel(QObject):
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
+        self.step_model_imported.emit("Detected feature" if model.features else "Engraving")
 
     @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int)
     def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
@@ -970,7 +981,8 @@ class ControllerViewModel(QObject):
         max_x = max(point[0] for point in points)
         max_y = max(point[1] for point in points)
         return (
-            f"STEP {job.mode} · stock {job.stock_width:.1f} × {job.stock_height:.1f} mm · "
+            f"STEP {job.mode}{f' ({job.feature_summary})' if job.feature_summary else ''} · "
+            f"stock {job.stock_width:.1f} × {job.stock_height:.1f} mm · "
             f"tool {job.tool_diameter:.2f} mm · depth {job.depth:.2f} mm · {job.passes} passes · "
             + (f"{job.tab_count} outer tabs · " if job.mode == "Profile cutout" else "")
             + f"{job.stroke_count} paths · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"

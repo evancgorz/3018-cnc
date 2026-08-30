@@ -135,6 +135,11 @@ unreadable, or otherwise unsupported geometry is rejected with an explanation.
 Choose one of these operations:
 
 - Engraving: follows the imported closed loops.
+- Detected feature: uses face topology to distinguish a recessed/removed region
+  from a raised boss. It clears inside a recess or clears the surrounding base
+  face to leave a boss, using the feature depth measured from the STEP solid.
+- Profile cutout: cuts inner loops first and the compensated outer profile last,
+  with stock-based through depth, breakthrough allowance, and holding tabs.
 - Outside contour or Inside contour: applies the selected tool radius.
 - Pocket: clears simple planar regions with nested rings.
 - Hole: cuts circular inner loops with a tool-center path.
@@ -145,6 +150,11 @@ safe Z, cut/plunge feeds, and optional `M3` spindle startup. The preview and
 review summary show the transformed path bounds. **Generate and load** sends the
 result through the same metric parser, bounds checks, preflight, save, and
 streaming pipeline as imported G-code; generation itself never moves the machine.
+
+The `examples/removed-cylinder.step` and `examples/extruded-circle.step` fixtures
+exercise the topology distinction. They have the same top-view rectangle and
+circle, but the first contains a 2 mm circular recess while the second contains
+a 2 mm raised circular boss.
 
 This release is intentionally planar. It does not yet perform arbitrary-face
 selection, 3D surface machining, adaptive clearing, collision simulation, or

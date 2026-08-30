@@ -60,6 +60,13 @@ class PlanarLoop:
 
 
 @dataclass(frozen=True)
+class StepFeature:
+    kind: str
+    loop_index: int
+    depth: float
+
+
+@dataclass(frozen=True)
 class StepPlanarModel:
     path: Path
     loops: tuple[PlanarLoop, ...]
@@ -68,6 +75,7 @@ class StepPlanarModel:
     source_bounds: tuple[float, float, float, float, float, float]
     face_plane: str = "XY"
     face_normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
+    features: tuple[StepFeature, ...] = ()
 
     @property
     def width(self) -> float:
@@ -186,6 +194,10 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
             tuple(float(value) for value in payload["source_bounds"]),
             str(payload["face_plane"]),
             tuple(float(value) for value in payload["face_normal"]),
+            tuple(
+                StepFeature(str(feature["kind"]), int(feature["loop_index"]), float(feature["depth"]))
+                for feature in payload.get("features", [])
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StepImportError("STEP importer returned incomplete geometry") from exc
@@ -197,7 +209,7 @@ def _ocp_modules() -> dict[str, Any]:
         from OCP.BRepBndLib import BRepBndLib
         from OCP.BRepTools import BRepTools_WireExplorer
         from OCP.Bnd import Bnd_Box
-        from OCP.GeomAbs import GeomAbs_Line, GeomAbs_Plane
+        from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Line, GeomAbs_Plane
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_Reader
         from OCP.TopAbs import TopAbs_FACE, TopAbs_WIRE
@@ -257,7 +269,69 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
     modules["BRepBndLib"].Add_s(shape, box)
     bounds = box.Get()
     thickness = _plane_thickness(bounds, selected_axis)
-    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal)
+    features = _detect_axial_features(shape, modules, selected_axis, face_coordinate, normal, normalized, min_x, min_y)
+    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal, features)
+
+
+def _detect_axial_features(
+    shape: Any,
+    modules: dict[str, Any],
+    plane: str,
+    face_coordinate: float,
+    normal: tuple[float, float, float],
+    loops: tuple[PlanarLoop, ...],
+    origin_u: float,
+    origin_v: float,
+) -> tuple[StepFeature, ...]:
+    """Classify cylindrical walls adjoining selected-face inner loops."""
+    if len(loops) < 2:
+        return ()
+    outer_index = max(range(len(loops)), key=lambda index: loops[index].area)
+    inner_indices = [index for index in range(len(loops)) if index != outer_index]
+    sign = normal[{"YZ": 0, "XZ": 1, "XY": 2}[plane]]
+    if abs(sign) < 0.999:
+        return ()
+    explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
+    features: list[StepFeature] = []
+    while explorer.More():
+        face = modules["TopoDS"].Face_s(explorer.Current())
+        surface = modules["BRepAdaptor_Surface"](face, True)
+        if surface.GetType() == modules["GeomAbs_Cylinder"]:
+            box = modules["Bnd_Box"]()
+            modules["BRepBndLib"].Add_s(face, box)
+            bounds = box.Get()
+            low, high, projected = _face_axis_projection(bounds, plane)
+            projected = (
+                projected[0] - origin_u,
+                projected[1] - origin_v,
+                projected[2] - origin_u,
+                projected[3] - origin_v,
+            )
+            match = min(
+                inner_indices,
+                key=lambda index: max(abs(actual - expected) for actual, expected in zip(projected, loops[index].bounds)),
+                default=None,
+            )
+            if match is not None:
+                error = max(abs(actual - expected) for actual, expected in zip(projected, loops[match].bounds))
+                if error <= 0.1:
+                    outward = (high - face_coordinate) if sign > 0 else (face_coordinate - low)
+                    inward = (face_coordinate - low) if sign > 0 else (high - face_coordinate)
+                    if outward > 0.001 and inward <= 0.001:
+                        features.append(StepFeature("Raised boss", match, outward))
+                    elif inward > 0.001 and outward <= 0.001:
+                        features.append(StepFeature("Recess", match, inward))
+        explorer.Next()
+    unique = {(feature.kind, feature.loop_index): feature for feature in features}
+    return tuple(unique.values())
+
+
+def _face_axis_projection(bounds: tuple[float, ...], plane: str) -> tuple[float, float, tuple[float, float, float, float]]:
+    if plane == "XY":
+        return bounds[2], bounds[5], (bounds[0], bounds[1], bounds[3], bounds[4])
+    if plane == "XZ":
+        return bounds[1], bounds[4], (bounds[0], bounds[2], bounds[3], bounds[5])
+    return bounds[0], bounds[3], (bounds[1], bounds[2], bounds[4], bounds[5])
 
 
 def _plane_axis(x: float, y: float, z: float) -> str | None:

@@ -53,6 +53,11 @@ ApplicationWindow {
         }
         function onUnreferenced_jog_requested() { unreferencedJogDialog.open() }
         function onClose_requested() { window.exitBypass = true; window.close() }
+        function onStep_model_imported(recommendedMode) {
+            const index = modeCombo.find(recommendedMode)
+            if (index >= 0) modeCombo.currentIndex = index
+            stepDialog.refreshPreview()
+        }
     }
 
     Dialog {
@@ -495,8 +500,8 @@ ApplicationWindow {
                             Divider {}
                             SectionTitle { text: "Cut parameters" }
                             GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
-                                Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (calculated above)" : "Depth (mm)"; color: window.palette.muted }
-                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                                Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : "Depth (mm)"; color: window.palette.muted }
+                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature"; validator: DoubleValidator { bottom: -20; top: -0.001 }
                                     onTextChanged: stepDialog.refreshPreview() }
                                 Label { text: "Depth passes"; color: window.palette.muted }
                                 Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
@@ -514,7 +519,7 @@ ApplicationWindow {
                                 Field { id: stepRpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
                                     onTextChanged: stepDialog.refreshPreview() }
                             }
-                            MutedLabel { text: "Profile cutout classifies inner and outer loops automatically. Outside/inside contours apply the tool radius. Pocket uses nested clearing rings. Hole mode requires circular inner loops." }
+                            MutedLabel { text: "Detected feature clears inside a recess or around a raised boss using STEP face topology. Profile cutout treats every inner loop as a through cutout. Other contour modes apply the tool radius." }
                         }
                     }
                 }

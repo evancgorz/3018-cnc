@@ -17,6 +17,9 @@ streaming pipeline.
 - [x] Support safe Z, cutting/plunge feeds, and optional spindle start.
 - [x] Generate combined through-profile cutouts with inner-first ordering,
   breakthrough allowance, and outer holding tabs.
+- [x] Distinguish axial circular recesses from raised bosses using STEP face
+  topology and generate the corresponding inside-versus-surrounding clearing
+  strategy at the detected feature depth.
 - [x] Preview the generated centerline toolpath before running.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
@@ -39,8 +42,10 @@ streaming pipeline.
 - [x] Add a small STEP import adapter; do not implement a STEP parser or
   geometric kernel in this repository.
 - [x] Add clear import errors when OCP is unavailable or a STEP file is invalid.
-- [ ] Add representative planar STEP fixtures that are safe to store in the
+- [x] Add representative planar STEP fixtures that are safe to store in the
   repository.
+- [x] Add paired removed-cylinder and extruded-circle STEP fixtures for
+  topology-classification regressions.
 
 ### 2. Model inspection and setup
 
@@ -133,3 +138,4 @@ streaming pipeline.
 | 2026-08-30 | pending | Added Auto/XY/XZ/YZ planar-face selection and verified the real Test Bracket STEP file. |
 | 2026-08-30 | `2f642b6` | Added compensated inner-first profile cutouts, through depth, breakthrough, and outer tabs. |
 | 2026-08-30 | pending | Added Qt profile-cutout controls and live preview/review details. |
+| 2026-08-30 | pending | Added paired STEP feature fixtures plus automatic recess/boss detection and slicing. |
