@@ -32,6 +32,8 @@ streaming pipeline.
   outer profile ordering.
 - [x] Apply bounded deterministic 2-opt improvement to small path sets without
   increasing rapid-link cost.
+- [x] Compare connected scanline and bounded offset pocket candidates using a
+  weighted cut/rapid/retract cost and select the lower-cost valid strategy.
 - [x] Preserve individual detected-feature depth targets and avoid applying the
   deepest recess depth to shallower recesses.
 - [x] Expose exact cut distance, rapid XY distance, and retract count for each
