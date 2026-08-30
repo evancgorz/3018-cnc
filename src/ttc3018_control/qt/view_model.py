@@ -9,10 +9,11 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from ..application.machine_session import MachineSession
 from ..application.connection_service import ConnectionService
 from ..application.job_service import JobService
+from ..application.generation_service import GenerationService
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError, GCodeProgram, load_gcode, parse_gcode
-from ..plaque_engraver import BORDER_STYLES, generate_plaque_gcode
+from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
     GrblStatus,
     Position,
@@ -31,10 +32,10 @@ from ..job import JobStreamer
 from ..machine_state import MachineProfile, ProfileStore, check_job_bounds
 from ..application.motion_service import MotionService
 from ..serial_connection import GrblConnection, SerialEvent, available_ports
-from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS, generate_step_gcode
+from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
 from ..tcp_connection import TcpGrblConnection
-from ..text_engraver import FONT_NAMES, generate_text_gcode
+from ..text_engraver import FONT_NAMES
 from ..wifi_setup import make_station_commands
 from ..wifi_discovery import discover_grbl_hosts
 
@@ -81,6 +82,7 @@ class ControllerViewModel(QObject):
             on_ready_to_return=self.return_to_work_zero,
         )
         self.job = self.job_service.streamer
+        self.generation_service = GenerationService()
         self.program: GCodeProgram | None = None
         self._pending_manual_acks = 0
         self._close_after_return_pending = False
@@ -563,7 +565,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
-            engraving = generate_text_gcode(
+            engraving = self.generation_service.text(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
@@ -573,14 +575,15 @@ class ControllerViewModel(QObject):
             self._preview_strokes = []
             self._preview_summary = "Enter valid text settings to preview the centerline toolpath."
         else:
-            self._preview_strokes = self._strokes_for_qml(engraving.strokes)
-            self._preview_summary = f"{engraving.width:.1f} × {engraving.height:.1f} mm · {engraving.stroke_count} strokes"
+            result = engraving.result
+            self._preview_strokes = self._strokes_for_qml(result.strokes)
+            self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes"
         self._emit_state()
 
     @Slot(str, str, bool, str, str, float, float, float, float, float, str, float, float, float, float, int)
     def preview_plaque(self, title: str, subtitle: str, subtitle_enabled: bool, title_font: str, subtitle_font: str, title_height: float, subtitle_height: float, width: float, height: float, margin: float, border: str, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         try:
-            plaque = generate_plaque_gcode(
+            plaque = self.generation_service.plaque(
                 title, subtitle, subtitle_enabled=subtitle_enabled, title_font=title_font,
                 subtitle_font=subtitle_font, title_height=title_height, subtitle_height=subtitle_height,
                 width=width, height=height, margin=margin, border=border, depth=depth,
@@ -591,8 +594,9 @@ class ControllerViewModel(QObject):
             self._preview_strokes = []
             self._preview_summary = "Enter valid plaque settings to preview the centerline toolpath."
         else:
-            self._preview_strokes = self._strokes_for_qml(plaque.strokes)
-            self._preview_summary = f"{plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes · {border}"
+            result = plaque.result
+            self._preview_strokes = self._strokes_for_qml(result.strokes)
+            self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes · {border}"
         self._emit_state()
 
     @Slot(QUrl)
@@ -644,7 +648,7 @@ class ControllerViewModel(QObject):
             self._emit_state()
             return
         try:
-            job = generate_step_gcode(
+            job = self.generation_service.step(
                 self._step_model, mode=mode, orientation=orientation,
                 stock_width=stock_width, stock_height=stock_height,
                 zero_location=zero_location, tool_diameter=tool_diameter,
@@ -657,13 +661,13 @@ class ControllerViewModel(QObject):
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
-            self._preview_summary = self._step_job_summary(job)
+            self._preview_summary = self._step_job_summary(job.result)
         self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def create_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
-            engraving = generate_text_gcode(
+            engraving = self.generation_service.text(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
@@ -672,12 +676,13 @@ class ControllerViewModel(QObject):
         except (ValueError, TypeError) as exc:
             QMessageBox.critical(None, "Text settings rejected", str(exc))
             return
-        self._load_generated_program(engraving.gcode, "generated-text.gcode", engraving.strokes, f"Text · {engraving.width:.1f} × {engraving.height:.1f} mm · {engraving.stroke_count} strokes")
+        result = engraving.result
+        self._load_generated_program(engraving.gcode, engraving.filename, result.strokes, f"Text · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
 
     @Slot(str, str, bool, str, str, float, float, float, float, float, str, float, float, float, float, int)
     def create_plaque(self, title: str, subtitle: str, subtitle_enabled: bool, title_font: str, subtitle_font: str, title_height: float, subtitle_height: float, width: float, height: float, margin: float, border: str, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         try:
-            plaque = generate_plaque_gcode(
+            plaque = self.generation_service.plaque(
                 title, subtitle, subtitle_enabled=subtitle_enabled, title_font=title_font,
                 subtitle_font=subtitle_font, title_height=title_height, subtitle_height=subtitle_height,
                 width=width, height=height, margin=margin, border=border, depth=depth,
@@ -687,7 +692,8 @@ class ControllerViewModel(QObject):
         except (ValueError, TypeError) as exc:
             QMessageBox.critical(None, "Plaque settings rejected", str(exc))
             return
-        self._load_generated_program(plaque.gcode, "generated-plaque.gcode", plaque.strokes, f"Plaque · {plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes")
+        result = plaque.result
+        self._load_generated_program(plaque.gcode, plaque.filename, result.strokes, f"Plaque · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
 
     @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
     def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
@@ -695,7 +701,7 @@ class ControllerViewModel(QObject):
             QMessageBox.critical(None, "STEP job unavailable", "Import a planar STEP model first")
             return
         try:
-            job = generate_step_gcode(
+            job = self.generation_service.step(
                 self._step_model, mode=mode, orientation=orientation,
                 stock_width=stock_width, stock_height=stock_height,
                 zero_location=zero_location, tool_diameter=tool_diameter,
@@ -708,9 +714,9 @@ class ControllerViewModel(QObject):
             return
         self._load_generated_program(
             job.gcode,
-            "generated-step.gcode",
+            job.filename,
             job.strokes,
-            self._step_job_summary(job),
+            self._step_job_summary(job.result),
         )
 
     @Slot()
