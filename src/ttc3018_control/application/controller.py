@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import queue
+import time
 from typing import Callable, Iterable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
@@ -12,7 +13,6 @@ from ..machine_state import MachineProfile, ProfileStore
 from ..serial_connection import GrblConnection, available_ports
 from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
-from ..wifi_setup import make_station_commands
 from .connection_service import ConnectionOutcome, ConnectionService
 from .events import ApplicationEvent, LogEvent, NoticeEvent
 from .generation_service import GenerationService
@@ -21,6 +21,7 @@ from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
 from .ports import ConnectionSettingsStorePort, ProfileStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
+from .wifi_service import WifiProvisioningService
 
 
 class ApplicationController:
@@ -65,6 +66,7 @@ class ApplicationController:
             wifi_factory or TcpGrblConnection,
             discover_hosts or discover_grbl_hosts,
         )
+        self.wifi_setup = WifiProvisioningService(self.connection_service.send_line, self._publish_notice)
         self.generation_service = GenerationService()
         self.motion = MotionService(
             self.session,
@@ -297,8 +299,21 @@ class ApplicationController:
     def request_status(self) -> None:
         self.send_realtime(REALTIME_STATUS)
 
-    def prepare_wifi_setup(self, ssid: str, password: str, port: int) -> list[tuple[bytes, str]]:
-        return make_station_commands(ssid, password, port)
+    def begin_wifi_setup(self, ssid: str, password: str, port: int, now: float) -> ActionOutcome:
+        if not self.connected or self.connection_service.mode is not ConnectionMode.USB:
+            return ActionOutcome(False, "Wi-Fi setup requires an active USB connection")
+        if not self.session.can_move:
+            return ActionOutcome(False, "Wi-Fi setup requires GRBL Idle")
+        outcome = self.wifi_setup.start(ssid, password, port, now)
+        if outcome.accepted:
+            self.session.invalidate_reference("Controller Wi-Fi reconfiguration")
+        return outcome
+
+    def validate_wifi_setup(self, ssid: str, password: str, port: int) -> None:
+        self.wifi_setup.validate(ssid, password, port)
+
+    def poll_wifi_setup(self, now: float) -> None:
+        self.wifi_setup.poll(now)
 
     def generate_text(self, *args, **kwargs):
         return self.generation_service.text(*args, **kwargs)
@@ -324,11 +339,13 @@ class ApplicationController:
     def invalidate_machine_reference(self, reason: str = "Manually invalidated") -> None:
         self.session.invalidate_reference(reason)
 
-    def disconnect(self) -> ConnectionOutcome:
+    def disconnect(self, reason: str | None = None) -> ConnectionOutcome:
+        self.wifi_setup.cancel()
         outcome = self.connection_service.disconnect()
         self.motion.reset()
         self.job.reset()
         self.manual_pending_acks = 0
+        self.session.invalidate_reference(reason or outcome.message)
         return outcome
 
     def establish_reference(self) -> ActionOutcome:
@@ -437,10 +454,7 @@ class ApplicationController:
         return ActionOutcome(True, "Resume requested")
 
     def close(self) -> None:
-        self.connection_service.disconnect()
-        self.motion.reset()
-        self.job.reset()
-        self.manual_pending_acks = 0
+        self.disconnect()
 
     def send_manual(self, command: bytes) -> None:
         self.connection_service.send_line(command)
@@ -480,6 +494,8 @@ class ApplicationController:
     def handle_transport_response(self, response: str, feed: float = 500.0, preserve_reference: bool = False) -> tuple[GrblStatus | None, bool]:
         """Dispatch one normalized transport response and apply GRBL state changes."""
         text = response.strip()
+        if self.wifi_setup.handle_response(text, time.monotonic()):
+            return None, False
         self.handle_response(text, feed)
         status = parse_status(text)
         if status is not None:

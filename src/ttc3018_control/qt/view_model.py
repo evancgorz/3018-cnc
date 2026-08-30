@@ -46,9 +46,6 @@ class ControllerViewModel(QObject):
         self._pending_confirmation: tuple[str, object] | None = None
         self._confirmation_token = ""
         self._confirmation_sequence = 0
-        self._wifi_setup_commands: list[tuple[bytes, str]] = []
-        self._wifi_setup_index = 0
-        self._wifi_setup_waiting = False
         self._ports: list[str] = []
         self._connection_text = "Disconnected"
         self._state_text = "Unknown"
@@ -382,16 +379,11 @@ class ControllerViewModel(QObject):
             self.application.abort_job()
             self._set_notice("Job aborted — references retained")
         elif operation == "wifi_setup":
-            commands = payload
-            if not isinstance(commands, list) or not self.connected or self.status is None or not self.status.can_jog:
-                self._set_notice("Wi-Fi setup confirmation expired — reconnect and wait for GRBL Idle")
+            if not isinstance(payload, tuple) or len(payload) != 3:
+                self._set_notice("Wi-Fi setup confirmation expired")
                 return
-            self.application.invalidate_reference("Controller Wi-Fi reconfiguration")
-            self._wifi_setup_commands = commands
-            self._wifi_setup_index = 0
-            self._wifi_setup_waiting = False
-            self._set_notice("Configuring controller Wi-Fi; the controller will restart")
-            self._send_next_wifi_setup_command()
+            outcome = self.application.begin_wifi_setup(payload[0], payload[1], payload[2], time.monotonic())
+            self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
@@ -610,21 +602,20 @@ class ControllerViewModel(QObject):
             self._set_notice("Wi-Fi setup requires GRBL Idle")
             return
         try:
-            commands = self.application.prepare_wifi_setup(ssid, password, self.wifi_port)
+            self.application.validate_wifi_setup(ssid, password, self.wifi_port)
         except ValueError as exc:
             self._set_notice(f"Invalid Wi-Fi settings — {exc}")
             return
         self._request_confirmation(
             "wifi_setup",
-            commands,
+            (ssid, password, self.wifi_port),
             "Switch controller to station mode?",
             "The controller will restart and join the selected 2.4 GHz network. The current manual reference will be cleared.",
         )
 
     @Slot()
     def disconnect(self) -> None:
-        outcome = self.application.disconnect()
-        self._disconnected(outcome.message)
+        self._disconnected("Disconnected by operator")
 
     @Slot(str, float)
     def jog(self, axis: str, distance: float) -> None:
@@ -849,6 +840,7 @@ class ControllerViewModel(QObject):
 
     def _poll(self) -> None:
         self._poll_wifi_result()
+        self.application.poll_wifi_setup(time.monotonic())
         if not self.connected:
             return
         events = self.application.transport_events()
@@ -889,8 +881,6 @@ class ControllerViewModel(QObject):
         if event.kind != "rx":
             return
         text = event.text.strip()
-        if self._handle_wifi_setup_response(text):
-            return
         status, reset = self.application.handle_transport_response(
             text,
             500.0,
@@ -924,41 +914,6 @@ class ControllerViewModel(QObject):
         self._work_zero_text = "Confirmed" if self.session.work_zero_confirmed else "Not confirmed"
         self._emit_state()
 
-    def _send_next_wifi_setup_command(self) -> None:
-        if not self._wifi_setup_commands or not self.connected:
-            return
-        if self._wifi_setup_index >= len(self._wifi_setup_commands):
-            self._wifi_setup_commands = []
-            self._set_notice("Controller Wi-Fi configuration sent; reconnect over Wi-Fi after the restart")
-            return
-        command, display_text = self._wifi_setup_commands[self._wifi_setup_index]
-        try:
-            self.application.send_line(command, display_text=display_text)
-        except RuntimeError as exc:
-            self._wifi_setup_commands = []
-            self._wifi_setup_waiting = False
-            self._set_notice(f"Wi-Fi setup interrupted — {exc}")
-            return
-        self._wifi_setup_waiting = not command.startswith(b"[ESP444]")
-        self._wifi_setup_index += 1
-        if not self._wifi_setup_waiting:
-            QTimer.singleShot(8000, self._send_next_wifi_setup_command)
-
-    def _handle_wifi_setup_response(self, response: str) -> bool:
-        if not self._wifi_setup_waiting:
-            return False
-        lowered = response.lower()
-        if lowered == "ok":
-            self._wifi_setup_waiting = False
-            QTimer.singleShot(100, self._send_next_wifi_setup_command)
-            return True
-        if lowered.startswith("error:") or lowered.startswith("alarm:"):
-            self._wifi_setup_commands = []
-            self._wifi_setup_waiting = False
-            self._set_notice(f"Controller rejected Wi-Fi configuration: {response}")
-            return True
-        return False
-
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:
         return [[[float(x), float(y)] for x, y in stroke] for stroke in strokes]
@@ -990,8 +945,7 @@ class ControllerViewModel(QObject):
         )
 
     def _disconnected(self, reason: str) -> None:
-        self.application.close()
-        self.session.invalidate_reference(reason)
+        self.application.disconnect(reason)
         self.status = None
         self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False

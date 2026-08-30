@@ -11,6 +11,7 @@ from ttc3018_control.application.generation_service import GenerationService
 from ttc3018_control.application.job_service import JobService
 from ttc3018_control.application.machine_session import MachineSession
 from ttc3018_control.application.state import ApplicationState, ConnectionMode, JobSnapshot
+from ttc3018_control.application.wifi_service import WifiProvisioningService
 from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 
@@ -157,6 +158,29 @@ def test_connection_service_discards_a_stale_wifi_result_after_disconnect() -> N
 
     assert service.poll_wifi() is None
     assert not stale_transport.connected
+
+
+def test_wifi_provisioning_sequences_acknowledged_commands_and_restart_delay() -> None:
+    lines: list[tuple[bytes, str | None]] = []
+    notices: list[str] = []
+    service = WifiProvisioningService(lambda command, display: lines.append((command, display)), notices.append)
+
+    assert service.start("network", "password", 23, now=0).accepted
+    assert lines[0][0] == b"[ESP110]STA"
+
+    now = 0.0
+    for _ in range(7):
+        assert service.handle_response("ok", now)
+        now += 0.1
+        service.poll(now)
+    assert lines[-1][0] == b"[ESP444]RESTART"
+    assert service.active
+
+    service.poll(now + 7.9)
+    assert service.active
+    service.poll(now + 8.0)
+    assert not service.active
+    assert notices[-1].startswith("Controller Wi-Fi configuration sent")
 
 
 def test_job_service_streams_and_stops_spindle_before_return() -> None:
