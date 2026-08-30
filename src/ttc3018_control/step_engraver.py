@@ -619,8 +619,7 @@ def _path_metrics(strokes: Iterable[Stroke], passes: int) -> tuple[float, float,
         for stroke in paths:
             rapid_xy_distance += math.dist(current, stroke[0])
             current = stroke[-1]
-        rapid_xy_distance += math.dist(current, (0.0, 0.0))
-        current = (0.0, 0.0)
+    rapid_xy_distance += math.dist(current, (0.0, 0.0))
     return cutting_distance, rapid_xy_distance, len(paths) * passes
 
 

@@ -229,6 +229,29 @@ def test_scheduler_local_improvement_never_increases_rapid_cost() -> None:
     assert _scheduled_path_cost(improved) <= _scheduled_path_cost(paths)
 
 
+def test_path_metrics_match_cross_pass_machine_position() -> None:
+    job = generate_step_gcode(
+        _solid_model(),
+        mode="Pocket",
+        stock_width=45,
+        stock_height=30,
+        tool_diameter=3,
+        depth=-1,
+        passes=2,
+    )
+
+    # The second pass starts at the first path from the prior path's endpoint;
+    # there is no hidden XY return to work zero between passes. The metric must
+    # therefore match the parsed rapid segments exactly.
+    program = parse_gcode(job.gcode)
+    actual_rapid = sum(
+        math.dist((segment.start.x, segment.start.y), (segment.end.x, segment.end.y))
+        for segment in program.segments
+        if segment.rapid
+    )
+    assert job.rapid_xy_distance == pytest.approx(actual_rapid)
+
+
 def test_centered_cutout_retains_existing_explicit_placement() -> None:
     job = generate_step_gcode(
         _model(),
