@@ -329,7 +329,41 @@ def _schedule_tagged_strokes(paths: Iterable[tuple[Stroke, bool]]) -> list[tuple
         result.append((oriented, is_outer))
         current = oriented[-1]
         remaining.pop(index)
+    if len(result) > 2 and len(result) <= 120:
+        result = _improve_tagged_order(result)
     return result
+
+
+def _improve_tagged_order(
+    paths: list[tuple[Stroke, bool]],
+) -> list[tuple[Stroke, bool]]:
+    """Apply deterministic bounded 2-opt to reduce inter-path rapids."""
+    best = list(paths)
+    best_cost = _scheduled_path_cost(best)
+    improved = True
+    while improved:
+        improved = False
+        for start in range(1, len(best) - 1):
+            for end in range(start + 1, len(best)):
+                candidate = best[:start] + list(reversed(best[start:end + 1])) + best[end + 1:]
+                cost = _scheduled_path_cost(candidate)
+                if cost + 1e-7 < best_cost:
+                    best, best_cost = candidate, cost
+                    improved = True
+                    break
+            if improved:
+                break
+    return best
+
+
+def _scheduled_path_cost(paths: Iterable[tuple[Stroke, bool]]) -> float:
+    current = (0.0, 0.0)
+    cost = 0.0
+    for stroke, _is_outer in paths:
+        oriented = _best_stroke_orientation(stroke, current)
+        cost += math.dist(current, oriented[0])
+        current = oriented[-1]
+    return cost
 
 
 def _schedule_strokes(strokes: Iterable[Stroke]) -> list[Stroke]:

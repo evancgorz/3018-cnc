@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from ttc3018_control.gcode import parse_gcode
-from ttc3018_control.step_engraver import _best_stroke_orientation, generate_step_gcode
+from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _scheduled_path_cost, generate_step_gcode
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
@@ -212,6 +212,19 @@ def test_scheduler_rotates_closed_path_to_nearest_vertex() -> None:
 
     assert oriented[0] == (10, 10)
     assert oriented[-1] == oriented[0]
+
+
+def test_scheduler_local_improvement_never_increases_rapid_cost() -> None:
+    paths = [
+        (((10, 0), (11, 0)), False),
+        (((20, 10), (21, 10)), False),
+        (((0, 10), (1, 10)), False),
+        (((20, 0), (21, 0)), False),
+    ]
+
+    improved = _improve_tagged_order(paths)
+
+    assert _scheduled_path_cost(improved) <= _scheduled_path_cost(paths)
 
 
 def test_centered_cutout_retains_existing_explicit_placement() -> None:
