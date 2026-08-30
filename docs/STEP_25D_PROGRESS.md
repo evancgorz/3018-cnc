@@ -1,5 +1,10 @@
 # STEP and 2.5D Machining Progress
 
+Status: Complete for the currently supported bounded 2.5D scope. The former
+detailed production-CAM handoff has been retired; the deferred items below are
+intentional product boundaries, not unfinished work in this release. The
+separate simulation SOW remains pending and is not included here.
+
 This file tracks the bounded STEP-to-G-code expansion for the TTC 3018 app.
 The first release targets simple planar STEP designs and 2.5D machining only.
 It must continue to use the existing validated G-code, preview, envelope, and
