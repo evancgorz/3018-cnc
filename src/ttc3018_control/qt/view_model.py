@@ -7,7 +7,6 @@ from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ..application.controller import ApplicationController
-from ..connection_settings import ConnectionSettings
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError
 from ..plaque_engraver import BORDER_STYLES
@@ -15,7 +14,6 @@ from ..grbl import (
     GrblStatus,
     Position,
     REALTIME_HOLD,
-    REALTIME_JOG_CANCEL,
     REALTIME_RESUME,
     REALTIME_SOFT_RESET,
     REALTIME_STATUS,
@@ -25,7 +23,6 @@ from ..grbl import (
     parse_status,
 )
 from ..machine_state import MachineProfile
-from ..serial_connection import SerialEvent, available_ports
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
 from ..text_engraver import FONT_NAMES
@@ -109,44 +106,8 @@ class ControllerViewModel(QObject):
         self.application.status = value
 
     @property
-    def _pending_manual_acks(self):
-        return self.application.manual_pending_acks
-
-    @_pending_manual_acks.setter
-    def _pending_manual_acks(self, value) -> None:
-        self.application.manual_pending_acks = value
-
-    @property
-    def profile_store(self):
-        return self.application.profile_store
-
-    @property
-    def connection_store(self):
-        return self.application.connection_store
-
-    @property
-    def connection_service(self):
-        return self.application.connection_service
-
-    @property
-    def motion(self):
-        return self.application.motion
-
-    @property
-    def job_service(self):
-        return self.application.job
-
-    @property
-    def job(self):
-        return self.application.job.streamer
-
-    @property
     def program(self):
-        return self.application.job.program
-
-    @property
-    def generation_service(self):
-        return self.application.generation_service
+        return self.application.program
 
     @property
     def connection(self):
@@ -155,7 +116,7 @@ class ControllerViewModel(QObject):
 
     @connection.setter
     def connection(self, value) -> None:
-        self.connection_service.transport = value
+        self.application.set_transport_for_testing(value)
 
     def _on_motion_position_complete(self) -> None:
         if self._close_after_return_pending and self.at_reference:
@@ -184,7 +145,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def reference_trusted(self) -> bool:
-        return self.session.envelope.trusted
+        return self.application.reference_trusted
 
     @Property(str, notify=state_changed)
     def work_zero(self) -> str:
@@ -192,7 +153,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def work_zero_confirmed(self) -> bool:
-        return self.session.work_zero_confirmed
+        return self.application.work_zero_confirmed
 
     @Property(str, notify=state_changed)
     def spindle(self) -> str:
@@ -263,28 +224,28 @@ class ControllerViewModel(QObject):
 
     @Property(str, notify=state_changed)
     def profile_summary(self) -> str:
-        profile = self.session.profile
+        profile = self.application.profile
         return f"{profile.name} · X {profile.travel_x:g} · Y {profile.travel_y:g} · Z {profile.travel_z:g} · safe Z {profile.safe_z:g} mm"
 
     @Property(str, notify=state_changed)
     def profile_name(self) -> str:
-        return self.session.profile.name
+        return self.application.profile.name
 
     @Property(float, notify=state_changed)
     def profile_x(self) -> float:
-        return self.session.profile.travel_x
+        return self.application.profile.travel_x
 
     @Property(float, notify=state_changed)
     def profile_y(self) -> float:
-        return self.session.profile.travel_y
+        return self.application.profile.travel_y
 
     @Property(float, notify=state_changed)
     def profile_z(self) -> float:
-        return self.session.profile.travel_z
+        return self.application.profile.travel_z
 
     @Property(float, notify=state_changed)
     def profile_safe_z(self) -> float:
-        return self.session.profile.safe_z
+        return self.application.profile.safe_z
 
     @Property("QStringList", notify=state_changed)
     def log_lines(self) -> list[str]:
@@ -328,11 +289,11 @@ class ControllerViewModel(QObject):
 
     @Property(str, notify=state_changed)
     def job_state(self) -> str:
-        return self.job.state.title()
+        return self.application.job_state.title()
 
     @Property(int, notify=state_changed)
     def job_progress(self) -> int:
-        return round(self.job.progress * 100)
+        return round(self.application.job_progress * 100)
 
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
@@ -361,44 +322,20 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def can_return_to_reference(self) -> bool:
-        return bool(self.connected and self.session.envelope.trusted and self.session.can_move and not self.job_active and not self._pending_manual_acks and not self.motion.busy)
+        return self.application.can_return_to_reference
 
     @Property(bool, notify=state_changed)
     def can_jog(self) -> bool:
-        return bool(
-            self.connected
-            and self.session.can_move
-            and not self.job_active
-            and not self.motion.busy
-            and not self._pending_manual_acks
-        )
+        return self.application.can_jog
 
     @Property(bool, notify=state_changed)
     def can_live_jog(self) -> bool:
-        # GRBL reports ``Jog`` as soon as the first held-jog segment starts.
-        # Keep the pressed QML button enabled for that expected transition;
-        # disabling a pressed Button emits ``canceled`` and would immediately
-        # invoke stop_live_jog after the first segment. Other non-Idle states
-        # (Hold, Alarm, Run, and so on) must still disable live jogging.
-        controller_accepts_live_jog = self.session.can_move or bool(
-            self.motion.live_jog_axis is not None
-            and self.status is not None
-            and self.status.state == "Jog"
-        )
-        return bool(
-            self.connected
-            and controller_accepts_live_jog
-            and not self.job_active
-            and not self.motion.position_move_active
-            and not self.motion.live_jog_stop_pending
-            and not self.motion.live_jog_alignment_pending
-            and (not self.motion.pending_acks or self.motion.live_jog_axis is not None)
-        )
+        return self.application.can_live_jog
 
     @Property(bool, notify=state_changed)
     def live_jog_active(self) -> bool:
         """Whether a held-jog session is active, including during GRBL state changes."""
-        return self.motion.live_jog_axis is not None or self.motion.live_jog_stop_pending or self.motion.live_jog_alignment_pending
+        return self.application.live_jog_active
 
     @Property(bool, notify=state_changed)
     def unreferenced_jog_allowed(self) -> bool:
@@ -406,11 +343,11 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def job_active(self) -> bool:
-        return self.job.state in {"running", "paused"}
+        return self.application.job_active
 
     @Property(bool, notify=state_changed)
     def can_start_job(self) -> bool:
-        return bool(self.connected and self.session.can_move and self.session.work_zero_confirmed and not self._pending_manual_acks and not self.motion.busy and not self.job_active and self.program and self.job_service.preflight()[0])
+        return self.application.can_start_job
 
     @Property("QStringList", notify=ports_changed)
     def ports(self) -> list[str]:
@@ -435,17 +372,16 @@ class ControllerViewModel(QObject):
         try:
             profile = MachineProfile(name.strip(), travel_x, travel_y, travel_z, safe_z)
             profile.validate()
-            self.profile_store.save(profile)
+            self.application.save_profile(profile)
         except (OSError, ValueError, TypeError) as exc:
             QMessageBox.critical(None, "Machine profile rejected", str(exc))
             return
-        self.session.profile = profile
         self._set_notice("Machine profile saved; the current reference was retained")
         self._emit_state()
 
     @Slot()
     def invalidate_reference(self) -> None:
-        self.session.invalidate_reference("Manually invalidated")
+        self.application.invalidate_machine_reference("Manually invalidated")
         self._set_notice("Virtual reference invalidated")
         self._emit_state()
 
@@ -578,7 +514,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
-            engraving = self.generation_service.text(
+            engraving = self.application.generate_text(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
@@ -596,7 +532,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, bool, str, str, float, float, float, float, float, str, float, float, float, float, int)
     def preview_plaque(self, title: str, subtitle: str, subtitle_enabled: bool, title_font: str, subtitle_font: str, title_height: float, subtitle_height: float, width: float, height: float, margin: float, border: str, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         try:
-            plaque = self.generation_service.plaque(
+            plaque = self.application.generate_plaque(
                 title, subtitle, subtitle_enabled=subtitle_enabled, title_font=title_font,
                 subtitle_font=subtitle_font, title_height=title_height, subtitle_height=subtitle_height,
                 width=width, height=height, margin=margin, border=border, depth=depth,
@@ -661,7 +597,7 @@ class ControllerViewModel(QObject):
             self._emit_state()
             return
         try:
-            job = self.generation_service.step(
+            job = self.application.generate_step(
                 self._step_model, mode=mode, orientation=orientation,
                 stock_width=stock_width, stock_height=stock_height,
                 zero_location=zero_location, tool_diameter=tool_diameter,
@@ -680,7 +616,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def create_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
-            engraving = self.generation_service.text(
+            engraving = self.application.generate_text(
                 text, font=font, text_height=height, depth=depth, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 letter_spacing=letter_spacing, line_spacing=line_spacing, alignment=alignment,
@@ -695,7 +631,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, bool, str, str, float, float, float, float, float, str, float, float, float, float, int)
     def create_plaque(self, title: str, subtitle: str, subtitle_enabled: bool, title_font: str, subtitle_font: str, title_height: float, subtitle_height: float, width: float, height: float, margin: float, border: str, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         try:
-            plaque = self.generation_service.plaque(
+            plaque = self.application.generate_plaque(
                 title, subtitle, subtitle_enabled=subtitle_enabled, title_font=title_font,
                 subtitle_font=subtitle_font, title_height=title_height, subtitle_height=subtitle_height,
                 width=width, height=height, margin=margin, border=border, depth=depth,
@@ -714,7 +650,7 @@ class ControllerViewModel(QObject):
             QMessageBox.critical(None, "STEP job unavailable", "Import a planar STEP model first")
             return
         try:
-            job = self.generation_service.step(
+            job = self.application.generate_step(
                 self._step_model, mode=mode, orientation=orientation,
                 stock_width=stock_width, stock_height=stock_height,
                 zero_location=zero_location, tool_diameter=tool_diameter,
@@ -951,7 +887,7 @@ class ControllerViewModel(QObject):
         if not path_text:
             return
         try:
-            program = self.job_service.load_program(Path(path_text))
+            program = self.application.load_program(Path(path_text))
         except (OSError, GCodeError) as exc:
             QMessageBox.critical(None, "G-code rejected", str(exc))
             return
@@ -976,7 +912,7 @@ class ControllerViewModel(QObject):
         summary: str,
     ) -> None:
         try:
-            program = self.job_service.load_generated(gcode, filename)
+            program = self.application.load_generated(gcode, filename)
         except GCodeError as exc:
             QMessageBox.critical(None, "Generated G-code rejected", str(exc))
             return
@@ -992,14 +928,14 @@ class ControllerViewModel(QObject):
         if not self.can_start_job or self.program is None:
             self._set_notice("Job blocked — connect, reference, confirm XYZ work zero, and load a fitting job")
             return
-        fits, reason = self.job_service.preflight()
+        fits, reason = self.application.preflight()
         if not fits:
             self._set_notice(f"Job blocked — {reason}")
             return
         answer = QMessageBox.question(None, "Start engraving job?", f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.")
         if answer != QMessageBox.StandardButton.Yes:
             return
-        outcome = self.job_service.start()
+        outcome = self.application.start_job()
         if not outcome.accepted:
             self._set_notice(outcome.message)
             return
@@ -1008,14 +944,14 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def pause_job(self) -> None:
-        outcome = self.job_service.pause()
+        outcome = self.application.pause_job()
         if not outcome.accepted:
             self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def resume_job(self) -> None:
-        outcome = self.job_service.resume()
+        outcome = self.application.resume_job()
         if not outcome.accepted:
             self._set_notice(outcome.message)
         self._emit_state()
@@ -1033,17 +969,14 @@ class ControllerViewModel(QObject):
             self._send_realtime(REALTIME_SOFT_RESET)
         except RuntimeError:
             pass
-        self.job_service.abort()
-        self._pending_manual_acks = 0
-        self.motion.reset()
+        self.application.abort_job()
         self._set_notice("Job aborted — references retained")
         self._emit_state()
 
     @Slot()
     def cancel_jog(self) -> None:
-        self.motion.cancel()
         try:
-            self._send_realtime(REALTIME_JOG_CANCEL)
+            self.application.cancel_jog()
         except RuntimeError as exc:
             self._set_notice(f"Jog cancel failed — {exc}")
 
@@ -1066,7 +999,7 @@ class ControllerViewModel(QObject):
         self.disconnect()
 
     def _refresh_ports(self) -> None:
-        self._ports = [f"{device} — {description}" for device, description in available_ports()]
+        self._ports = [f"{device} — {description}" for device, description in self.application.usb_ports()]
         if self._ports and not self.port:
             self.port = self._ports[0]
         self.ports_changed.emit()
@@ -1099,14 +1032,14 @@ class ControllerViewModel(QObject):
         self.wifi_host = outcome.host
         self.wifi_port = outcome.port or self.wifi_port
         try:
-            self.connection_store.save(ConnectionSettings(self.wifi_host, self.wifi_port, "Wi-Fi TCP"))
+            self.application.save_wifi_settings(self.wifi_host, self.wifi_port)
         except (OSError, ValueError):
             pass
         self._connection_text = outcome.message
         self._set_notice(self._connection_text)
         self._emit_state()
 
-    def _handle_event(self, event: SerialEvent) -> None:
+    def _handle_event(self, event) -> None:
         self._append_log(event)
         if event.kind == "error":
             self._disconnected(f"Connection error: {event.text}")
@@ -1257,8 +1190,6 @@ class ControllerViewModel(QObject):
         self.application.close()
         self.session.invalidate_reference(reason)
         self.status = None
-        self.motion.reset()
-        self._pending_manual_acks = 0
         self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False
         self._preserve_references_on_next_reset = False
@@ -1274,7 +1205,7 @@ class ControllerViewModel(QObject):
     def _set_notice(self, message: str) -> None:
         self.toast_requested.emit(message)
 
-    def _append_log(self, event: SerialEvent) -> None:
+    def _append_log(self, event) -> None:
         line = f"{event.timestamp:%H:%M:%S}  {event.kind.upper():<11} {event.text}"
         self._log_lines = (*self._log_lines[-399:], line)
         self._emit_state()

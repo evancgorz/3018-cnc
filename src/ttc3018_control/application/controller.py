@@ -8,7 +8,7 @@ from typing import Callable
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_JOG_CANCEL, make_work_zero
 from ..machine_state import MachineProfile, ProfileStore
-from ..serial_connection import GrblConnection
+from ..serial_connection import GrblConnection, available_ports
 from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
 from .connection_service import ConnectionOutcome, ConnectionService
@@ -69,6 +69,67 @@ class ApplicationController:
         return self.connection_service.connected
 
     @property
+    def profile(self) -> MachineProfile:
+        return self.session.profile
+
+    @property
+    def reference_trusted(self) -> bool:
+        return self.session.envelope.trusted
+
+    @property
+    def work_zero_confirmed(self) -> bool:
+        return self.session.work_zero_confirmed
+
+    @property
+    def motion_busy(self) -> bool:
+        return self.motion.busy
+
+    @property
+    def live_jog_active(self) -> bool:
+        return bool(self.motion.live_jog_axis or self.motion.live_jog_stop_pending or self.motion.live_jog_alignment_pending)
+
+    @property
+    def job_active(self) -> bool:
+        return self.job.active
+
+    @property
+    def job_state(self) -> str:
+        return self.job.state
+
+    @property
+    def job_progress(self) -> float:
+        return self.job.progress
+
+    @property
+    def can_jog(self) -> bool:
+        return bool(self.connected and self.reference_trusted and self.session.can_move and not self.job_active and not self.manual_pending_acks and not self.motion_busy)
+
+    @property
+    def can_live_jog(self) -> bool:
+        controller_accepts_live_jog = self.session.can_move or bool(
+            self.motion.live_jog_axis is not None
+            and self.status is not None
+            and self.status.state == "Jog"
+        )
+        return bool(
+            self.connected
+            and controller_accepts_live_jog
+            and not self.job_active
+            and not self.motion.position_move_active
+            and not self.motion.live_jog_stop_pending
+            and not self.motion.live_jog_alignment_pending
+            and (not self.motion.pending_acks or self.motion.live_jog_axis is not None)
+        )
+
+    @property
+    def can_return_to_reference(self) -> bool:
+        return bool(self.connected and self.reference_trusted and self.session.can_move and not self.job_active and not self.manual_pending_acks and not self.motion_busy)
+
+    @property
+    def can_start_job(self) -> bool:
+        return bool(self.connected and self.session.can_move and self.work_zero_confirmed and not self.manual_pending_acks and not self.motion_busy and not self.job_active and self.program and self.preflight()[0])
+
+    @property
     def transport(self):
         return self.connection_service.transport
 
@@ -83,6 +144,62 @@ class ApplicationController:
 
     def transport_events(self):
         return self.connection_service.events()
+
+    def usb_ports(self) -> list[tuple[str, str]]:
+        """Return currently enumerated USB serial endpoints for the adapter."""
+        return available_ports()
+
+    def set_transport_for_testing(self, transport) -> None:
+        """Inject a fake transport without exposing service internals to Qt tests."""
+        self.connection_service.transport = transport
+
+    @property
+    def program(self):
+        return self.job.program
+
+    def load_program(self, path: Path):
+        return self.job.load_program(path)
+
+    def load_generated(self, gcode: str, filename: str):
+        return self.job.load_generated(gcode, filename)
+
+    def preflight(self) -> tuple[bool, str]:
+        return self.job.preflight()
+
+    def start_job(self) -> ActionOutcome:
+        return self.job.start()
+
+    def pause_job(self) -> ActionOutcome:
+        return self.job.pause()
+
+    def resume_job(self) -> ActionOutcome:
+        return self.job.resume()
+
+    def abort_job(self, reason: str = "Aborted by operator") -> None:
+        self.job.abort(reason)
+        self.motion.reset()
+        self.manual_pending_acks = 0
+
+    def generate_text(self, *args, **kwargs):
+        return self.generation_service.text(*args, **kwargs)
+
+    def generate_plaque(self, *args, **kwargs):
+        return self.generation_service.plaque(*args, **kwargs)
+
+    def generate_step(self, *args, **kwargs):
+        return self.generation_service.step(*args, **kwargs)
+
+    def save_wifi_settings(self, host: str, port: int) -> None:
+        self.settings = ConnectionSettings(host, port, "Wi-Fi TCP")
+        self.connection_store.save(self.settings)
+
+    def save_profile(self, profile: MachineProfile) -> None:
+        profile.validate()
+        self.profile_store.save(profile)
+        self.session.profile = profile
+
+    def invalidate_machine_reference(self, reason: str = "Manually invalidated") -> None:
+        self.session.invalidate_reference(reason)
 
     def disconnect(self) -> ConnectionOutcome:
         outcome = self.connection_service.disconnect()
