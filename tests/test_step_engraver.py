@@ -86,6 +86,9 @@ def test_lower_left_cutout_anchors_compensated_envelope_at_work_zero(mode: str) 
     points = [point for stroke in job.strokes for point in stroke]
     assert min(point[0] for point in points) == pytest.approx(0)
     assert min(point[1] for point in points) == pytest.approx(0)
+    part_points = [point for stroke in job.model_strokes for point in stroke]
+    assert min(point[0] for point in part_points) == pytest.approx(1.5)
+    assert min(point[1] for point in part_points) == pytest.approx(1.5)
     assert job.placement_offset_x == pytest.approx(1.5)
     assert job.placement_offset_y == pytest.approx(1.5)
     assert "G0 X0 Y0" in job.gcode
