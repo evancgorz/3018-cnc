@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.application.events import EventLevel, NoticeEvent
+from ttc3018_control.application.events import EventLevel, LogEvent, NoticeEvent
 from ttc3018_control.application.connection_service import ConnectionService, WifiAttempt
 from ttc3018_control.application.generation_service import GenerationService
 from ttc3018_control.application.job_service import JobService
@@ -40,6 +40,22 @@ def test_application_controller_exposes_a_qt_independent_state_snapshot(tmp_path
     assert not snapshot.connected
     assert snapshot.job.state == "idle"
     assert snapshot.program is None
+
+
+def test_application_controller_publishes_typed_transient_events(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    controller._publish_notice("Ready")  # service callback seam
+    controller.publish_log("rx", "ok")
+
+    events = controller.application_events()
+
+    assert isinstance(events[0], NoticeEvent)
+    assert events[0].message == "Ready"
+    assert isinstance(events[1], LogEvent)
+    assert events[1].kind == "rx"
+    assert controller.application_events() == ()
 
 
 def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:

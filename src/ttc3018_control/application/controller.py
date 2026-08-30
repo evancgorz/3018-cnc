@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import queue
 from typing import Callable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
@@ -13,6 +14,7 @@ from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
 from ..wifi_setup import make_station_commands
 from .connection_service import ConnectionOutcome, ConnectionService
+from .events import ApplicationEvent, LogEvent, NoticeEvent
 from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
@@ -47,22 +49,25 @@ class ApplicationController:
         self.settings = settings
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
+        self._events: queue.Queue[ApplicationEvent] = queue.Queue()
+        self._on_notice = on_notice or (lambda _message: None)
+        self._on_change = on_change or (lambda: None)
         self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
         self.generation_service = GenerationService()
         self.motion = MotionService(
             self.session,
             self.connection_service.send_line,
             self.connection_service.send_realtime,
-            on_notice=on_notice,
-            on_change=on_change,
+            on_notice=self._publish_notice,
+            on_change=self._publish_change,
             on_position_complete=on_position_complete,
         )
         self.job = JobService(
             self.session,
             self.connection_service.send_line,
             self.connection_service.send_realtime,
-            on_notice=on_notice,
-            on_change=on_change,
+            on_notice=self._publish_notice,
+            on_change=self._publish_change,
             on_ready_to_return=on_ready_to_return,
         )
 
@@ -75,6 +80,10 @@ class ApplicationController:
         on_ready_to_return: Callable[[], None] | None = None,
     ) -> None:
         """Bind a presentation adapter after composition is complete."""
+        if on_notice is not None:
+            self._on_notice = on_notice
+        if on_change is not None:
+            self._on_change = on_change
         self.motion.bind_callbacks(
             on_notice=on_notice,
             on_change=on_change,
@@ -85,6 +94,25 @@ class ApplicationController:
             on_change=on_change,
             on_ready_to_return=on_ready_to_return,
         )
+
+    def application_events(self) -> tuple[ApplicationEvent, ...]:
+        """Drain transient, UI-neutral events emitted by application services."""
+        events: list[ApplicationEvent] = []
+        while True:
+            try:
+                events.append(self._events.get_nowait())
+            except queue.Empty:
+                return tuple(events)
+
+    def publish_log(self, kind: str, text: str) -> None:
+        self._events.put(LogEvent(kind, text))
+
+    def _publish_notice(self, message: str) -> None:
+        self._events.put(NoticeEvent(message))
+        self._on_notice(message)
+
+    def _publish_change(self) -> None:
+        self._on_change()
 
     @property
     def connected(self) -> bool:
