@@ -249,6 +249,49 @@ class ApplicationController:
             return ActionOutcome(False, f"Work zero not sent — {exc}")
         return outcome
 
+    def start_spindle(self, rpm: int) -> ActionOutcome:
+        if not self.can_jog:
+            return ActionOutcome(False, "Spindle start ignored — machine is not ready or GRBL is not Idle")
+        if not 1 <= rpm <= 24000:
+            return ActionOutcome(False, "Spindle RPM must be between 1 and 24000")
+        try:
+            self.send_manual(f"M3 S{rpm}\n".encode("ascii"))
+        except RuntimeError as exc:
+            return ActionOutcome(False, f"Spindle start failed — {exc}")
+        return ActionOutcome(True, f"Spindle start requested at {rpm} RPM")
+
+    def stop_spindle(self) -> ActionOutcome:
+        if not self.connected:
+            return ActionOutcome(False, "Spindle stop ignored — not connected")
+        try:
+            self.send_manual(b"M5\n")
+        except RuntimeError as exc:
+            return ActionOutcome(False, f"Spindle stop failed — {exc}")
+        return ActionOutcome(True, "Spindle stop requested")
+
+    def soft_reset(self) -> ActionOutcome:
+        if not self.connected:
+            return ActionOutcome(False, "Soft reset ignored — not connected")
+        try:
+            self.send_realtime(b"\x18")
+        except RuntimeError as exc:
+            return ActionOutcome(False, f"Soft reset failed — {exc}")
+        return ActionOutcome(True, "Soft reset requested")
+
+    def hold(self) -> ActionOutcome:
+        try:
+            self.send_realtime(b"!")
+        except RuntimeError as exc:
+            return ActionOutcome(False, f"Feed hold failed — {exc}")
+        return ActionOutcome(True, "Feed hold requested")
+
+    def resume(self) -> ActionOutcome:
+        try:
+            self.send_realtime(b"~")
+        except RuntimeError as exc:
+            return ActionOutcome(False, f"Resume failed — {exc}")
+        return ActionOutcome(True, "Resume requested")
+
     def close(self) -> None:
         self.connection_service.disconnect()
         self.motion.reset()

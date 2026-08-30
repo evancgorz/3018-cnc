@@ -396,11 +396,9 @@ class ControllerViewModel(QObject):
         if not self.connected:
             self._set_notice("Soft reset ignored — not connected")
             return
-        try:
-            self._preserve_references_on_next_reset = False
-            self._send_realtime(REALTIME_SOFT_RESET)
-        except RuntimeError as exc:
-            self._set_notice(f"Soft reset failed — {exc}")
+        self._preserve_references_on_next_reset = False
+        outcome = self.application.soft_reset()
+        self._set_notice(outcome.message)
 
     @Slot(str)
     def start_input_test(self, pin: str) -> None:
@@ -798,24 +796,16 @@ class ControllerViewModel(QObject):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        try:
-            self._send_manual(f"M3 S{rpm}\n".encode("ascii"))
-        except RuntimeError as exc:
-            self._set_notice(f"Spindle start failed — {exc}")
-            return
-        self._set_notice(f"Spindle start requested at {rpm} RPM")
+        outcome = self.application.start_spindle(rpm)
+        self._set_notice(outcome.message)
 
     @Slot()
     def stop_spindle(self) -> None:
         if not self.connected:
             self._set_notice("Spindle stop ignored — not connected")
             return
-        try:
-            self._send_manual(b"M5\n")
-        except RuntimeError as exc:
-            self._set_notice(f"Spindle stop failed — {exc}")
-            return
-        self._set_notice("Spindle stop requested")
+        outcome = self.application.stop_spindle()
+        self._set_notice(outcome.message)
 
     @Slot(float, float, float, float)
     def move_to(self, x: float, y: float, z: float, feed: float = 500.0) -> None:
@@ -982,17 +972,11 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def hold(self) -> None:
-        try:
-            self._send_realtime(REALTIME_HOLD)
-        except RuntimeError as exc:
-            self._set_notice(f"Feed hold failed — {exc}")
+        self._set_notice(self.application.hold().message)
 
     @Slot()
     def resume(self) -> None:
-        try:
-            self._send_realtime(REALTIME_RESUME)
-        except RuntimeError as exc:
-            self._set_notice(f"Resume failed — {exc}")
+        self._set_notice(self.application.resume().message)
 
     @Slot()
     def close(self) -> None:
