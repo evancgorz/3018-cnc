@@ -7,19 +7,14 @@ from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWidgets import QMessageBox
 
 from ..application.controller import ApplicationController
-from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError
 from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
     GrblStatus,
     Position,
     REALTIME_HOLD,
-    REALTIME_RESUME,
     REALTIME_SOFT_RESET,
     REALTIME_STATUS,
-    make_setting,
-    make_work_zero,
-    parse_setting,
     parse_status,
 )
 from ..machine_state import MachineProfile
@@ -41,7 +36,6 @@ class ControllerViewModel(QObject):
     def __init__(self, application: ApplicationController | None = None) -> None:
         super().__init__()
         root = Path.cwd()
-        self.commissioning_store = CommissioningStore(root / "config" / "commissioning.json")
         self.application = application or ApplicationController(root)
         self.application.bind_callbacks(
             on_notice=self._set_notice,
@@ -49,12 +43,6 @@ class ControllerViewModel(QObject):
             on_position_complete=self._on_motion_position_complete,
             on_ready_to_return=self.return_to_work_zero,
         )
-        try:
-            self.commissioning_profile = self.commissioning_store.load()
-        except (OSError, ValueError, TypeError):
-            self.commissioning_profile = CommissioningProfile()
-        self._commissioning_tracker = InputTestTracker()
-        self._commissioning_settings: dict[int, float] = {}
         self.connection = None
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
@@ -81,8 +69,6 @@ class ControllerViewModel(QObject):
         self._step_path: Path | None = None
         self._step_source_text = "No STEP model imported"
         self._log_lines: list[str] = []
-        self._commissioning_pins_text = "Active inputs: none"
-        self._commissioning_status_text = "No commissioning checks recorded"
         self.transport = self.application.settings.preferred_transport
         self.port = ""
         self.wifi_host = self.application.settings.wifi_host
@@ -252,42 +238,6 @@ class ControllerViewModel(QObject):
         return self._log_lines
 
     @Property(str, notify=state_changed)
-    def commissioning_pins(self) -> str:
-        return self._commissioning_pins_text
-
-    @Property(str, notify=state_changed)
-    def commissioning_summary(self) -> str:
-        return self._commissioning_status_text
-
-    @Property(bool, notify=state_changed)
-    def x_limit_tested(self) -> bool:
-        return self.commissioning_profile.x_limit_tested
-
-    @Property(bool, notify=state_changed)
-    def y_limit_tested(self) -> bool:
-        return self.commissioning_profile.y_limit_tested
-
-    @Property(bool, notify=state_changed)
-    def z_limit_tested(self) -> bool:
-        return self.commissioning_profile.z_limit_tested
-
-    @Property(bool, notify=state_changed)
-    def probe_tested(self) -> bool:
-        return self.commissioning_profile.probe_tested
-
-    @Property(bool, notify=state_changed)
-    def x_direction_confirmed(self) -> bool:
-        return self.commissioning_profile.x_positive_confirmed
-
-    @Property(bool, notify=state_changed)
-    def y_direction_confirmed(self) -> bool:
-        return self.commissioning_profile.y_positive_confirmed
-
-    @Property(bool, notify=state_changed)
-    def z_direction_confirmed(self) -> bool:
-        return self.commissioning_profile.z_positive_confirmed
-
-    @Property(str, notify=state_changed)
     def job_state(self) -> str:
         return self.application.job_state.title()
 
@@ -399,115 +349,6 @@ class ControllerViewModel(QObject):
         self._preserve_references_on_next_reset = False
         outcome = self.application.soft_reset()
         self._set_notice(outcome.message)
-
-    @Slot(str)
-    def start_input_test(self, pin: str) -> None:
-        if self.status is None:
-            self._set_notice("Input test requires a live GRBL status report")
-            return
-        try:
-            result = self._commissioning_tracker.start(pin, self.status.pins)
-        except ValueError as exc:
-            self._set_notice(str(exc))
-            return
-        self._commissioning_status_text = result.message
-        self._set_notice(result.message)
-        self._emit_state()
-
-    @Slot(str, bool)
-    def confirm_commissioning_direction(self, axis: str, confirmed: bool) -> None:
-        axis = axis.upper()
-        if axis not in "XYZ":
-            return
-        setattr(self.commissioning_profile, f"{axis.lower()}_positive_confirmed", confirmed)
-        self._save_commissioning_profile()
-
-    @Slot(float, float, float, float)
-    def save_probe_geometry(self, plate_thickness: float, x_edge_offset: float, y_edge_offset: float, hole_diameter: float) -> None:
-        self.commissioning_profile.plate_thickness = plate_thickness
-        self.commissioning_profile.x_edge_offset = x_edge_offset
-        self.commissioning_profile.y_edge_offset = y_edge_offset
-        self.commissioning_profile.hole_diameter = hole_diameter
-        try:
-            self._save_commissioning_profile()
-        except ValueError as exc:
-            self._set_notice(f"Probe geometry rejected — {exc}")
-            return
-        self._set_notice("Measured probe geometry saved")
-
-    @Slot()
-    def read_commissioning_settings(self) -> None:
-        if not self.session.can_move:
-            self._set_notice("Settings read requires GRBL Idle")
-            return
-        try:
-            self._send_manual(b"$$\n")
-        except RuntimeError as exc:
-            self._set_notice(f"Settings request failed — {exc}")
-            return
-        self._set_notice("Reading GRBL settings")
-
-    @Slot()
-    def apply_commissioning_settings(self) -> None:
-        if not self.session.can_move:
-            self._set_notice("Settings apply requires GRBL Idle")
-            return
-        if not self.commissioning_profile.ready_for_homing_test:
-            self._set_notice("Complete all limit tests, direction checks, and settings review first")
-            return
-        answer = QMessageBox.question(None, "Apply first homing settings?", "Apply the guarded first-homing configuration with soft and hard limits disabled? Verify the machine-specific homing direction mask before continuing.")
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        values = {20: 0, 21: 0, 22: 1, 24: 25, 25: 200, 26: 250, 27: 2, 130: self.session.profile.travel_x, 131: self.session.profile.travel_y, 132: self.session.profile.travel_z}
-        try:
-            for number, value in values.items():
-                self._send_manual(make_setting(number, value))
-        except (RuntimeError, ValueError) as exc:
-            self._set_notice(f"Commissioning settings stopped — {exc}")
-            return
-        self.commissioning_profile.homing_settings_reviewed = True
-        self._save_commissioning_profile()
-        self._set_notice("First-homing settings sent")
-
-    @Slot()
-    def run_homing_test(self) -> None:
-        if not self.session.can_move:
-            self._set_notice("Homing requires GRBL Idle")
-            return
-        if not self.commissioning_profile.ready_for_homing_test:
-            self._set_notice("Homing is gated until input tests, directions, and settings review pass")
-            return
-        answer = QMessageBox.question(None, "Run first homing test?", "Clear the machine, keep physical power within reach, and confirm every switch is installed. Start GRBL homing now?")
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            self._send_manual(b"$H\n")
-        except RuntimeError as exc:
-            self._set_notice(f"Homing not started — {exc}")
-            return
-        self._set_notice("First homing test started")
-
-    @Slot()
-    def mark_homing_verified(self) -> None:
-        if self.status is None or not self.status.can_jog:
-            self._set_notice("Mark homing verified only after GRBL returns to Idle")
-            return
-        self.commissioning_profile.homing_verified = True
-        self._save_commissioning_profile()
-        self._set_notice("Homing marked successful")
-
-    @Slot()
-    def enable_protections(self) -> None:
-        if not self.commissioning_profile.homing_verified:
-            self._set_notice("Verify a successful homing cycle before enabling protections")
-            return
-        try:
-            self._send_manual(make_setting(21, 1))
-            self._send_manual(make_setting(20, 1))
-        except (RuntimeError, ValueError) as exc:
-            self._set_notice(f"Protection settings stopped — {exc}")
-            return
-        self._set_notice("Hard and soft limits enable requested")
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
@@ -980,7 +821,7 @@ class ControllerViewModel(QObject):
 
     def _poll(self) -> None:
         self._poll_wifi_result()
-        if self.connection is None:
+        if not self.connected:
             return
         events = self.application.transport_events()
         try:
@@ -1002,7 +843,6 @@ class ControllerViewModel(QObject):
             self._set_notice(self._connection_text)
             self._emit_state()
             return
-        self.connection = self.application.transport
         self.wifi_host = outcome.host
         self.wifi_port = outcome.port or self.wifi_port
         try:
@@ -1021,18 +861,12 @@ class ControllerViewModel(QObject):
         if event.kind != "rx":
             return
         text = event.text.strip()
-        lowered = text.lower()
         if self._handle_wifi_setup_response(text):
             return
-        setting = parse_setting(text)
-        if setting is not None:
-            self._commissioning_settings[setting[0]] = setting[1]
-            self._emit_state()
         self.application.handle_response(text, 500.0)
         status = parse_status(text)
         if status is not None:
             self.application.apply_status(status)
-            self._update_commissioning(status)
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
@@ -1063,28 +897,8 @@ class ControllerViewModel(QObject):
         self._work_zero_text = "Confirmed" if self.session.work_zero_confirmed else "Not confirmed"
         self._emit_state()
 
-    def _update_commissioning(self, status: GrblStatus) -> None:
-        pins = status.pins or ""
-        self._commissioning_pins_text = f"Active inputs: {pins}" if pins else "Active inputs: none"
-        tracker = self._commissioning_tracker
-        if tracker.target is None or tracker.state not in {"awaiting_press", "awaiting_release"}:
-            return
-        result = tracker.update(pins)
-        self._commissioning_status_text = result.message
-        if result.passed:
-            attribute = "probe_tested" if tracker.target == "P" else f"{tracker.target.lower()}_limit_tested"
-            setattr(self.commissioning_profile, attribute, True)
-            self._save_commissioning_profile()
-        self._emit_state()
-
-    def _save_commissioning_profile(self) -> None:
-        try:
-            self.commissioning_store.save(self.commissioning_profile)
-        except (OSError, ValueError) as exc:
-            raise ValueError(str(exc)) from exc
-
     def _send_next_wifi_setup_command(self) -> None:
-        if not self._wifi_setup_commands or self.connection is None:
+        if not self._wifi_setup_commands or not self.connected:
             return
         if self._wifi_setup_index >= len(self._wifi_setup_commands):
             self._wifi_setup_commands = []
@@ -1092,7 +906,7 @@ class ControllerViewModel(QObject):
             return
         command, display_text = self._wifi_setup_commands[self._wifi_setup_index]
         try:
-            self.connection.send_line(command, display_text=display_text)
+            self.application.send_line(command, display_text=display_text)
         except RuntimeError as exc:
             self._wifi_setup_commands = []
             self._wifi_setup_waiting = False
