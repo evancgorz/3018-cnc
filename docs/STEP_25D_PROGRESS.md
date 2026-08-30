@@ -196,6 +196,8 @@ streaming pipeline.
   exact blind, through, and ramp final depths.
 - [x] Expose operation feature types, target depths, dependencies, and actual
   clearing/contour strategy in the Qt operation plan.
+- [x] Validate the exact parsed STEP program for rapid XY travel at or above
+  safe Z, independently of the negative-Z cutting-depth checks.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -254,3 +256,4 @@ streaming pipeline.
 | 2026-08-30 | `8f80188` | Required confirmed stock thickness for all through STEP operations. |
 | 2026-08-30 | `e2de1bc` | Added configurable maximum stepdown scheduling and STEP dialog control. |
 | 2026-08-30 | `9ca8e32` | Exposed STEP operation feature and strategy metadata in Qt. |
+| 2026-08-30 | `188ae74` | Added exact-program rapid XY safe-height validation. |
