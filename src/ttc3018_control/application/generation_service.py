@@ -42,4 +42,6 @@ class GenerationService:
 
     def import_step(self, path, plane: str | None = None) -> StepPlanarModel:
         """Keep native STEP loading behind the application generation boundary."""
+        if plane is None:
+            return load_step_isolated(path)
         return load_step_isolated(path, plane)
