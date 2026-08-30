@@ -1331,13 +1331,10 @@ class ControllerViewModel(QObject):
             return
         axis = self._live_jog_axis_last or "X"
         current = getattr(position, axis.lower())
-        # Keep the release correction in the direction the operator held.  A
-        # nearest-integer round could make a positive jog back up (or a
-        # negative jog creep forward) by a fraction of a millimeter.
-        if self._live_jog_direction > 0:
-            target = math.ceil(current - 0.001)
-        else:
-            target = math.floor(current + 0.001)
+        # Finish at the nearest whole millimeter after the realtime jog is
+        # cancelled. The correction is intentionally small and may be either
+        # direction because the requested endpoint is the nearest integer.
+        target = math.floor(current + 0.5)
         distance = target - current
         if abs(distance) <= 0.001:
             self._clear_live_jog()
