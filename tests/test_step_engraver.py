@@ -370,6 +370,8 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     assert len(extruded_job.feature_simulations) == 1
     assert removed_job.feature_simulations[0].passed
     assert extruded_job.feature_simulations[0].passed
+    assert removed_job.feature_simulations[0].gouged_area <= removed_job.feature_simulations[0].allowed_gouged_area
+    assert extruded_job.feature_simulations[0].gouged_area <= extruded_job.feature_simulations[0].allowed_gouged_area
 
 
 def test_outside_contour_rejects_stock_that_cannot_contain_tool_offset() -> None:

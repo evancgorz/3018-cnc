@@ -65,6 +65,7 @@ class _DetectedFeatureGroup:
     strokes: tuple[Stroke, ...]
     depth: float
     region: object
+    retained_region: object | None = None
 
 
 def generate_step_gcode(
@@ -188,6 +189,7 @@ def generate_step_gcode(
                 stock_height=resolved_stock_height,
                 stock_thickness=resolved_thickness,
                 passes=passes,
+                retained_region=group.retained_region,
             )
             for group in detected_groups
         )
@@ -621,15 +623,22 @@ def _detected_feature_groups(
                 tuple(_pocket_strokes(feature_region, radius, tool_diameter)),
                 feature_depth,
                 feature_region,
+                region,
             )
         )
     if any(feature.kind == "Raised boss" for feature in model.features):
         boss_depth = max(feature.depth for feature in model.features if feature.kind == "Raised boss")
+        boss_region = unary_union([
+            Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
+            for feature in model.features
+            if feature.kind == "Raised boss"
+        ])
         groups.append(
             _DetectedFeatureGroup(
                 tuple(_pocket_strokes(region, radius, tool_diameter)),
                 boss_depth,
                 region,
+                boss_region,
             )
         )
     return tuple(groups)
