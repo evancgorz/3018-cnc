@@ -560,6 +560,51 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features(
 
 
 @pytest.mark.parametrize(
+    ("fixture", "primary_operation"),
+    (
+        ("removed-cylinder.step", "feature-depth-0"),
+        ("extruded-circle.step", "feature-depth-0"),
+        ("wedge.step", "planar-surface"),
+    ),
+)
+def test_automatic_part_machines_geometry_then_cuts_outer_profile(
+    fixture: str,
+    primary_operation: str,
+) -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+
+    job = generate_step_gcode(
+        model,
+        mode="Automatic part",
+        stock_width=model.width + 3.175,
+        stock_height=model.height + 3.175,
+        stock_thickness=model.thickness,
+        tool_diameter=3.175,
+        passes=2,
+        max_stepdown=1.0,
+    )
+
+    assert [operation.operation_id for operation in job.operations] == [
+        primary_operation,
+        "outer-profile",
+    ]
+    assert job.operations[-1].depends_on == (primary_operation,)
+    assert job.profile_simulation is not None
+    assert job.stock_thickness == pytest.approx(model.thickness)
+    points = [point for stroke in job.strokes for point in stroke]
+    assert min(point[0] for point in points) == pytest.approx(0)
+    assert min(point[1] for point in points) == pytest.approx(0)
+    parsed = parse_gcode(job.gcode)
+    assert parsed.bounds.minimum.x >= 0
+    assert parsed.bounds.minimum.y >= 0
+    if fixture == "wedge.step":
+        assert job.surface_paths
+        assert job.surface_simulation is not None
+    else:
+        assert job.feature_simulations
+
+
+@pytest.mark.parametrize(
     ("fixture", "mode"),
     [
         ("removed-cylinder.step", "Detected feature"),

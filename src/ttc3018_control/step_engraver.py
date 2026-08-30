@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Iterable
 
@@ -25,7 +25,7 @@ from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot")
+STEP_MODES = ("Automatic part", "Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -108,7 +108,30 @@ def generate_step_gcode(
     tab_count: int = 4,
     tab_width: float = 4.0,
     tab_height: float = 0.8,
+    _placement_offset: tuple[float, float] | None = None,
+    _profile_outer_only: bool = False,
 ) -> StepMachining:
+    if mode == "Automatic part":
+        return _generate_automatic_part(
+            model,
+            orientation=orientation,
+            stock_width=stock_width,
+            stock_height=stock_height,
+            zero_location=zero_location,
+            tool_diameter=tool_diameter,
+            depth=depth,
+            passes=passes,
+            max_stepdown=max_stepdown,
+            safe_z=safe_z,
+            cut_feed=cut_feed,
+            plunge_feed=plunge_feed,
+            spindle_rpm=spindle_rpm,
+            stock_thickness=stock_thickness,
+            breakthrough=breakthrough,
+            tab_count=tab_count,
+            tab_width=tab_width,
+            tab_height=tab_height,
+        )
     if mode == "Profile cutout" and stock_thickness is None:
         raise ValueError("A profile cutout requires confirmed physical stock thickness")
     if (
@@ -139,6 +162,12 @@ def generate_step_gcode(
         stock_thickness=resolved_thickness,
         breakthrough=breakthrough,
     )
+    if mode == "Profile cutout" and _profile_outer_only:
+        operations = tuple(
+            replace(operation, depends_on=())
+            for operation in operations
+            if operation.operation_id == "outer-profile"
+        )
     validate_operation_plan(operations)
     loops = tuple(_transform_loop(loop, orientation) for loop in model.loops)
     loop_bounds = _loop_bounds(loops)
@@ -170,6 +199,8 @@ def generate_step_gcode(
         if not -20 <= depth < 0:
             raise ValueError("The imported planar surface exceeds the supported 20 mm machining depth")
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
+    if _profile_outer_only:
+        profile_paths = [path for path in profile_paths if path[1]]
     depth_paths: list[float] = []
     detected_groups: tuple[_DetectedFeatureGroup, ...] = ()
     if mode == "Detected feature":
@@ -207,6 +238,13 @@ def generate_step_gcode(
     placement_offset_x, placement_offset_y = _cutout_placement_offset(
         strokes, mode, zero_location, tool_diameter
     )
+    if _placement_offset is not None:
+        if (
+            len(_placement_offset) != 2
+            or not all(math.isfinite(value) and value >= 0 for value in _placement_offset)
+        ):
+            raise ValueError("STEP placement override must contain two nonnegative coordinates")
+        placement_offset_x, placement_offset_y = _placement_offset
     if placement_offset_x or placement_offset_y:
         loops = tuple(_translate_loop(loop, placement_offset_x, placement_offset_y) for loop in loops)
         region = _even_odd_region(loops)
@@ -435,6 +473,175 @@ def generate_step_gcode(
         max_stepdown,
         estimated_minutes,
     )
+
+
+def _generate_automatic_part(
+    model: StepPlanarModel,
+    *,
+    orientation: str,
+    stock_width: float | None,
+    stock_height: float | None,
+    zero_location: str,
+    tool_diameter: float,
+    depth: float,
+    passes: int,
+    max_stepdown: float | None,
+    safe_z: float,
+    cut_feed: float,
+    plunge_feed: float,
+    spindle_rpm: int | None,
+    stock_thickness: float | None,
+    breakthrough: float,
+    tab_count: int,
+    tab_width: float,
+    tab_height: float,
+) -> StepMachining:
+    """Machine accessible 2.5D geometry, then cut the finished part free.
+
+    Feature or ramp work is completed before the outer profile. A shared
+    placement offset keeps every operation in the same work coordinate frame,
+    with the compensated cutter envelope touching lower-left work X0/Y0.
+    """
+    resolved_thickness = float(model.thickness if stock_thickness is None else stock_thickness)
+    primary_mode = (
+        "Planar surface"
+        if any(patch.tilted for patch in model.surface_patches)
+        else "Detected feature"
+        if model.features
+        else None
+    )
+    profile = generate_step_gcode(
+        model,
+        mode="Profile cutout",
+        orientation=orientation,
+        stock_width=stock_width,
+        stock_height=stock_height,
+        zero_location=zero_location,
+        tool_diameter=tool_diameter,
+        depth=depth,
+        passes=passes,
+        max_stepdown=max_stepdown,
+        safe_z=safe_z,
+        cut_feed=cut_feed,
+        plunge_feed=plunge_feed,
+        spindle_rpm=None,
+        stock_thickness=resolved_thickness,
+        breakthrough=breakthrough,
+        tab_count=tab_count,
+        tab_width=tab_width,
+        tab_height=tab_height,
+        _profile_outer_only=primary_mode is not None,
+    )
+    primary = None
+    if primary_mode is not None:
+        primary = generate_step_gcode(
+            model,
+            mode=primary_mode,
+            orientation=orientation,
+            stock_width=stock_width,
+            stock_height=stock_height,
+            zero_location=zero_location,
+            tool_diameter=tool_diameter,
+            depth=depth,
+            passes=passes,
+            max_stepdown=max_stepdown,
+            safe_z=safe_z,
+            cut_feed=cut_feed,
+            plunge_feed=plunge_feed,
+            spindle_rpm=None,
+            stock_thickness=resolved_thickness,
+            breakthrough=breakthrough,
+            tab_count=tab_count,
+            tab_width=tab_width,
+            tab_height=tab_height,
+            _placement_offset=(profile.placement_offset_x, profile.placement_offset_y),
+        )
+
+    primary_operations = primary.operations if primary is not None else ()
+    primary_ids = tuple(operation.operation_id for operation in primary_operations)
+    profile_operations = tuple(
+        replace(
+            operation,
+            depends_on=tuple(dict.fromkeys(primary_ids + operation.depends_on)),
+        )
+        for operation in profile.operations
+    )
+    operations = primary_operations + profile_operations
+    validate_operation_plan(operations)
+
+    component_jobs = tuple(job for job in (primary, profile) if job is not None)
+    strokes = tuple(stroke for job in component_jobs for stroke in job.strokes)
+    commands = [
+        "; Generated by TTC 3018 automatic STEP 2.5D machining",
+        "; Automatic plan: machine accessible features/surfaces, then cut outer profile",
+        f"; Stock {profile.stock_width:g} x {profile.stock_height:g} x {resolved_thickness:g} mm",
+        f"; Tool {tool_diameter:g} mm; lower-left placement X{profile.placement_offset_x:g} Y{profile.placement_offset_y:g}",
+    ]
+    commands.extend(
+        f"; Operation {operation.operation_id}: {operation.kind}, target Z{operation.target_depth:g}"
+        + (f", depends on {','.join(operation.depends_on)}" if operation.depends_on else "")
+        for operation in operations
+    )
+    commands.extend(("G21", "G17", "G90", "G94"))
+    if spindle_rpm is not None:
+        commands.append(f"M3 S{spindle_rpm}")
+    for job in component_jobs:
+        commands.extend(_step_gcode_body(job.gcode))
+    commands.extend((f"G0 Z{safe_z:g}", "G0 X0 Y0", "M5", "M2"))
+    gcode = "\n".join(commands) + "\n"
+    parsed_program = parse_gcode(gcode)
+    validate_nonnegative_work_xy(parsed_program)
+    validate_rapid_xy_clearance(parsed_program, safe_z)
+
+    cutting_distance = sum(job.cutting_distance for job in component_jobs)
+    rapid_xy_distance = sum(job.rapid_xy_distance for job in component_jobs)
+    retract_count = sum(job.retract_count for job in component_jobs)
+    return StepMachining(
+        gcode=gcode,
+        mode="Automatic part",
+        width=profile.width,
+        height=profile.height,
+        stock_width=profile.stock_width,
+        stock_height=profile.stock_height,
+        tool_diameter=tool_diameter,
+        depth=profile.depth,
+        passes=max(job.passes for job in component_jobs),
+        stroke_count=len(strokes),
+        strokes=strokes,
+        model_strokes=profile.model_strokes,
+        stock_thickness=resolved_thickness,
+        breakthrough=breakthrough,
+        tab_count=tab_count,
+        tab_width=tab_width,
+        tab_height=tab_height,
+        feature_summary=primary.feature_summary if primary is not None else "",
+        placement_offset_x=profile.placement_offset_x,
+        placement_offset_y=profile.placement_offset_y,
+        surface_paths=primary.surface_paths if primary is not None else (),
+        cutting_distance=cutting_distance,
+        rapid_xy_distance=rapid_xy_distance,
+        retract_count=retract_count,
+        verification=primary.verification if primary is not None else None,
+        operations=operations,
+        simulation=primary.simulation if primary is not None else None,
+        feature_simulations=primary.feature_simulations if primary is not None else (),
+        surface_simulation=primary.surface_simulation if primary is not None else None,
+        profile_simulation=profile.profile_simulation,
+        max_stepdown=max_stepdown,
+        estimated_minutes=sum(job.estimated_minutes for job in component_jobs),
+    )
+
+
+def _step_gcode_body(gcode: str) -> list[str]:
+    """Return motion/comments between a component preamble and final trailer."""
+    lines = gcode.splitlines()
+    try:
+        start = lines.index("G94") + 1
+    except ValueError as exc:
+        raise ValueError("Generated STEP component has no absolute-feed preamble") from exc
+    if lines[-4:] != [lines[-4], "G0 X0 Y0", "M5", "M2"] or not lines[-4].startswith("G0 Z"):
+        raise ValueError("Generated STEP component has an unexpected completion trailer")
+    return lines[start:-4]
 
 
 def _validate_settings(
