@@ -6,7 +6,7 @@ from typing import Callable, Sequence
 from pathlib import Path
 
 from ..gcode import GCodeProgram, load_gcode, parse_gcode
-from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME
+from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME, REALTIME_SOFT_RESET
 from ..job import JobStreamer
 from ..machine_state import check_job_bounds
 from .machine_session import ActionOutcome, MachineSession
@@ -17,6 +17,11 @@ class JobService:
 
     DEFAULT_RX_CAPACITY = 127
     MAX_REPORTED_RX_CAPACITY = 4096
+    # The DLC32 advertises roughly 1.2 KB, but its ESP32 TCP-to-GRBL bridge can
+    # become unreliable when a desktop sender fills that window to its edge in
+    # one burst. 512 bytes keeps substantially more than the 15-slot motion
+    # planner supplied while retaining ample bridge and status-report headroom.
+    MAX_STREAM_WINDOW = 512
 
     def __init__(
         self,
@@ -38,6 +43,7 @@ class JobService:
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
+        self._restart_requires_reload = False
 
     @property
     def state(self) -> str:
@@ -54,12 +60,14 @@ class JobService:
     def load_program(self, path: Path) -> GCodeProgram:
         program = load_gcode(path)
         self.program = program
+        self._restart_requires_reload = False
         self._changed()
         return program
 
     def load_generated(self, gcode: str, filename: str) -> GCodeProgram:
         program = parse_gcode(gcode, Path(filename))
         self.program = program
+        self._restart_requires_reload = False
         self._changed()
         return program
 
@@ -86,7 +94,13 @@ class JobService:
     def return_waiting_for_idle(self) -> bool:
         return self._return_waiting_for_idle
 
+    @property
+    def restart_requires_reload(self) -> bool:
+        return self._restart_requires_reload
+
     def start(self, commands: Sequence[str] | None = None) -> ActionOutcome:
+        if self._restart_requires_reload:
+            return ActionOutcome(False, "Job not started — reload and review the program after the previous failure")
         if commands is None:
             if self.program is None:
                 return ActionOutcome(False, "Job not started — no validated G-code is loaded")
@@ -151,6 +165,8 @@ class JobService:
                 self._on_notice(f"Job complete but spindle stop was not sent — {exc}")
             else:
                 self._spindle_stop_pending = True
+        elif was_active and self.streamer.state == "failed":
+            self._fail_closed(self.streamer.error)
         self._changed()
         return True
 
@@ -158,14 +174,22 @@ class JobService:
         reported_capacity = self._rx_capacity_from_status(status)
         if reported_capacity is not None:
             self._reported_rx_capacity = max(self._reported_rx_capacity, reported_capacity)
+        if self.active and status.state in {"Alarm", "Door", "Sleep"}:
+            reason = f"controller entered {status.state} during the job"
+            self.streamer.fail(reason)
+            self._fail_closed(reason)
+            self._changed()
+            return
         if self._return_waiting_for_idle and status.can_jog:
             self._return_waiting_for_idle = False
             self._on_ready_to_return()
             self._changed()
 
     def reset(self) -> None:
-        if self.active:
+        was_active = self.active
+        if was_active:
             self.streamer.abort("Controller reset")
+            self._restart_requires_reload = True
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
@@ -194,10 +218,31 @@ class JobService:
         usable = free_bytes - 1
         if usable < cls.DEFAULT_RX_CAPACITY or usable > cls.MAX_REPORTED_RX_CAPACITY:
             return None
-        return usable
+        return min(usable, cls.MAX_STREAM_WINDOW)
 
     def _changed(self) -> None:
         self._on_change()
+
+    def _fail_closed(self, reason: str) -> None:
+        self._restart_requires_reload = True
+        self._spindle_stop_pending = False
+        self._return_waiting_for_idle = False
+        try:
+            # A failure can leave later buffered commands queued behind the
+            # rejected line. Feed-hold and soft reset are realtime bytes, so
+            # they do not wait behind that queue. GRBL reset also forces the
+            # spindle output off and invalidates position trust.
+            self._send_realtime(REALTIME_HOLD)
+            self._send_realtime(REALTIME_SOFT_RESET)
+        except RuntimeError as exc:
+            self._on_notice(
+                f"Job failed — emergency stop command could not be sent ({exc}); remove machine power"
+            )
+        else:
+            self._on_notice(
+                f"Job failed — {reason}; motion queue reset and spindle stop requested. "
+                "Re-establish references and reload the job before restarting."
+            )
 
     def bind_callbacks(
         self,

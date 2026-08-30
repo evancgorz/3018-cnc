@@ -255,7 +255,17 @@ class ApplicationController:
 
     @property
     def can_start_job(self) -> bool:
-        return bool(self.connected and self.session.can_move and self.work_zero_confirmed and not self.manual_pending_acks and not self.motion_busy and not self.job_active and self.program and self.preflight()[0])
+        return bool(
+            self.connected
+            and self.session.can_move
+            and self.work_zero_confirmed
+            and not self.manual_pending_acks
+            and not self.motion_busy
+            and not self.job_active
+            and not self.job.restart_requires_reload
+            and self.program
+            and self.preflight()[0]
+        )
 
     @property
     def transport(self):
@@ -295,6 +305,11 @@ class ApplicationController:
         return self.job.preflight()
 
     def start_job(self) -> ActionOutcome:
+        if self.job.restart_requires_reload:
+            return ActionOutcome(
+                False,
+                "Job not started — reload and review the program after the previous failure",
+            )
         if not self.can_start_job:
             fits, reason = self.preflight()
             if not fits:

@@ -64,6 +64,18 @@ def test_error_fails_job_without_sending_more() -> None:
     assert sent == sent_before_error
 
 
+def test_external_controller_failure_clears_buffered_job() -> None:
+    sent: list[bytes] = []
+    job = JobStreamer(sent.append)
+    job.start(["G1 X1", "G1 X2"])
+
+    job.fail("controller entered Alarm during the job")
+
+    assert job.state == "failed"
+    assert not job.awaiting_ack
+    assert "Alarm" in job.error
+
+
 def test_rejects_a_line_larger_than_the_grbl_rx_buffer() -> None:
     job = JobStreamer(lambda _command: None, buffer_capacity=8)
 

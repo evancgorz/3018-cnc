@@ -444,6 +444,41 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     assert any("spindle stopped" in notice for notice in notices)
 
 
+@pytest.mark.parametrize("failure", ["error:2", "ALARM:1"])
+def test_job_failure_resets_motion_and_blocks_implicit_restart(failure: str) -> None:
+    lines: list[bytes] = []
+    realtime: list[bytes] = []
+    notices: list[str] = []
+    service = JobService(MachineSession(), lines.append, realtime.append, notices.append)
+
+    assert service.start(("M3 S1000", "G1 X1", "G1 X2")).accepted
+    assert service.handle_response(failure)
+
+    assert service.state == "failed"
+    assert service.restart_requires_reload
+    assert realtime[-2:] == [b"!", b"\x18"]
+    assert "spindle stop requested" in notices[-1]
+    restart = service.start(("G1 X1",))
+    assert not restart.accepted
+    assert "reload" in restart.message.lower()
+
+    service.load_generated("G21\nG90\nG1 X1 F100\nM5\nM2\n", "reviewed.gcode")
+    assert not service.restart_requires_reload
+
+
+@pytest.mark.parametrize("state", ["Alarm", "Door", "Sleep"])
+def test_unsafe_controller_state_fails_active_job_closed(state: str) -> None:
+    realtime: list[bytes] = []
+    service = JobService(MachineSession(), lambda _command: None, realtime.append)
+    assert service.start(("M3 S1000", "G1 X1")).accepted
+
+    service.observe_status(GrblStatus(state))
+
+    assert service.state == "failed"
+    assert service.restart_requires_reload
+    assert realtime[-2:] == [b"!", b"\x18"]
+
+
 def test_job_service_uses_dlc32_reported_rx_capacity() -> None:
     lines: list[bytes] = []
     service = JobService(MachineSession(), lines.append, lambda _command: None)
@@ -451,9 +486,9 @@ def test_job_service_uses_dlc32_reported_rx_capacity() -> None:
 
     assert service.start(tuple("G1 X1" for _ in range(200))).accepted
 
-    assert service.streamer.buffer_capacity == 1199
-    assert len(lines) == 199
-    assert service.streamer.buffered_bytes == 1194
+    assert service.streamer.buffer_capacity == 512
+    assert len(lines) == 85
+    assert service.streamer.buffered_bytes == 510
 
 
 def test_job_service_keeps_standard_grbl_capacity_and_resets_detection() -> None:
