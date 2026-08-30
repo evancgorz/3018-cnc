@@ -470,6 +470,45 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features(
     assert extruded_job.feature_simulations[0].gouged_area <= extruded_job.feature_simulations[0].allowed_gouged_area
 
 
+@pytest.mark.parametrize(
+    ("fixture", "mode"),
+    [
+        ("removed-cylinder.step", "Detected feature"),
+        ("extruded-circle.step", "Detected feature"),
+        ("wedge.step", "Planar surface"),
+    ],
+)
+def test_real_step_jobs_are_deterministic_and_nonnegative(
+    fixture: str,
+    mode: str,
+) -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+    settings = dict(
+        mode=mode,
+        stock_width=model.width + 6,
+        stock_height=model.height + 6,
+        tool_diameter=3.175,
+        depth=-1,
+        passes=2,
+        stock_thickness=model.thickness if fixture.startswith("removed") else None,
+    )
+
+    first = generate_step_gcode(model, **settings)
+    second = generate_step_gcode(model, **settings)
+
+    assert first.gcode == second.gcode
+    assert first.strokes == second.strokes
+    assert first.operations == second.operations
+    assert (
+        first.cutting_distance,
+        first.rapid_xy_distance,
+        first.retract_count,
+    ) == pytest.approx((second.cutting_distance, second.rapid_xy_distance, second.retract_count))
+    program = parse_gcode(first.gcode)
+    assert program.bounds.minimum.x >= -0.001
+    assert program.bounds.minimum.y >= -0.001
+
+
 def test_outside_contour_rejects_stock_that_cannot_contain_tool_offset() -> None:
     with pytest.raises(ValueError, match="outside the declared stock"):
         generate_step_gcode(_model(), mode="Outside contour", tool_diameter=3, stock_width=40, stock_height=25)
