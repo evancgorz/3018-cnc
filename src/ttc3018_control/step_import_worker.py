@@ -32,6 +32,15 @@ def main() -> int:
                     {"kind": feature.kind, "loop_index": feature.loop_index, "depth": feature.depth}
                     for feature in model.features
                 ],
+                "surface_patches": [
+                    {
+                        "loops": [[[point.x, point.y] for point in loop.points] for loop in patch.loops],
+                        "a": patch.a,
+                        "b": patch.b,
+                        "c": patch.c,
+                    }
+                    for patch in model.surface_patches
+                ],
             }
         )
     )

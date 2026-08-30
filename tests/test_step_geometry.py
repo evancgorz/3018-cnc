@@ -54,6 +54,19 @@ def test_load_step_isolated_round_trips_model(tmp_path: Path) -> None:
 
     assert model.face_plane == "XZ"
     assert (model.width, model.height, model.thickness) == pytest.approx((40, 5, 25), abs=0.001)
+    assert model.surface_patches
+    assert all(patch.loops for patch in model.surface_patches)
+
+
+def test_wedge_import_preserves_tilted_planar_surface_patch() -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / "wedge.step")
+
+    tilted = [patch for patch in model.surface_patches if patch.tilted]
+    assert tilted
+    patch = tilted[0]
+    assert patch.a == pytest.approx(0.60696, abs=0.001)
+    assert patch.height_at(9.2234, 0) == pytest.approx(-5.983, abs=0.01)
+    assert patch.height_at(19.0806, 0) == pytest.approx(0, abs=0.01)
 
 
 def test_load_step_isolated_reports_worker_errors(tmp_path: Path) -> None:

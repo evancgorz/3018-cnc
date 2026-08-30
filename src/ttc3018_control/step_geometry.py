@@ -67,6 +67,24 @@ class StepFeature:
 
 
 @dataclass(frozen=True)
+class PlanarSurfacePatch:
+    """A tool-axis-accessible planar face projected into the machining plane."""
+
+    loops: tuple[PlanarLoop, ...]
+    a: float
+    b: float
+    c: float
+
+    def height_at(self, x: float, y: float) -> float:
+        """Return signed surface depth relative to the selected top surface."""
+        return self.a * x + self.b * y + self.c
+
+    @property
+    def tilted(self) -> bool:
+        return abs(self.a) > 1e-6 or abs(self.b) > 1e-6
+
+
+@dataclass(frozen=True)
 class StepPlanarModel:
     path: Path
     loops: tuple[PlanarLoop, ...]
@@ -76,6 +94,7 @@ class StepPlanarModel:
     face_plane: str = "XY"
     face_normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
     features: tuple[StepFeature, ...] = ()
+    surface_patches: tuple[PlanarSurfacePatch, ...] = ()
 
     @property
     def width(self) -> float:
@@ -198,6 +217,18 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
                 StepFeature(str(feature["kind"]), int(feature["loop_index"]), float(feature["depth"]))
                 for feature in payload.get("features", [])
             ),
+            tuple(
+                PlanarSurfacePatch(
+                    tuple(
+                        PlanarLoop(tuple(Point2D(float(point[0]), float(point[1])) for point in loop))
+                        for loop in patch["loops"]
+                    ),
+                    float(patch["a"]),
+                    float(patch["b"]),
+                    float(patch["c"]),
+                )
+                for patch in payload.get("surface_patches", [])
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StepImportError("STEP importer returned incomplete geometry") from exc
@@ -225,27 +256,32 @@ def _ocp_modules() -> dict[str, Any]:
 def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str) -> StepPlanarModel:
     explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
     candidates: list[tuple[float, str, list[PlanarLoop], tuple[float, float, float], float]] = []
+    planar_faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float, tuple[float, float, float]]] = []
     while explorer.More():
         face = modules["TopoDS"].Face_s(explorer.Current())
         surface = modules["BRepAdaptor_Surface"](face, True)
         if surface.GetType() == modules["GeomAbs_Plane"]:
             normal = surface.Plane().Axis().Direction()
-            axis = _plane_axis(normal.X(), normal.Y(), normal.Z())
+            strict_axis = _plane_axis(normal.X(), normal.Y(), normal.Z())
+            axis = strict_axis or _dominant_plane_axis(normal.X(), normal.Y(), normal.Z())
             if axis is not None:
                 try:
                     loops = _extract_loops(face, modules, axis)
                 except StepImportError:
                     loops = []
                 if loops:
-                    candidates.append(
-                        (
-                            max(loop.area for loop in loops),
-                            axis,
-                            loops,
-                            (float(normal.X()), float(normal.Y()), float(normal.Z())),
-                            _plane_coordinate(surface.Plane().Location(), axis),
+                    location = surface.Plane().Location()
+                    planar_faces.append((face, axis, loops, (float(normal.X()), float(normal.Y()), float(normal.Z())), _plane_coordinate(location, axis), (float(location.X()), float(location.Y()), float(location.Z()))))
+                    if strict_axis is not None:
+                        candidates.append(
+                            (
+                                max(loop.area for loop in loops),
+                                axis,
+                                loops,
+                                (float(normal.X()), float(normal.Y()), float(normal.Z())),
+                                _plane_coordinate(surface.Plane().Location(), axis),
+                            )
                         )
-                    )
         explorer.Next()
     if not candidates:
         raise StepImportError("No closed orthogonal planar face was found; tilted or open geometry is not supported")
@@ -270,7 +306,65 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
     bounds = box.Get()
     thickness = _plane_thickness(bounds, selected_axis)
     features = _detect_axial_features(shape, modules, selected_axis, face_coordinate, normal, normalized, min_x, min_y)
-    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal, features)
+    machine_top = _machine_axis_max(bounds, selected_axis)
+    surface_patches = _surface_patches(
+        planar_faces, selected_axis, machine_top, min_x, min_y, modules
+    )
+    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal, features, surface_patches)
+
+
+def _machine_axis_max(bounds: tuple[float, float, float, float, float, float], plane: str) -> float:
+    if plane == "XY":
+        return float(bounds[5])
+    if plane == "XZ":
+        return float(bounds[4])
+    return float(bounds[3])
+
+
+def _surface_patches(
+    faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float, tuple[float, float, float]]],
+    selected_axis: str,
+    machine_top: float,
+    origin_u: float,
+    origin_v: float,
+    modules: dict[str, Any],
+) -> tuple[PlanarSurfacePatch, ...]:
+    """Normalize planar faces whose normals expose the selected tool axis."""
+    axis_index = {"YZ": 0, "XZ": 1, "XY": 2}[selected_axis]
+    patches: list[PlanarSurfacePatch] = []
+    for _face, axis, loops, normal, coordinate, location in faces:
+        if axis != selected_axis or abs(normal[axis_index]) <= 0.05:
+            continue
+        normal_u, normal_v, normal_machine = _plane_normal_components(normal, selected_axis)
+        if abs(normal_machine) <= 0.05:
+            continue
+        a = -normal_u / normal_machine
+        b = -normal_v / normal_machine
+        location_u, location_v, _location_machine = _plane_point_components(location, selected_axis)
+        c = coordinate - machine_top - a * (location_u - origin_u) - b * (location_v - origin_v)
+        normalized_loops = tuple(
+            PlanarLoop(tuple(Point2D(point.x - origin_u, point.y - origin_v) for point in loop.points))
+            for loop in loops
+        )
+        if normalized_loops and all(loop.area > 1e-7 for loop in normalized_loops):
+            patches.append(PlanarSurfacePatch(normalized_loops, a, b, c))
+    return tuple(patches)
+
+
+def _plane_normal_components(normal: tuple[float, float, float], plane: str) -> tuple[float, float, float]:
+    if plane == "XY":
+        return normal[0], normal[1], normal[2]
+    if plane == "XZ":
+        return normal[0], normal[2], normal[1]
+    return normal[1], normal[2], normal[0]
+
+
+def _plane_point_components(point: tuple[float, float, float], plane: str) -> tuple[float, float, float]:
+    if plane == "XY":
+        return point[0], point[1], point[2]
+    if plane == "XZ":
+        return point[0], point[2], point[1]
+    return point[1], point[2], point[0]
 
 
 def _detect_axial_features(
@@ -338,6 +432,12 @@ def _plane_axis(x: float, y: float, z: float) -> str | None:
     components = {"XY": abs(z), "XZ": abs(y), "YZ": abs(x)}
     axis, strength = max(components.items(), key=lambda item: item[1])
     return axis if strength > 0.999 else None
+
+
+def _dominant_plane_axis(x: float, y: float, z: float) -> str | None:
+    components = {"XY": abs(z), "XZ": abs(y), "YZ": abs(x)}
+    axis, strength = max(components.items(), key=lambda item: item[1])
+    return axis if strength > 0.05 else None
 
 
 def _plane_coordinate(point: Any, plane: str) -> float:
@@ -419,7 +519,15 @@ def _polygonize_segments(segments: list[list[Point2D]]) -> PlanarLoop | None:
         from shapely.ops import polygonize, unary_union
     except ImportError as exc:
         raise StepImportError("STEP geometry requires the shapely dependency") from exc
-    lines = [LineString((point.x, point.y) for point in segment) for segment in segments if len(segment) >= 2]
+    # STEP edge endpoints often differ by a few floating-point ulps after
+    # projection (especially when a tilted face is projected onto XZ/YZ).
+    # Snap only the polygonization input; retain the higher precision on the
+    # normalized output after a closed face has been recovered.
+    lines = [
+        LineString((round(point.x, 7), round(point.y, 7)) for point in segment)
+        for segment in segments
+        if len(segment) >= 2
+    ]
     polygons = list(polygonize(unary_union(lines)))
     if not polygons:
         return None

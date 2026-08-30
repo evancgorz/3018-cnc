@@ -439,7 +439,7 @@ ApplicationWindow {
         onOpened: refreshPreview()
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
-            Label { text: "Import a simple planar STEP top face and generate a bounded 2.5D toolpath."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Import a STEP model and generate a bounded 2.5D toolpath from accessible planar faces, pockets, bosses, holes, and ramps."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             RowLayout { Layout.fillWidth: true; spacing: 10
                 SecondaryButton { text: appViewModel && appViewModel.step_importing ? "Importing…" : "Import STEP…"; enabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
                 Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
@@ -463,7 +463,7 @@ ApplicationWindow {
                             Label { text: "Path rotation"; color: window.palette.muted; font.pixelSize: 11 }
                             ComboBox { id: orientationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_orientations : ["Top (XY)"]; onActivated: stepDialog.refreshPreview() }
                             Label { text: "Work zero"; color: window.palette.muted; font.pixelSize: 11 }
-                            ComboBox { id: zeroLocationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_zero_locations : ["Center"]; currentIndex: 1; onActivated: stepDialog.refreshPreview() }
+                            ComboBox { id: zeroLocationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_zero_locations : ["Center"]; currentIndex: 0; onActivated: stepDialog.refreshPreview() }
                             GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
                                 Label { text: "Stock width (mm)"; color: window.palette.muted }
                                 Field { id: stockWidthField; Layout.fillWidth: true; text: "50"; validator: DoubleValidator { bottom: 0.1; top: 1000 }
@@ -500,8 +500,8 @@ ApplicationWindow {
                             Divider {}
                             SectionTitle { text: "Cut parameters" }
                             GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
-                                Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : "Depth (mm)"; color: window.palette.muted }
-                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                                Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : modeCombo.currentText === "Planar surface" ? "Depth (from STEP surface)" : "Depth (mm)"; color: window.palette.muted }
+                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature" && modeCombo.currentText !== "Planar surface"; validator: DoubleValidator { bottom: -20; top: -0.001 }
                                     onTextChanged: stepDialog.refreshPreview() }
                                 Label { text: "Depth passes"; color: window.palette.muted }
                                 Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
@@ -519,7 +519,7 @@ ApplicationWindow {
                                 Field { id: stepRpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
                                     onTextChanged: stepDialog.refreshPreview() }
                             }
-                            MutedLabel { text: "Detected feature clears inside a recess or around a raised boss using STEP face topology. Profile cutout treats every inner loop as a through cutout. Other contour modes apply the tool radius." }
+                            MutedLabel { text: "Planar surface follows accessible flat and ramp faces with bounded raster paths. Detected feature clears inside a recess or around a raised boss. Profile cutout treats inner loops as through cuts and uses the confirmed stock thickness. Other contour modes apply the tool radius." }
                         }
                     }
                 }

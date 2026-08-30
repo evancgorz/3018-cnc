@@ -9,11 +9,11 @@ from typing import Iterable
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
-from .step_geometry import Point2D, PlanarLoop, StepPlanarModel
+from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Engraving", "Detected feature", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
+STEP_MODES = ("Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -40,6 +40,7 @@ class StepMachining:
     feature_summary: str = ""
     placement_offset_x: float = 0.0
     placement_offset_y: float = 0.0
+    surface_paths: tuple[tuple[tuple[float, float, float], ...], ...] = ()
 
 
 def generate_step_gcode(
@@ -89,9 +90,20 @@ def generate_step_gcode(
     offset_y = 0.0 if zero_location == "Lower-left" else (resolved_stock_height - model_height) / 2
     loops = tuple(_translate_loop(loop, offset_x, offset_y) for loop in loops)
     region = _even_odd_region(loops)
+    surface_paths: tuple[tuple[tuple[float, float, float], ...], ...] = ()
+    if mode == "Planar surface":
+        surface_paths, depth = _planar_surface_paths(
+            model.surface_patches, orientation, region, tool_diameter, offset_x, offset_y
+        )
+        if not surface_paths:
+            raise ValueError("No accessible planar surface path could be generated from the imported geometry")
+        if not -20 <= depth < 0:
+            raise ValueError("The imported planar surface exceeds the supported 20 mm machining depth")
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
     if mode == "Detected feature":
         strokes = _detected_feature_paths(model, loops, region, tool_diameter)
+    elif mode == "Planar surface":
+        strokes = [tuple((x, y) for x, y, _z in path) for path in surface_paths]
     else:
         strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
     if not strokes:
@@ -123,6 +135,16 @@ def generate_step_gcode(
         )
     for pass_index in range(1, passes + 1):
         pass_depth = depth * pass_index / passes
+        if mode == "Planar surface":
+            for surface_path in surface_paths:
+                first_x, first_y, first_z = surface_path[0]
+                commands.extend((f"G0 X{_fmt(first_x)} Y{_fmt(first_y)}", f"G1 Z{_fmt(max(first_z, pass_depth))} F{plunge_feed:g}"))
+                commands.extend(
+                    f"G1 X{_fmt(x)} Y{_fmt(y)} Z{_fmt(max(z, pass_depth))} F{cut_feed:g}"
+                    for x, y, z in surface_path[1:]
+                )
+                commands.append(f"G0 Z{safe_z:g}")
+            continue
         paths = profile_paths if mode == "Profile cutout" else [(stroke, False) for stroke in strokes]
         for stroke, is_outer in paths:
             first = stroke[0]
@@ -159,6 +181,7 @@ def generate_step_gcode(
         if mode == "Detected feature" else "",
         placement_offset_x,
         placement_offset_y,
+        surface_paths,
     )
 
 
@@ -226,12 +249,34 @@ def _transform_loop(loop: PlanarLoop, orientation: str) -> PlanarLoop:
     return PlanarLoop(tuple(Point2D(point.y, point.x) for point in loop.points))
 
 
+def _transform_surface_patch(patch: PlanarSurfacePatch, orientation: str) -> PlanarSurfacePatch:
+    if orientation == "Top (XY)":
+        return patch
+    return PlanarSurfacePatch(
+        tuple(_transform_loop(loop, orientation) for loop in patch.loops),
+        patch.b,
+        patch.a,
+        patch.c,
+    )
+
+
 def _translate_loop(loop: PlanarLoop, offset_x: float, offset_y: float) -> PlanarLoop:
     return PlanarLoop(tuple(Point2D(point.x + offset_x, point.y + offset_y) for point in loop.points))
 
 
 def _translate_stroke(stroke: Stroke, offset_x: float, offset_y: float) -> Stroke:
     return tuple((x + offset_x, y + offset_y) for x, y in stroke)
+
+
+def _translate_surface_patch(
+    patch: PlanarSurfacePatch, offset_x: float, offset_y: float
+) -> PlanarSurfacePatch:
+    return PlanarSurfacePatch(
+        tuple(_translate_loop(loop, offset_x, offset_y) for loop in patch.loops),
+        patch.a,
+        patch.b,
+        patch.c - patch.a * offset_x - patch.b * offset_y,
+    )
 
 
 def _cutout_placement_offset(
@@ -329,6 +374,106 @@ def _detected_feature_paths(
     if any(feature.kind == "Raised boss" for feature in model.features):
         strokes.extend(_pocket_strokes(region, radius, tool_diameter))
     return strokes
+
+
+def _planar_surface_paths(
+    patches: tuple[PlanarSurfacePatch, ...],
+    orientation: str,
+    region,
+    tool_diameter: float,
+    offset_x: float,
+    offset_y: float,
+) -> tuple[tuple[tuple[float, float, float], ...], float]:
+    """Generate a bounded raster over accessible planar height-field patches."""
+    transformed = tuple(
+        _translate_surface_patch(_transform_surface_patch(patch, orientation), offset_x, offset_y)
+        for patch in patches
+    )
+    if not transformed:
+        return (), 0.0
+    patch_regions = [(_even_odd_region(patch.loops), patch) for patch in transformed]
+    current = region.buffer(-tool_diameter / 2, join_style=2)
+    if current.is_empty:
+        return (), 0.0
+    min_x, min_y, max_x, max_y = current.bounds
+    stepover = max(0.25, tool_diameter * 0.5)
+    sample_step = max(0.2, tool_diameter * 0.25)
+    row_count = max(1, int(math.ceil((max_y - min_y) / stepover))) + 1
+    paths: list[tuple[tuple[float, float, float], ...]] = []
+    for row_index in range(row_count):
+        y = min(max_y, min_y + row_index * (max_y - min_y) / max(1, row_count - 1))
+        scan = LineString(((min_x - stepover, y), (max_x + stepover, y)))
+        spans = _strokes_from_geometry(current.intersection(scan))
+        spans.sort(key=lambda span: min(point[0] for point in span))
+        if row_index % 2:
+            spans = [tuple(reversed(span)) for span in reversed(spans)]
+        for span in spans:
+            sampled = _sample_surface_span(span, patch_regions, sample_step)
+            paths.extend(sampled)
+    if not paths:
+        return (), 0.0
+    connected: list[tuple[tuple[float, float, float], ...]] = []
+    active: tuple[tuple[float, float, float], ...] | None = None
+    for path in paths:
+        if active is not None and _safe_surface_link(current, active[-1], path[0]):
+            active = active + (path[0],) + path[1:]
+        else:
+            if active is not None:
+                connected.append(active)
+            active = path
+    if active is not None:
+        connected.append(active)
+    minimum_depth = min(point[2] for path in connected for point in path)
+    return tuple(connected), minimum_depth
+
+
+def _sample_surface_span(
+    span: Stroke,
+    patch_regions: list[tuple[object, PlanarSurfacePatch]],
+    sample_step: float,
+) -> list[tuple[tuple[float, float, float], ...]]:
+    line = LineString(span)
+    count = max(2, int(math.ceil(line.length / sample_step)) + 1)
+    paths: list[tuple[tuple[float, float, float], ...]] = []
+    active: list[tuple[float, float, float]] = []
+    for index in range(count):
+        point = line.interpolate(line.length * index / (count - 1))
+        depth = _surface_depth_at(point.x, point.y, patch_regions)
+        candidate = (float(point.x), float(point.y), depth) if depth is not None else None
+        if candidate is None or (
+            active
+            and abs(candidate[2] - active[-1][2])
+            > max(0.5, 1.75 * math.dist(candidate[:2], active[-1][:2]))
+        ):
+            if len(active) >= 2:
+                paths.append(tuple(active))
+            active = []
+        if candidate is not None:
+            active.append(candidate)
+    if len(active) >= 2:
+        paths.append(tuple(active))
+    return paths
+
+
+def _surface_depth_at(
+    x: float,
+    y: float,
+    patch_regions: list[tuple[object, PlanarSurfacePatch]],
+) -> float | None:
+    point = Point(x, y)
+    depths = [patch.height_at(x, y) for region, patch in patch_regions if region.covers(point)]
+    return max(depths) if depths else None
+
+
+def _safe_surface_link(
+    region,
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+) -> bool:
+    return (
+        abs(end[2] - start[2]) <= max(0.5, 1.75 * math.dist(start[:2], end[:2]))
+        and _safe_stay_down_link(region, start[:2], end[:2])
+    )
 
 
 def _tabbed_profile_commands(

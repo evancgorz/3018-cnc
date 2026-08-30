@@ -142,6 +142,36 @@ def test_pocket_does_not_stay_down_across_an_inner_hole() -> None:
     assert job.stroke_count > 1
 
 
+def test_wedge_planar_surface_generates_varying_bounded_gcode_without_cliff_bridge() -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / "wedge.step")
+    job = generate_step_gcode(
+        model,
+        mode="Planar surface",
+        stock_width=30,
+        stock_height=15,
+        tool_diameter=3.175,
+        passes=2,
+        safe_z=3,
+    )
+
+    program = parse_gcode(job.gcode)
+    assert job.surface_paths
+    assert len({round(point[2], 3) for path in job.surface_paths for point in path}) > 5
+    assert program.bounds.minimum.z == pytest.approx(-5.983, abs=0.01)
+    assert program.bounds.maximum.z == pytest.approx(3)
+    assert program.bounds.minimum.x >= -0.001
+    assert program.bounds.minimum.y >= -0.001
+    cutting_segments = [
+        segment for segment in program.segments
+        if not segment.rapid and math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y) > 0.1
+    ]
+    assert all(
+        abs(segment.end.z - segment.start.z)
+        <= max(0.5, 1.75 * math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)) + 0.01
+        for segment in cutting_segments
+    )
+
+
 def test_centered_cutout_retains_existing_explicit_placement() -> None:
     job = generate_step_gcode(
         _model(),
