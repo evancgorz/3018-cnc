@@ -27,7 +27,14 @@ def build_step_operation_plan(
 ) -> tuple[StepOperation, ...]:
     """Describe the actual operation groups emitted by the STEP generator."""
     if mode == "Profile cutout":
-        inner = tuple(index for index in range(len(model.loops)) if index != _outer_index(model))
+        # Every root loop is a retained-part boundary.  Only contained loops
+        # represent internal through-cutouts; disconnected roots must not be
+        # mistaken for holes simply because one happens to be smaller.
+        inner = tuple(
+            index
+            for index, parent in enumerate(model.resolved_loop_parents)
+            if parent is not None
+        )
         operations = []
         if inner:
             operations.append(
@@ -154,4 +161,4 @@ def _topological_operation_order(
 
 
 def _outer_index(model: StepPlanarModel) -> int:
-    return max(range(len(model.loops)), key=lambda index: model.loops[index].area)
+    return max(model.outer_loop_indices, key=lambda index: model.loops[index].area)

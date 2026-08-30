@@ -111,12 +111,57 @@ class StepPlanarModel:
 
     @property
     def outer_loop(self) -> PlanarLoop:
-        return max(self.loops, key=lambda loop: loop.area)
+        return self.loops[max(self.outer_loop_indices, key=lambda index: self.loops[index].area)]
+
+    @property
+    def outer_loop_indices(self) -> tuple[int, ...]:
+        """Return every disconnected top-level material boundary."""
+        return tuple(
+            index
+            for index, parent in enumerate(self.resolved_loop_parents)
+            if parent is None
+        )
 
     @property
     def inner_loops(self) -> tuple[PlanarLoop, ...]:
-        outer = self.outer_loop
-        return tuple(loop for loop in self.loops if loop is not outer)
+        return tuple(
+            loop
+            for index, loop in enumerate(self.loops)
+            if index not in self.outer_loop_indices
+        )
+
+    @property
+    def loop_depths(self) -> tuple[int, ...]:
+        """Return containment depth for each loop, with roots at depth zero."""
+        parents = self.resolved_loop_parents
+        depths: list[int | None] = [None] * len(parents)
+
+        def resolve(index: int, trail: tuple[int, ...] = ()) -> int:
+            if index in trail:
+                raise StepImportError("Projected planar loop containment contains a cycle")
+            cached = depths[index]
+            if cached is not None:
+                return cached
+            parent = parents[index]
+            if parent is None:
+                depth = 0
+            elif not 0 <= parent < len(parents):
+                raise StepImportError("Projected planar loop containment references an unknown parent")
+            else:
+                depth = resolve(parent, trail + (index,)) + 1
+            depths[index] = depth
+            return depth
+
+        return tuple(resolve(index) for index in range(len(parents)))
+
+    @property
+    def loop_roles(self) -> tuple[str, ...]:
+        """Classify boundaries by containment parity for downstream planning."""
+        depths = self.loop_depths
+        return tuple(
+            "outer" if depth == 0 else "cutout" if depth % 2 else "island"
+            for depth in depths
+        )
 
     @property
     def resolved_loop_parents(self) -> tuple[int | None, ...]:
@@ -154,6 +199,10 @@ def loop_containment_parents(loops: tuple[PlanarLoop, ...]) -> tuple[int | None,
             if parent_index == child_index:
                 continue
             overlap = child.intersection(parent).area
+            if abs(parent.area - child.area) <= 1e-7 and parent.covers(child) and child.covers(parent):
+                raise StepImportError(
+                    "Projected planar geometry contains coincident loops"
+                )
             if overlap > 1e-7 and not parent.covers(child) and not child.covers(parent):
                 raise StepImportError(
                     "Projected planar loops partially overlap and cannot be machined safely"

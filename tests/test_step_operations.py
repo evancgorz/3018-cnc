@@ -70,3 +70,37 @@ def test_nested_detected_features_are_topologically_ordered_inner_first() -> Non
     assert [operation.feature_indices for operation in operations] == [(1,), (0,)]
     assert operations[1].depends_on == ("feature-depth-0",)
     validate_operation_plan(operations)
+
+
+def test_profile_plan_treats_disconnected_roots_as_part_boundaries() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    model = StepPlanarModel(
+        Path("two-parts.step"),
+        (square(0, 0, 20), square(30, 30, 5)),
+        5,
+        5,
+        (0, 0, 0, 35, 35, 5),
+        loop_parents=(None, None),
+    )
+
+    operations = build_step_operation_plan(
+        model,
+        "Profile cutout",
+        depth=-5.2,
+        stock_thickness=5,
+        breakthrough=0.2,
+    )
+
+    assert len(operations) == 1
+    assert operations[0].operation_id == "outer-profile"
+    assert operations[0].feature_indices == ()

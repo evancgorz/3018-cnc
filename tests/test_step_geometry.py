@@ -8,6 +8,7 @@ from ttc3018_control.step_geometry import (
     STEP_PLANES,
     PlanarLoop,
     Point2D,
+    StepPlanarModel,
     StepImportError,
     load_step,
     load_step_isolated,
@@ -101,6 +102,31 @@ def test_loop_containment_parents_represent_nested_pockets_and_islands() -> None
     loops = (square(0, 0, 40), square(5, 5, 30), square(10, 10, 20), square(15, 15, 10))
 
     assert loop_containment_parents(loops) == (None, 0, 1, 2)
+
+    model = StepPlanarModel(
+        Path("nested.step"), loops, 5, 5, (0, 0, 0, 40, 40, 5),
+        loop_parents=(None, 0, 1, 2),
+    )
+    assert model.outer_loop_indices == (0,)
+    assert model.loop_depths == (0, 1, 2, 3)
+    assert model.loop_roles == ("outer", "cutout", "island", "cutout")
+
+
+def test_loop_containment_parents_preserve_disconnected_roots_and_reject_coincident_loops() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    assert loop_containment_parents((square(0, 0, 10), square(20, 20, 5))) == (None, None)
+    with pytest.raises(StepImportError, match="coincident"):
+        loop_containment_parents((square(0, 0, 10), square(0, 0, 10)))
 
 
 def test_loop_containment_parents_rejects_partial_overlap_and_self_intersection() -> None:
