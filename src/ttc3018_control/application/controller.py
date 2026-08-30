@@ -16,6 +16,7 @@ from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
+from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 
 
 class ApplicationController:
@@ -67,6 +68,37 @@ class ApplicationController:
     @property
     def connected(self) -> bool:
         return self.connection_service.connected
+
+    @property
+    def state(self) -> ApplicationState:
+        status = self.status
+        machine_position = self.session.machine_position
+        work_position = status.work_position if status else None
+        if work_position is None and machine_position is not None and self.session.work_offset is not None:
+            work_position = machine_position.minus(self.session.work_offset)
+        program = self.program
+        program_snapshot = None
+        if program is not None:
+            program_snapshot = ProgramSnapshot(
+                path=str(program.path),
+                command_count=len(program.commands),
+                minimum=program.bounds.minimum,
+                maximum=program.bounds.maximum,
+            )
+        streamer = self.job.streamer
+        return ApplicationState(
+            connection_mode=ConnectionMode.WIFI if self.connection_service.mode is ConnectionMode.WIFI else ConnectionMode.USB,
+            connected=self.connected,
+            status=status,
+            machine_position=machine_position,
+            work_position=work_position,
+            virtual_position=self.session.virtual_position,
+            reference_trusted=self.reference_trusted,
+            work_zero_confirmed=self.work_zero_confirmed,
+            profile=self.profile,
+            program=program_snapshot,
+            job=JobSnapshot(streamer.state, streamer.completed, streamer.total, streamer.error),
+        )
 
     @property
     def profile(self) -> MachineProfile:

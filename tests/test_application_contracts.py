@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -27,12 +28,37 @@ def test_job_snapshot_reports_progress_without_ui_formatting() -> None:
     assert JobSnapshot().progress == 0.0
 
 
+def test_application_controller_exposes_a_qt_independent_state_snapshot(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+
+    snapshot = controller.state
+
+    assert isinstance(snapshot, ApplicationState)
+    assert not snapshot.connected
+    assert snapshot.job.state == "idle"
+    assert snapshot.program is None
+
+
 def test_events_are_typed_data() -> None:
     event = NoticeEvent("Machine ready", EventLevel.INFO)
 
     assert event.message == "Machine ready"
     assert event.level is EventLevel.INFO
     assert not hasattr(event, "show")
+
+
+def test_application_modules_are_qt_independent_and_qt_adapter_has_no_transport_ownership() -> None:
+    root = Path(__file__).parents[1]
+    application_dir = root / "src" / "ttc3018_control" / "application"
+    for path in application_dir.glob("*.py"):
+        assert "PySide6" not in path.read_text(encoding="utf-8")
+
+    view_model = (root / "src" / "ttc3018_control" / "qt" / "view_model.py").read_text(encoding="utf-8")
+    assert "from ..serial_connection" not in view_model
+    assert "from ..tcp_connection" not in view_model
+    assert "JobStreamer" not in view_model
 
 
 class _Transport:
