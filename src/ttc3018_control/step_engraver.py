@@ -126,6 +126,15 @@ def generate_step_gcode(
             (_translate_stroke(stroke, placement_offset_x, placement_offset_y), is_outer)
             for stroke, is_outer in profile_paths
         ]
+    if mode == "Detected feature":
+        scheduled = _schedule_depth_paths(tuple(zip(strokes, depth_paths)))
+        strokes = [stroke for stroke, _depth in scheduled]
+        depth_paths = [depth for _stroke, depth in scheduled]
+    elif mode == "Profile cutout":
+        profile_paths = _schedule_profile_paths(profile_paths)
+        strokes = [stroke for stroke, _is_outer in profile_paths]
+    elif mode != "Planar surface":
+        strokes = _schedule_strokes(strokes)
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
     verification = None
     if mode in {"Pocket", "Planar surface"}:
@@ -296,6 +305,68 @@ def _translate_surface_patch(
         patch.b,
         patch.c - patch.a * offset_x - patch.b * offset_y,
     )
+
+
+def _schedule_profile_paths(
+    paths: Iterable[tuple[Stroke, bool]],
+) -> list[tuple[Stroke, bool]]:
+    tagged = tuple(paths)
+    inner = [(stroke, False) for stroke, is_outer in tagged if not is_outer]
+    outer = [(stroke, True) for stroke, is_outer in tagged if is_outer]
+    return _schedule_tagged_strokes(inner) + _schedule_tagged_strokes(outer)
+
+
+def _schedule_tagged_strokes(paths: Iterable[tuple[Stroke, bool]]) -> list[tuple[Stroke, bool]]:
+    remaining = list(paths)
+    result: list[tuple[Stroke, bool]] = []
+    current = (0.0, 0.0)
+    while remaining:
+        choices = [
+            (_best_stroke_orientation(stroke, current), index, is_outer)
+            for index, (stroke, is_outer) in enumerate(remaining)
+        ]
+        oriented, index, is_outer = min(choices, key=lambda item: (math.dist(current, item[0][0]), item[1]))
+        result.append((oriented, is_outer))
+        current = oriented[-1]
+        remaining.pop(index)
+    return result
+
+
+def _schedule_strokes(strokes: Iterable[Stroke]) -> list[Stroke]:
+    return [stroke for stroke, _is_outer in _schedule_tagged_strokes((stroke, False) for stroke in strokes)]
+
+
+def _schedule_depth_paths(
+    paths: Iterable[tuple[Stroke, float]],
+) -> list[tuple[Stroke, float]]:
+    remaining = list(paths)
+    result: list[tuple[Stroke, float]] = []
+    current = (0.0, 0.0)
+    while remaining:
+        choices = [
+            (_best_stroke_orientation(stroke, current), index, depth)
+            for index, (stroke, depth) in enumerate(remaining)
+        ]
+        oriented, index, depth = min(choices, key=lambda item: (math.dist(current, item[0][0]), item[1]))
+        result.append((oriented, depth))
+        current = oriented[-1]
+        remaining.pop(index)
+    return result
+
+
+def _best_stroke_orientation(stroke: Stroke, current: tuple[float, float]) -> Stroke:
+    if len(stroke) < 3:
+        candidates = (stroke, tuple(reversed(stroke)))
+    elif math.dist(stroke[0], stroke[-1]) <= 1e-7:
+        body = stroke[:-1]
+        candidates = tuple(
+            tuple(direction[index:] + direction[:index] + (direction[index],))
+            for direction in (body, tuple(reversed(body)))
+            for index in range(len(body))
+        )
+    else:
+        candidates = (stroke, tuple(reversed(stroke)))
+    return min(candidates, key=lambda candidate: math.dist(current, candidate[0]))
 
 
 def _cutout_placement_offset(

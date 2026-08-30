@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from ttc3018_control.gcode import parse_gcode
-from ttc3018_control.step_engraver import generate_step_gcode
+from ttc3018_control.step_engraver import _best_stroke_orientation, generate_step_gcode
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
@@ -197,6 +197,21 @@ def test_detected_features_keep_individual_depths() -> None:
     assert "G1 Z-0.5 F100" in job.gcode
     assert "G1 Z-1.5 F100" in job.gcode
     assert "G1 Z-3 F100" in job.gcode
+
+
+def test_scheduler_reverses_open_path_to_use_nearest_endpoint() -> None:
+    stroke = ((10, 0), (20, 0))
+
+    assert _best_stroke_orientation(stroke, (21, 0)) == ((20, 0), (10, 0))
+
+
+def test_scheduler_rotates_closed_path_to_nearest_vertex() -> None:
+    stroke = ((0, 0), (10, 0), (10, 10), (0, 10), (0, 0))
+
+    oriented = _best_stroke_orientation(stroke, (9, 9))
+
+    assert oriented[0] == (10, 10)
+    assert oriented[-1] == oriented[0]
 
 
 def test_centered_cutout_retains_existing_explicit_placement() -> None:
