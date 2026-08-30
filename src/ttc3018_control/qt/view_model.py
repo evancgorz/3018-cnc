@@ -11,16 +11,12 @@ from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
     GrblStatus,
     Position,
-    REALTIME_HOLD,
-    REALTIME_SOFT_RESET,
-    REALTIME_STATUS,
     parse_status,
 )
 from ..machine_state import MachineProfile
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
 from ..text_engraver import FONT_NAMES
-from ..wifi_setup import make_station_commands
 
 
 class ControllerViewModel(QObject):
@@ -383,12 +379,7 @@ class ControllerViewModel(QObject):
             if not self.application.job_active:
                 self._set_notice("Abort ignored — no job is active")
                 return
-            try:
-                self._preserve_references_on_next_reset = True
-                self._send_realtime(REALTIME_HOLD)
-                self._send_realtime(REALTIME_SOFT_RESET)
-            except RuntimeError:
-                pass
+            self._preserve_references_on_next_reset = True
             self.application.abort_job()
             self._set_notice("Job aborted — references retained")
         elif operation == "wifi_setup":
@@ -451,12 +442,7 @@ class ControllerViewModel(QObject):
 
     @Slot(QUrl)
     def import_step_file(self, selected_file: QUrl) -> None:
-        """Import a STEP URL selected by Qt Quick's file dialog.
-
-        The application is hosted by ``QGuiApplication``.  Creating a Widgets
-        ``QFileDialog`` from this slot is unsupported and can terminate the
-        process on Windows, so file selection remains entirely in QML.
-        """
+        """Import a STEP URL selected by Qt Quick's file dialog."""
 
         path_text = selected_file.toLocalFile()
         if not path_text:
@@ -625,7 +611,7 @@ class ControllerViewModel(QObject):
             self._set_notice("Wi-Fi setup requires GRBL Idle")
             return
         try:
-            commands = make_station_commands(ssid, password, self.wifi_port)
+            commands = self.application.prepare_wifi_setup(ssid, password, self.wifi_port)
         except ValueError as exc:
             self._set_notice(f"Invalid Wi-Fi settings — {exc}")
             return
@@ -872,7 +858,7 @@ class ControllerViewModel(QObject):
                 self._handle_event(events.get_nowait())
             now = time.monotonic()
             if self.connected and now - self._last_status_poll >= 0.5:
-                self._send_realtime(REALTIME_STATUS)
+                self.application.request_status()
                 self._last_status_poll = now
         except RuntimeError as exc:
             self._disconnected(str(exc))
@@ -974,18 +960,6 @@ class ControllerViewModel(QObject):
             self._set_notice(f"Controller rejected Wi-Fi configuration: {response}")
             return True
         return False
-
-    def _send_manual(self, command: bytes) -> None:
-        self.application.send_manual(command)
-
-    def _send_realtime(self, command: bytes) -> None:
-        self.application.send_realtime(command)
-
-    def _send_job_line(self, command: bytes) -> None:
-        self.application.send_line(command)
-
-    def _send_motion_line(self, command: bytes) -> None:
-        self.application.send_line(command)
 
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:

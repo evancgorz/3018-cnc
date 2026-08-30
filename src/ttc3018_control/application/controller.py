@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Callable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
-from ..grbl import GrblStatus, Position, REALTIME_JOG_CANCEL, make_work_zero
+from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero
 from ..machine_state import MachineProfile, ProfileStore
 from ..serial_connection import GrblConnection, available_ports
 from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
+from ..wifi_setup import make_station_commands
 from .connection_service import ConnectionOutcome, ConnectionService
 from .generation_service import GenerationService
 from .job_service import JobService
@@ -228,9 +229,20 @@ class ApplicationController:
         return self.job.resume()
 
     def abort_job(self, reason: str = "Aborted by operator") -> None:
+        try:
+            self.send_realtime(REALTIME_HOLD)
+            self.send_realtime(REALTIME_SOFT_RESET)
+        except RuntimeError:
+            pass
         self.job.abort(reason)
         self.motion.reset()
         self.manual_pending_acks = 0
+
+    def request_status(self) -> None:
+        self.send_realtime(REALTIME_STATUS)
+
+    def prepare_wifi_setup(self, ssid: str, password: str, port: int) -> list[tuple[bytes, str]]:
+        return make_station_commands(ssid, password, port)
 
     def generate_text(self, *args, **kwargs):
         return self.generation_service.text(*args, **kwargs)
