@@ -40,6 +40,8 @@ streaming pipeline.
   generated STEP job.
 - [x] Add a deterministic geometry-only verification gate for clearing-path
   containment and tool-reachable planar coverage before generated G-code loads.
+- [x] Attach the current STEP operation groups and dependencies to generated
+  results, review summaries, and G-code metadata.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Preview the generated centerline toolpath before running.
