@@ -820,7 +820,7 @@ ApplicationWindow {
                                 Rectangle { anchors.fill: parent; radius: 18; color: "#1D2025"; border.color: window.palette.divider; border.width: 1 }
                                 Label { anchors.centerIn: parent; text: "XY"; color: window.palette.muted; font.pixelSize: 10; font.weight: Font.DemiBold }
 
-                                // Outer ring: press and hold for live jogging; release stops at a whole mm.
+                                // Outer ring: press and hold for live jogging; release stops at the next whole mm in that direction.
                                 JogArrowButton { x: 76; y: 6; width: 62; height: 42; glyph: "▲\nY+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
                                 JogArrowButton { x: 7; y: 86; width: 58; height: 42; glyph: "◀\nX−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
                                 JogArrowButton { x: 149; y: 86; width: 58; height: 42; glyph: "▶\nX+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
@@ -841,7 +841,7 @@ ApplicationWindow {
                                 JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 47; glyph: "▼\nZ−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Z", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
                             }
                         }
-                        Label { Layout.alignment: Qt.AlignHCenter; text: "Inner click: " + Number(window.jogStep).toFixed(1) + " mm  ·  Outer hold: live jog, whole-mm stop"; color: window.palette.subtle; font.pixelSize: 10 }
+                        Label { Layout.alignment: Qt.AlignHCenter; text: "Inner click: " + Number(window.jogStep).toFixed(1) + " mm  ·  Outer hold: live jog, directional whole-mm stop"; color: window.palette.subtle; font.pixelSize: 10 }
                         SecondaryButton { Layout.alignment: Qt.AlignHCenter; width: 108; text: "Cancel jog"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.cancel_jog() }
                         Divider {}
                         SectionTitle { text: "Move to virtual coordinates" }

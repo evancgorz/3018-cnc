@@ -124,5 +124,15 @@ def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
     assert connection.realtime[-1] == b"\x85"
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
     view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))
+    assert connection.lines[-1] == b"$J=G91 G21 X0.75 F500\n"
+    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
+
+    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
+    view_model.start_live_jog("X", -1)
     assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
+    assert connection.lines[-1] == b"$J=G91 G21 X-1 F500\n"
+    view_model.stop_live_jog()
+    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
+    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))
+    assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
