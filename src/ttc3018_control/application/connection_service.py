@@ -108,22 +108,17 @@ class ConnectionService:
 
         def worker() -> None:
             last_error = "No GRBL controller answered on the local network"
-            candidates = [host.strip()] if host.strip() else []
-            try:
-                candidates.extend(self._discover_hosts(port))
-            except Exception as exc:
-                last_error = str(exc)
-            for candidate in dict.fromkeys(candidates):
+
+            def try_candidate(candidate: str) -> tuple[str, str]:
                 if cancel_event.is_set():
-                    return
-                transport = None
+                    return "canceled", ""
+                candidate_transport = None
                 try:
-                    transport = self._wifi_factory()
-                    transport.connect(candidate, port, timeout=1.2)
+                    candidate_transport = self._wifi_factory()
+                    candidate_transport.connect(candidate, port, timeout=1.2)
                 except Exception as exc:
-                    self._safe_disconnect(transport)
-                    last_error = str(exc)
-                    continue
+                    self._safe_disconnect(candidate_transport)
+                    return "failed", str(exc)
                 with self._state_lock:
                     canceled = (
                         cancel_event.is_set()
@@ -131,21 +126,52 @@ class ConnectionService:
                         or attempt_id != self._wifi_attempt_id
                     )
                     if not canceled:
-                        self._wifi_results.put(WifiAttempt(attempt_id, transport, candidate, port))
-                        return
-                self._safe_disconnect(transport)
-                return
-            with self._state_lock:
-                if (
-                    not cancel_event.is_set()
-                    and not self._closed
-                    and attempt_id == self._wifi_attempt_id
-                ):
-                    self._wifi_results.put(WifiAttempt(attempt_id, None, "", port, last_error))
+                        self._wifi_results.put(
+                            WifiAttempt(attempt_id, candidate_transport, candidate, port)
+                        )
+                        return "connected", ""
+                self._safe_disconnect(candidate_transport)
+                return "canceled", ""
 
-            with self._state_lock:
-                if self._wifi_worker is threading.current_thread():
-                    self._wifi_worker = None
+            try:
+                # A configured endpoint is authoritative and should be tried
+                # before discovery. Some controller firmware permits only one
+                # TCP client; probing it first can otherwise delay or reject
+                # the persistent connection that follows.
+                configured_host = host.strip()
+                if configured_host:
+                    status, error = try_candidate(configured_host)
+                    if status != "failed":
+                        return
+                    last_error = error
+
+                if cancel_event.is_set():
+                    return
+                try:
+                    candidates = self._discover_hosts(port)
+                except Exception as exc:
+                    candidates = ()
+                    last_error = str(exc)
+                for candidate in dict.fromkeys(candidates):
+                    if candidate == configured_host:
+                        continue
+                    status, error = try_candidate(candidate)
+                    if status != "failed":
+                        return
+                    last_error = error
+                with self._state_lock:
+                    if (
+                        not cancel_event.is_set()
+                        and not self._closed
+                        and attempt_id == self._wifi_attempt_id
+                    ):
+                        self._wifi_results.put(
+                            WifiAttempt(attempt_id, None, "", port, last_error)
+                        )
+            finally:
+                with self._state_lock:
+                    if self._wifi_worker is threading.current_thread():
+                        self._wifi_worker = None
 
         thread = threading.Thread(target=worker, daemon=True, name="ttc3018-wifi-connect")
         with self._state_lock:

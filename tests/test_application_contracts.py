@@ -350,6 +350,58 @@ def test_connection_service_discards_a_stale_wifi_result_after_disconnect() -> N
     assert not stale_transport.connected
 
 
+def test_connection_service_tries_configured_wifi_host_before_discovery() -> None:
+    discovery_called = threading.Event()
+    connected = threading.Event()
+
+    class _ImmediateWifi(_Transport):
+        def connect(self, host: str, port: int, timeout: float = 0) -> None:
+            assert host == "192.168.86.36"
+            self.connected = True
+            connected.set()
+
+    service = ConnectionService(
+        _Transport,
+        _ImmediateWifi,
+        lambda _port: discovery_called.set() or (),
+    )
+
+    assert service.begin_wifi("192.168.86.36", 23).accepted
+    assert connected.wait(timeout=1)
+    outcome = service.poll_wifi()
+
+    assert outcome is not None and outcome.accepted
+    assert not discovery_called.is_set()
+    service.close()
+
+
+def test_connection_service_discovers_only_after_configured_host_fails() -> None:
+    attempted: list[str] = []
+    completed = threading.Event()
+
+    class _FallbackWifi(_Transport):
+        def connect(self, host: str, port: int, timeout: float = 0) -> None:
+            attempted.append(host)
+            if host == "192.168.86.36":
+                raise OSError("saved endpoint unavailable")
+            self.connected = True
+            completed.set()
+
+    service = ConnectionService(
+        _Transport,
+        _FallbackWifi,
+        lambda _port: ("192.168.86.50",),
+    )
+
+    assert service.begin_wifi("192.168.86.36", 23).accepted
+    assert completed.wait(timeout=1)
+    outcome = service.poll_wifi()
+
+    assert outcome is not None and outcome.accepted
+    assert attempted == ["192.168.86.36", "192.168.86.50"]
+    service.close()
+
+
 def test_wifi_provisioning_sequences_acknowledged_commands_and_restart_delay() -> None:
     lines: list[tuple[bytes, str | None]] = []
     notices: list[str] = []

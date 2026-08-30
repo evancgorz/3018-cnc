@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Address, IPv4Network
 import socket
+import time
 
 
 def local_ipv4_addresses() -> list[str]:
@@ -68,7 +69,15 @@ def discover_grbl_hosts(
 
 def _is_grbl_endpoint(host: str, port: int, timeout: float) -> bool:
     with socket.create_connection((host, port), timeout=timeout) as endpoint:
-        endpoint.settimeout(0.7)
-        endpoint.sendall(b"?")
-        response = endpoint.recv(2048)
-    return b"<" in response and b">" in response
+        endpoint.settimeout(0.2)
+        deadline = time.monotonic() + 1.0
+        response = bytearray()
+        while time.monotonic() < deadline:
+            endpoint.sendall(b"?")
+            try:
+                response.extend(endpoint.recv(2048))
+            except TimeoutError:
+                continue
+            if b"Grbl " in response or (b"<" in response and b">" in response):
+                return True
+    return False
