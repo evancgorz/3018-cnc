@@ -36,7 +36,7 @@ if not "%TTC3018_EXIT%"=="0" (
 exit /b %TTC3018_EXIT%
 
 :check
-"%TTC3018_PYTHON%" "%CD%\run_qt.py" --check
+"%TTC3018_PYTHON%" "%CD%\run.py" --check
 exit /b %errorlevel%
 
 :setup_failed

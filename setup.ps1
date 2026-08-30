@@ -14,5 +14,15 @@ $venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
 & $venvPython -m pip install --upgrade pip
 & $venvPython -m pip install -r (Join-Path $projectRoot "requirements-dev.txt")
 
-Write-Host "Setup complete. Start the Qt app with .\run.bat"
+$desktop = [Environment]::GetFolderPath("Desktop")
+$shortcutPath = Join-Path $desktop "TTC 3018 Control.lnk"
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = Join-Path $projectRoot "run.bat"
+$shortcut.WorkingDirectory = $projectRoot
+$shortcut.Description = "Launch TTC 3018 Control"
+$shortcut.Save()
+
+Write-Host "Setup complete. Desktop shortcut created: $shortcutPath"
+Write-Host "You can also start the app with .\run.bat"
 

@@ -178,8 +178,10 @@ Open PowerShell in this directory and run:
 
 ## Run
 
-Double-click `run.bat` in File Explorer, or run it from Command Prompt. This
-launches the Qt Quick interface:
+The recommended entry point is the **TTC 3018 Control** desktop shortcut. It is
+created or refreshed automatically by `setup.ps1`. You can also double-click
+`run.bat` in File Explorer, or run it from Command Prompt. This launches the Qt
+Quick interface:
 
 ```bat
 run.bat
@@ -187,11 +189,8 @@ run.bat
 
 The batch launcher automatically runs setup if the project virtual environment
 is missing and keeps its console open when startup fails so the error remains
-visible. PowerShell users can alternatively run:
-
-```powershell
-.\run.ps1
-```
+visible. There is one supported application launcher; `setup.ps1` is only for
+installing or repairing the environment and desktop shortcut.
 
 Select a detected serial port, connect, and wait for `Idle` before jogging. The
 same centered connection dialog also supports Wi-Fi TCP when USB is removed.
