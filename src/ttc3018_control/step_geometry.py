@@ -64,6 +64,7 @@ class StepFeature:
     kind: str
     loop_index: int
     depth: float
+    parent_loop_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,7 @@ class StepPlanarModel:
     face_normal: tuple[float, float, float] = (0.0, 0.0, 1.0)
     features: tuple[StepFeature, ...] = ()
     surface_patches: tuple[PlanarSurfacePatch, ...] = ()
+    loop_parents: tuple[int | None, ...] = ()
 
     @property
     def width(self) -> float:
@@ -114,6 +116,52 @@ class StepPlanarModel:
     def inner_loops(self) -> tuple[PlanarLoop, ...]:
         outer = self.outer_loop
         return tuple(loop for loop in self.loops if loop is not outer)
+
+    @property
+    def resolved_loop_parents(self) -> tuple[int | None, ...]:
+        """Return containment metadata, including for synthetic test models."""
+        if len(self.loop_parents) == len(self.loops):
+            return self.loop_parents
+        return loop_containment_parents(self.loops)
+
+
+def loop_containment_parents(loops: tuple[PlanarLoop, ...]) -> tuple[int | None, ...]:
+    """Build a deterministic parent loop for nested planar geometry.
+
+    A parent is the smallest loop that fully contains a child. Partial area
+    overlap, coincident loops, invalid polygons, and zero-area loops are
+    rejected instead of being silently converted into an ambiguous even/odd
+    region. This is 2D metadata; solid-level blind/through classification
+    remains the responsibility of the OCC topology analyzer.
+    """
+    from shapely.geometry import Polygon
+
+    polygons = []
+    for loop in loops:
+        polygon = Polygon((point.x, point.y) for point in loop.points)
+        if polygon.is_empty:
+            raise StepImportError("Projected planar geometry contains an empty loop")
+        if not polygon.is_valid:
+            raise StepImportError("Projected planar geometry contains a self-intersecting loop")
+        if polygon.area <= 1e-7:
+            raise StepImportError("Projected planar geometry contains a zero-area loop")
+        polygons.append(polygon)
+    parents: list[int | None] = [None] * len(polygons)
+    for child_index, child in enumerate(polygons):
+        containers: list[tuple[float, int]] = []
+        for parent_index, parent in enumerate(polygons):
+            if parent_index == child_index:
+                continue
+            overlap = child.intersection(parent).area
+            if overlap > 1e-7 and not parent.covers(child) and not child.covers(parent):
+                raise StepImportError(
+                    "Projected planar loops partially overlap and cannot be machined safely"
+                )
+            if parent.area > child.area + 1e-7 and parent.covers(child):
+                containers.append((parent.area, parent_index))
+        if containers:
+            parents[child_index] = min(containers)[1]
+    return tuple(parents)
 
 
 def load_step(path: Path, plane: str = STEP_PLANES[0]) -> StepPlanarModel:
@@ -214,7 +262,14 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
             str(payload["face_plane"]),
             tuple(float(value) for value in payload["face_normal"]),
             tuple(
-                StepFeature(str(feature["kind"]), int(feature["loop_index"]), float(feature["depth"]))
+                StepFeature(
+                    str(feature["kind"]),
+                    int(feature["loop_index"]),
+                    float(feature["depth"]),
+                    None
+                    if feature.get("parent_loop_index") is None
+                    else int(feature["parent_loop_index"]),
+                )
                 for feature in payload.get("features", [])
             ),
             tuple(
@@ -228,6 +283,10 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
                     float(patch["c"]),
                 )
                 for patch in payload.get("surface_patches", [])
+            ),
+            tuple(
+                None if parent is None else int(parent)
+                for parent in payload.get("loop_parents", [])
             ),
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -305,12 +364,34 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
     modules["BRepBndLib"].Add_s(shape, box)
     bounds = box.Get()
     thickness = _plane_thickness(bounds, selected_axis)
-    features = _detect_axial_features(shape, modules, selected_axis, face_coordinate, normal, normalized, min_x, min_y)
+    loop_parents = loop_containment_parents(normalized)
+    features = _detect_axial_features(
+        shape,
+        modules,
+        selected_axis,
+        face_coordinate,
+        normal,
+        normalized,
+        min_x,
+        min_y,
+        loop_parents,
+    )
     machine_top = _machine_axis_max(bounds, selected_axis)
     surface_patches = _surface_patches(
         planar_faces, selected_axis, machine_top, min_x, min_y, modules
     )
-    return StepPlanarModel(path, normalized, face_coordinate, thickness, bounds, selected_axis, normal, features, surface_patches)
+    return StepPlanarModel(
+        path,
+        normalized,
+        face_coordinate,
+        thickness,
+        bounds,
+        selected_axis,
+        normal,
+        features,
+        surface_patches,
+        loop_parents,
+    )
 
 
 def _machine_axis_max(bounds: tuple[float, float, float, float, float, float], plane: str) -> float:
@@ -376,6 +457,7 @@ def _detect_axial_features(
     loops: tuple[PlanarLoop, ...],
     origin_u: float,
     origin_v: float,
+    loop_parents: tuple[int | None, ...] = (),
 ) -> tuple[StepFeature, ...]:
     """Classify cylindrical walls adjoining selected-face inner loops."""
     if len(loops) < 2:
@@ -412,9 +494,23 @@ def _detect_axial_features(
                     outward = (high - face_coordinate) if sign > 0 else (face_coordinate - low)
                     inward = (face_coordinate - low) if sign > 0 else (high - face_coordinate)
                     if outward > 0.001 and inward <= 0.001:
-                        features.append(StepFeature("Raised boss", match, outward))
+                        features.append(
+                            StepFeature(
+                                "Raised boss",
+                                match,
+                                outward,
+                                loop_parents[match] if len(loop_parents) == len(loops) else None,
+                            )
+                        )
                     elif inward > 0.001 and outward <= 0.001:
-                        features.append(StepFeature("Recess", match, inward))
+                        features.append(
+                            StepFeature(
+                                "Recess",
+                                match,
+                                inward,
+                                loop_parents[match] if len(loop_parents) == len(loops) else None,
+                            )
+                        )
         explorer.Next()
     unique = {(feature.kind, feature.loop_index): feature for feature in features}
     return tuple(unique.values())

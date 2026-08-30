@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.step_geometry import STEP_PLANES, StepImportError, load_step, load_step_isolated
+from ttc3018_control.step_geometry import (
+    STEP_PLANES,
+    PlanarLoop,
+    Point2D,
+    StepImportError,
+    load_step,
+    load_step_isolated,
+    loop_containment_parents,
+)
 
 
 def _write_box(path: Path, width: float = 40, height: float = 25, depth: float = 5) -> None:
@@ -67,6 +75,46 @@ def test_wedge_import_preserves_tilted_planar_surface_patch() -> None:
     assert patch.a == pytest.approx(0.60696, abs=0.001)
     assert patch.height_at(9.2234, 0) == pytest.approx(-5.983, abs=0.01)
     assert patch.height_at(19.0806, 0) == pytest.approx(0, abs=0.01)
+
+
+@pytest.mark.parametrize("fixture", ["removed-cylinder.step", "extruded-circle.step"])
+def test_real_feature_fixture_round_trips_loop_containment(fixture: str) -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+
+    assert model.loop_parents == (None, 0)
+    assert model.resolved_loop_parents == model.loop_parents
+    assert model.features[0].parent_loop_index == 0
+
+
+def test_loop_containment_parents_represent_nested_pockets_and_islands() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    loops = (square(0, 0, 40), square(5, 5, 30), square(10, 10, 20), square(15, 15, 10))
+
+    assert loop_containment_parents(loops) == (None, 0, 1, 2)
+
+
+def test_loop_containment_parents_rejects_partial_overlap_and_self_intersection() -> None:
+    with pytest.raises(StepImportError, match="partially overlap"):
+        loop_containment_parents(
+            (
+                PlanarLoop((Point2D(0, 0), Point2D(10, 0), Point2D(10, 10), Point2D(0, 10))),
+                PlanarLoop((Point2D(5, -1), Point2D(15, -1), Point2D(15, 9), Point2D(5, 9))),
+            )
+        )
+    with pytest.raises(StepImportError, match="self-intersecting"):
+        loop_containment_parents(
+            (PlanarLoop((Point2D(0, 0), Point2D(10, 10), Point2D(0, 10), Point2D(10, 0))),)
+        )
 
 
 def test_load_step_isolated_reports_worker_errors(tmp_path: Path) -> None:

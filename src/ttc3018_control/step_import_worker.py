@@ -29,9 +29,15 @@ def main() -> int:
                 "face_plane": model.face_plane,
                 "face_normal": list(model.face_normal),
                 "features": [
-                    {"kind": feature.kind, "loop_index": feature.loop_index, "depth": feature.depth}
+                    {
+                        "kind": feature.kind,
+                        "loop_index": feature.loop_index,
+                        "depth": feature.depth,
+                        "parent_loop_index": feature.parent_loop_index,
+                    }
                     for feature in model.features
                 ],
+                "loop_parents": list(model.loop_parents),
                 "surface_patches": [
                     {
                         "loops": [[[point.x, point.y] for point in loop.points] for loop in patch.loops],

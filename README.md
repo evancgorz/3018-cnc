@@ -131,6 +131,9 @@ top-view preview. Use **Machining face** to choose XY (top/bottom), XZ
 (front/back), or YZ (left/right) when the CAD model is standing on its side;
 then use **Path rotation** for the in-plane XY/YX direction. Tilted, open,
 unreadable, or otherwise unsupported geometry is rejected with an explanation.
+Projected loops are normalized with a deterministic containment tree, so nested
+islands and pockets are not treated as an arbitrary flat list; partial overlaps
+and self-intersections fail closed.
 
 Choose one of these operations:
 
