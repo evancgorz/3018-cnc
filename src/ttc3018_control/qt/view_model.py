@@ -536,10 +536,11 @@ class ControllerViewModel(QObject):
                 stock_thickness=stock_thickness, breakthrough=breakthrough,
                 tab_count=tab_count, tab_width=tab_width, tab_height=tab_height,
             )
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as exc:
             self._preview_strokes = []
             self._preview_model_strokes = []
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
+            self._set_notice(f"STEP preview rejected — {exc}")
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
             self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
