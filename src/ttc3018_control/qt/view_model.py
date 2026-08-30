@@ -32,7 +32,7 @@ from ..job import JobStreamer
 from ..machine_state import MachineProfile, ProfileStore, check_job_bounds
 from ..serial_connection import GrblConnection, SerialEvent, available_ports
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS, generate_step_gcode
-from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step
+from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
 from ..tcp_connection import TcpGrblConnection
 from ..text_engraver import FONT_NAMES, generate_text_gcode
 from ..wifi_setup import make_station_commands
@@ -581,7 +581,7 @@ class ControllerViewModel(QObject):
         if not path_text:
             return
         try:
-            model = load_step(Path(path_text))
+            model = load_step_isolated(Path(path_text))
         except StepImportError as exc:
             QMessageBox.critical(None, "STEP import rejected", str(exc))
             return
@@ -598,7 +598,7 @@ class ControllerViewModel(QObject):
         if self._step_path is None:
             return
         try:
-            model = load_step(self._step_path, plane)
+            model = load_step_isolated(self._step_path, plane)
         except StepImportError as exc:
             self._set_notice(f"STEP face unavailable — {exc}")
             return

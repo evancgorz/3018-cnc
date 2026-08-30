@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.step_geometry import STEP_PLANES, StepImportError, load_step
+from ttc3018_control.step_geometry import STEP_PLANES, StepImportError, load_step, load_step_isolated
 
 
 def _write_box(path: Path, width: float = 40, height: float = 25, depth: float = 5) -> None:
@@ -44,6 +44,21 @@ def test_load_step_can_select_each_orthogonal_face(tmp_path: Path) -> None:
     assert (front.width, front.height, front.thickness) == pytest.approx((40, 5, 25), abs=0.001)
     assert side.face_plane == "YZ"
     assert (side.width, side.height, side.thickness) == pytest.approx((25, 5, 40), abs=0.001)
+
+
+def test_load_step_isolated_round_trips_model(tmp_path: Path) -> None:
+    path = tmp_path / "plate.step"
+    _write_box(path)
+
+    model = load_step_isolated(path, STEP_PLANES[2])
+
+    assert model.face_plane == "XZ"
+    assert (model.width, model.height, model.thickness) == pytest.approx((40, 5, 25), abs=0.001)
+
+
+def test_load_step_isolated_reports_worker_errors(tmp_path: Path) -> None:
+    with pytest.raises(StepImportError, match="STEP file was not found"):
+        load_step_isolated(tmp_path / "missing.step")
 
 
 def test_load_step_rejects_unknown_face_orientation(tmp_path: Path) -> None:

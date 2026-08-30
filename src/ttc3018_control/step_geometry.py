@@ -7,8 +7,12 @@ small immutable 2D dataclasses and never needs to know about OCC handles.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
+import os
 from pathlib import Path
+import subprocess
+import sys
 from typing import Any
 
 
@@ -121,6 +125,70 @@ def load_step(path: Path, plane: str = STEP_PLANES[0]) -> StepPlanarModel:
         raise
     except Exception as exc:
         raise StepImportError(f"STEP geometry could not be normalized: {exc}") from exc
+
+
+def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float = 120.0) -> StepPlanarModel:
+    """Load STEP in a child process so a native OCP abort cannot kill Qt.
+
+    OpenCASCADE is a native dependency.  A malformed or unusual CAD file can
+    terminate the interpreter instead of raising Python's ``Exception``.  The
+    controller therefore keeps the risky import in a short-lived worker and
+    converts any worker failure into a normal ``StepImportError``.
+    """
+
+    path = Path(path)
+    if plane not in STEP_PLANES:
+        raise StepImportError("Choose Auto, XY, XZ, or YZ for the STEP face orientation")
+    environment = os.environ.copy()
+    source_root = str(Path(__file__).resolve().parent.parent)
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = source_root if not existing_pythonpath else source_root + os.pathsep + existing_pythonpath
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "ttc3018_control.step_import_worker", str(path), plane],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(Path(__file__).resolve().parents[2]),
+            env=environment,
+            creationflags=creation_flags,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise StepImportError(f"STEP import timed out after {timeout:g} seconds") from exc
+    except OSError as exc:
+        raise StepImportError(f"STEP importer could not be started: {exc}") from exc
+    if result.returncode != 0:
+        try:
+            worker_payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            worker_payload = {}
+        if isinstance(worker_payload, dict) and worker_payload.get("error"):
+            raise StepImportError(str(worker_payload["error"]))
+        detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "no diagnostic was returned"
+        raise StepImportError(f"STEP importer stopped safely with exit code {result.returncode}: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise StepImportError("STEP importer returned an invalid result") from exc
+    if "error" in payload:
+        raise StepImportError(str(payload["error"]))
+    try:
+        return StepPlanarModel(
+            Path(payload["path"]),
+            tuple(
+                PlanarLoop(tuple(Point2D(float(point[0]), float(point[1])) for point in loop))
+                for loop in payload["loops"]
+            ),
+            float(payload["top_z"]),
+            float(payload["thickness"]),
+            tuple(float(value) for value in payload["source_bounds"]),
+            str(payload["face_plane"]),
+            tuple(float(value) for value in payload["face_normal"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StepImportError("STEP importer returned incomplete geometry") from exc
 
 
 def _ocp_modules() -> dict[str, Any]:
