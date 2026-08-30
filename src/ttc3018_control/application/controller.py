@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
-from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero
+from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
 from ..serial_connection import GrblConnection, available_ports
 from ..tcp_connection import TcpGrblConnection
@@ -393,7 +393,21 @@ class ApplicationController:
             return True
         return self.job.handle_response(text)
 
-    def reset(self) -> None:
+    def reset(self, preserve_reference: bool = False) -> None:
         self.manual_pending_acks = 0
         self.motion.reset()
         self.job.reset()
+        if not preserve_reference:
+            self.session.invalidate_reference("GRBL reset")
+
+    def handle_transport_response(self, response: str, feed: float = 500.0, preserve_reference: bool = False) -> tuple[GrblStatus | None, bool]:
+        """Dispatch one normalized transport response and apply GRBL state changes."""
+        text = response.strip()
+        self.handle_response(text, feed)
+        status = parse_status(text)
+        if status is not None:
+            self.apply_status(status)
+        reset = text.startswith("Grbl ") or "[MSG:Reset" in text
+        if reset:
+            self.reset(preserve_reference=preserve_reference)
+        return status, reset

@@ -11,7 +11,6 @@ from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
     GrblStatus,
     Position,
-    parse_status,
 )
 from ..machine_state import MachineProfile
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
@@ -892,20 +891,19 @@ class ControllerViewModel(QObject):
         text = event.text.strip()
         if self._handle_wifi_setup_response(text):
             return
-        self.application.handle_response(text, 500.0)
-        status = parse_status(text)
+        status, reset = self.application.handle_transport_response(
+            text,
+            500.0,
+            preserve_reference=self._preserve_references_on_next_reset,
+        )
         if status is not None:
-            self.application.apply_status(status)
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
             self._project_status(status)
-        if text.startswith("Grbl ") or "[MSG:Reset" in text:
-            self.application.reset()
+        if reset:
             if self._preserve_references_on_next_reset:
                 self._preserve_references_on_next_reset = False
-            else:
-                self.session.invalidate_reference("GRBL reset")
             if self.status is not None:
                 self._project_status(self.status)
             else:
