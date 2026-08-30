@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.gcode import GCodeError, Point, parse_gcode, validate_nonnegative_work_xy
+from ttc3018_control.gcode import GCodeError, Point, parse_gcode, validate_nonnegative_work_xy, validate_rapid_xy_clearance
 
 
 def test_parses_metric_absolute_program_and_bounds() -> None:
@@ -43,6 +43,19 @@ def test_work_xy_gate_rejects_negative_linear_coordinate() -> None:
 
     with pytest.raises(GCodeError, match="negative work X"):
         validate_nonnegative_work_xy(program)
+
+
+def test_rapid_xy_clearance_rejects_travel_below_safe_z() -> None:
+    program = parse_gcode("G21 G90\nG0 X1 Y1 Z3\nG1 Z-1 F100\nG0 X2 Y2")
+
+    with pytest.raises(GCodeError, match="rapid XY travel below safe Z"):
+        validate_rapid_xy_clearance(program, 3)
+
+
+def test_rapid_xy_clearance_allows_cutting_and_rapid_z_only_motion() -> None:
+    program = parse_gcode("G21 G90\nG0 Z3\nG0 X1 Y1\nG1 Z-1 F100\nG0 Z3\nG0 X2 Y2")
+
+    validate_rapid_xy_clearance(program, 3)
 
 
 @pytest.mark.parametrize(

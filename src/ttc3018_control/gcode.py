@@ -187,6 +187,29 @@ def validate_nonnegative_work_xy(program: GCodeProgram, tolerance: float = 0.001
                 )
 
 
+def validate_rapid_xy_clearance(
+    program: GCodeProgram,
+    safe_z: float,
+    tolerance: float = 0.001,
+) -> None:
+    """Reject rapid XY travel that is below the configured safe height."""
+    if not math.isfinite(safe_z) or safe_z <= 0:
+        raise ValueError("Safe Z must be finite and greater than zero")
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("Motion tolerance must be finite and nonnegative")
+    for index, segment in enumerate(program.segments, start=1):
+        if not segment.rapid or math.dist(
+            (segment.start.x, segment.start.y),
+            (segment.end.x, segment.end.y),
+        ) <= tolerance:
+            continue
+        if min(segment.start.z, segment.end.z) < safe_z - tolerance:
+            raise GCodeError(
+                f"Segment {index} contains rapid XY travel below safe Z "
+                f"{safe_z:g} mm"
+            )
+
+
 def _target(current: float, values: list[float] | None, absolute: bool) -> float:
     if not values:
         return current

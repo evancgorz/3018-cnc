@@ -10,7 +10,7 @@ from shapely.affinity import translate as shapely_translate
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
-from .gcode import parse_gcode, validate_nonnegative_work_xy
+from .gcode import parse_gcode, validate_nonnegative_work_xy, validate_rapid_xy_clearance
 from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
 from .step_simulation import (
@@ -378,6 +378,7 @@ def generate_step_gcode(
     # and fails closed if a future strategy emits an unsupported command.
     parsed_program = parse_gcode(gcode)
     validate_nonnegative_work_xy(parsed_program)
+    validate_rapid_xy_clearance(parsed_program, safe_z)
     return StepMachining(
         gcode,
         mode,
