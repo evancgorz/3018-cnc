@@ -24,6 +24,8 @@ ApplicationWindow {
 
     property int workspace: 0
     property string toastText: ""
+    property real jogStep: 1.0
+    property string selectedTransport: "USB serial"
 
     Connections {
         target: appViewModel
@@ -31,12 +33,310 @@ ApplicationWindow {
             window.toastText = message
             toastTimer.restart()
         }
+        function onUnreferenced_jog_requested() { unreferencedJogDialog.open() }
+    }
+
+    Dialog {
+        id: unreferencedJogDialog
+        modal: true
+        title: "Manual positioning acknowledgement"
+        width: 510
+        height: 270
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 12
+            Label { text: "The virtual machine reference has not been established."; color: window.palette.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+            MutedLabel { text: "Unreferenced jogs are allowed only after you confirm that you are watching the machine, moving slowly, and will stop before a physical limit. Software envelope checks are inactive until a reference is saved." }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: unreferencedJogDialog.close() }
+                PrimaryButton { text: "I will jog carefully"; onClicked: { appViewModel.acknowledge_unreferenced_jog(); unreferencedJogDialog.close() } }
+            }
+        }
     }
 
     Timer {
         id: toastTimer
         interval: 4200
         onTriggered: window.toastText = ""
+    }
+
+    Dialog {
+        id: connectionDialog
+        modal: true
+        title: "Connect to controller"
+        width: 460
+        height: 360
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 12
+            Label { text: "Choose how TTC 3018 should reach GRBL."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Transport"; color: window.palette.subtle; font.pixelSize: 11 }
+            ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP"]; currentIndex: 0; onActivated: window.selectedTransport = currentText }
+
+            ColumnLayout {
+                visible: transportCombo.currentText === "USB serial"
+                Layout.fillWidth: true
+                spacing: 7
+                Label { text: "Serial port"; color: window.palette.subtle; font.pixelSize: 11 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    ComboBox { id: portCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.ports : []; currentIndex: 0 }
+                    SecondaryButton { text: "Refresh"; onClicked: appViewModel.refresh_ports() }
+                }
+            }
+
+            ColumnLayout {
+                visible: transportCombo.currentText === "Wi-Fi TCP"
+                Layout.fillWidth: true
+                spacing: 7
+                Label { text: "Controller address"; color: window.palette.subtle; font.pixelSize: 11 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Field { id: wifiHostField; Layout.fillWidth: true; text: "192.168.4.1"; placeholderText: "IP address or host name" }
+                    Field { id: wifiPortField; Layout.preferredWidth: 82; text: "23"; validator: IntValidator { bottom: 1; top: 65535 } }
+                }
+                MutedLabel { text: "You can remove USB and connect over the controller's Wi-Fi TCP endpoint." }
+            }
+
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: connectionDialog.close() }
+                PrimaryButton {
+                    text: "Connect"
+                    enabled: appViewModel && (transportCombo.currentText === "USB serial" ? portCombo.currentText.length > 0 : wifiHostField.text.trim().length > 0)
+                    onClicked: {
+                        if (transportCombo.currentText === "USB serial") appViewModel.connect_to_usb(portCombo.currentText)
+                        else appViewModel.connect_to_wifi(wifiHostField.text, Number(wifiPortField.text))
+                        connectionDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: textDialog
+        modal: true
+        title: "Text engraving"
+        width: 650
+        height: 620
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        function refreshPreview() {
+            if (appViewModel) appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(rpmField.text))
+        }
+        onOpened: refreshPreview()
+        onClosed: { if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0) }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 11
+            Label { text: "Create a centerline engraving from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Text"; color: window.palette.subtle; font.pixelSize: 11 }
+            Field { id: textField; Layout.fillWidth: true; text: "TTC 3018"; onTextChanged: textDialog.refreshPreview() }
+            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                Label { text: "Font"; color: window.palette.muted }
+                ComboBox { id: fontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: textDialog.refreshPreview() }
+                Label { text: "Height (mm)"; color: window.palette.muted }
+                Field { id: heightField; Layout.fillWidth: true; text: "8"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Depth (mm)"; color: window.palette.muted }
+                Field { id: depthField; Layout.fillWidth: true; text: "-0.3"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Safe Z (mm)"; color: window.palette.muted }
+                Field { id: safeField; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Cut feed (mm/min)"; color: window.palette.muted }
+                Field { id: cutField; Layout.fillWidth: true; text: "300"; validator: DoubleValidator { bottom: 1; top: 3000 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
+                Field { id: plungeField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
+                    onTextChanged: textDialog.refreshPreview() }
+                Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
+                Field { id: rpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
+                    onTextChanged: textDialog.refreshPreview() }
+            }
+            Divider {}
+            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: textDialog.close() }
+                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(rpmField.text)); textDialog.close(); window.workspace = 1 } }
+            }
+        }
+    }
+
+    Dialog {
+        id: wifiSetupDialog
+        modal: true
+        title: "Configure controller Wi-Fi"
+        width: 560
+        height: 370
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 12
+            Label { text: "Send station-mode settings to the controller over USB."; color: window.palette.text; font.pixelSize: 16; font.weight: Font.DemiBold }
+            Label { text: "The controller will restart after the transaction. Use a 2.4 GHz network; credentials are never saved by this app."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Network name (SSID)"; color: window.palette.subtle; font.pixelSize: 11 }
+            Field { id: wifiSsidField; Layout.fillWidth: true }
+            Label { text: "Wi-Fi password"; color: window.palette.subtle; font.pixelSize: 11 }
+            Field { id: wifiPasswordField; Layout.fillWidth: true; echoMode: TextInput.Password }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: wifiSetupDialog.close() }
+                PrimaryButton { text: "Configure"; enabled: appViewModel && appViewModel.connected; onClicked: { appViewModel.configure_wifi(wifiSsidField.text, wifiPasswordField.text); wifiPasswordField.text = ""; wifiSetupDialog.close() } }
+            }
+        }
+    }
+
+    Dialog {
+        id: profileDialog
+        modal: true
+        title: "Machine profile"
+        width: 480
+        height: 470
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 10
+            Label { text: "Enter measured usable travel. These values protect the virtual envelope."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Machine name"; color: window.palette.subtle; font.pixelSize: 11 }
+            Field { id: profileNameField; Layout.fillWidth: true; text: appViewModel ? appViewModel.profile_name : "Two Trees TTC 3018" }
+            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                Label { text: "X travel (mm)"; color: window.palette.muted }
+                Field { id: profileXField; Layout.fillWidth: true; text: appViewModel ? appViewModel.profile_x.toFixed(2) : "300"; validator: DoubleValidator { bottom: 0.001; top: 1000 } }
+                Label { text: "Y travel (mm)"; color: window.palette.muted }
+                Field { id: profileYField; Layout.fillWidth: true; text: appViewModel ? appViewModel.profile_y.toFixed(2) : "180"; validator: DoubleValidator { bottom: 0.001; top: 1000 } }
+                Label { text: "Z travel (mm)"; color: window.palette.muted }
+                Field { id: profileZField; Layout.fillWidth: true; text: appViewModel ? appViewModel.profile_z.toFixed(2) : "45"; validator: DoubleValidator { bottom: 0.001; top: 1000 } }
+                Label { text: "Safe Z (mm)"; color: window.palette.muted }
+                Field { id: profileSafeField; Layout.fillWidth: true; text: appViewModel ? appViewModel.profile_safe_z.toFixed(2) : "3"; validator: DoubleValidator { bottom: 0; top: 1000 } }
+            }
+            Label { text: appViewModel ? appViewModel.profile_summary : ""; color: window.palette.subtle; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: profileDialog.close() }
+                PrimaryButton { text: "Save profile"; onClicked: { appViewModel.save_profile(profileNameField.text, Number(profileXField.text), Number(profileYField.text), Number(profileZField.text), Number(profileSafeField.text)); profileDialog.close() } }
+            }
+        }
+    }
+
+    Dialog {
+        id: consoleDialog
+        modal: true
+        title: "Controller console"
+        width: 820
+        height: 520
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 16; spacing: 10
+            Label { text: "Read-only transport and GRBL messages"; color: window.palette.muted }
+            Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; color: "#14161A"; radius: 8; border.color: window.palette.divider
+                ListView { id: consoleList; anchors.fill: parent; anchors.margins: 10; model: appViewModel ? appViewModel.log_lines : []; clip: true; delegate: Label { width: consoleList.width; text: modelData; color: window.palette.muted; font.family: "Cascadia Mono"; font.pixelSize: 11; wrapMode: Text.NoWrap }
+                    onCountChanged: if (count > 0) positionViewAtEnd()
+                }
+            }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Close"; onClicked: consoleDialog.close() }
+            }
+        }
+    }
+
+    Dialog {
+        id: plaqueDialog
+        modal: true
+        title: "Plaque builder"
+        width: 720
+        height: 720
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        function refreshPreview() {
+            if (appViewModel) appViewModel.preview_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
+        }
+        onOpened: refreshPreview()
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 9
+            Label { text: "Build a plaque with protected text margins and a decorative border."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 7
+                Label { text: "Title"; color: window.palette.muted }
+                Field { id: titleField; Layout.fillWidth: true; text: "Welcome"; onTextChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Title font"; color: window.palette.muted }
+                ComboBox { id: titleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: plaqueDialog.refreshPreview() }
+                Label { text: "Title height (mm)"; color: window.palette.muted }
+                Field { id: titleHeightField; Layout.fillWidth: true; text: "10"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                    onTextChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Subtitle"; color: window.palette.muted }
+                Field { id: subtitleField; Layout.fillWidth: true; text: ""; onTextChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Enable subtitle"; color: window.palette.muted }
+                CheckBox { id: subtitleCheck; checked: true; onCheckedChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Subtitle font"; color: window.palette.muted }
+                ComboBox { id: subtitleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: plaqueDialog.refreshPreview() }
+                Label { text: "Subtitle height (mm)"; color: window.palette.muted }
+                Field { id: subtitleHeightField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                    onTextChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Plaque width × height (mm)"; color: window.palette.muted }
+                RowLayout { Layout.fillWidth: true
+                    Field { id: widthField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 10; top: 300 }
+                        onTextChanged: plaqueDialog.refreshPreview() }
+                    Field { id: plaqueHeightField; Layout.fillWidth: true; text: "50"; validator: DoubleValidator { bottom: 10; top: 180 }
+                        onTextChanged: plaqueDialog.refreshPreview() }
+                }
+                Label { text: "Inner margin (mm)"; color: window.palette.muted }
+                Field { id: marginField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 1; top: 80 }
+                    onTextChanged: plaqueDialog.refreshPreview() }
+                Label { text: "Border"; color: window.palette.muted }
+                ComboBox { id: borderCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.borders : ["Rectangle"]; onActivated: plaqueDialog.refreshPreview() }
+            }
+            Divider {}
+            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 7
+                Label { text: "Depth / safe Z (mm)"; color: window.palette.muted }
+                RowLayout { Layout.fillWidth: true
+                    Field { id: plaqueDepthField; Layout.fillWidth: true; text: "-0.3"; onTextChanged: plaqueDialog.refreshPreview() }
+                    Field { id: plaqueSafeField; Layout.fillWidth: true; text: "3"; onTextChanged: plaqueDialog.refreshPreview() }
+                }
+                Label { text: "Cut / plunge feed"; color: window.palette.muted }
+                RowLayout { Layout.fillWidth: true
+                    Field { id: plaqueCutField; Layout.fillWidth: true; text: "300"; onTextChanged: plaqueDialog.refreshPreview() }
+                    Field { id: plaquePlungeField; Layout.fillWidth: true; text: "100"; onTextChanged: plaqueDialog.refreshPreview() }
+                }
+                Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
+                Field { id: plaqueRpmField; Layout.fillWidth: true; text: "0"; onTextChanged: plaqueDialog.refreshPreview() }
+            }
+            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: plaqueDialog.close() }
+                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text)); plaqueDialog.close(); window.workspace = 1 } }
+            }
+        }
     }
 
     component Panel: Rectangle {
@@ -183,9 +483,9 @@ ApplicationWindow {
                     Label { text: "CONTROL"; color: window.palette.subtle; font.pixelSize: 11; font.letterSpacing: 1.5; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Item { Layout.fillWidth: true }
-                Pill { label: appViewModel ? appViewModel.connection : "Disconnected"; tone: window.palette.warning }
+                Pill { label: appViewModel ? appViewModel.connection_text : "Disconnected"; tone: window.palette.warning }
                 Pill { label: appViewModel ? appViewModel.grbl_state : "Unknown"; tone: window.palette.muted }
-                SecondaryButton { text: "Connect"; onClicked: appViewModel.show_connection_notice() }
+                SecondaryButton { text: appViewModel && appViewModel.connected ? "Disconnect" : "Connect"; onClicked: appViewModel && appViewModel.connected ? appViewModel.disconnect() : connectionDialog.open() }
             }
 
             RowLayout {
@@ -194,7 +494,7 @@ ApplicationWindow {
                 spacing: 6
 
                 Repeater {
-                    model: ["Prepare", "Preview & Run", "Machine", "Guided Setup", "Commissioning"]
+                    model: ["Prepare", "Preview & Run", "Machine", "Guided Setup"]
                     delegate: Button {
                         required property int index
                         required property string modelData
@@ -211,7 +511,7 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillWidth: true }
-                Label { text: "Qt migration preview"; color: window.palette.subtle; font.pixelSize: 11 }
+                Label { text: "TTC 3018 workspace"; color: window.palette.subtle; font.pixelSize: 11 }
             }
         }
     }
@@ -249,7 +549,11 @@ ApplicationWindow {
                         MutedLabel { text: "Start with an existing G-code file or create a centerline engraving." }
                         Divider {}
                         Repeater { model: ["Load G-code", "Text engraving", "Plaque builder"]
-                            delegate: SecondaryButton { Layout.fillWidth: true; text: modelData; onClicked: appViewModel.show_preview_notice(text) }
+                            delegate: SecondaryButton {
+                                Layout.fillWidth: true
+                                text: modelData
+                                onClicked: index === 0 ? appViewModel.load_gcode() : index === 1 ? textDialog.open() : plaqueDialog.open()
+                            }
                         }
                         Divider {}
                         SectionTitle { text: "Recent jobs" }
@@ -268,10 +572,11 @@ ApplicationWindow {
                         SectionTitle { text: "Job inspector" }
                         MutedLabel { text: "Select a job source to edit its settings and see the exact centerline toolpath." }
                         Divider {}
-                        Label { text: "No job selected"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold }
-                        MutedLabel { text: "Load G-code, create text, or build a plaque. The canvas remains the single source of visual context."; Layout.fillWidth: true }
+                        Label { text: appViewModel ? appViewModel.job_file : "No job selected"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                        MutedLabel { text: appViewModel ? appViewModel.job_summary : "Load G-code, create text, or build a plaque. The canvas remains the single source of visual context."; Layout.fillWidth: true }
                         Item { Layout.fillHeight: true }
-                        PrimaryButton { Layout.fillWidth: true; text: "Create a job"; onClicked: appViewModel.show_preview_notice(text) }
+                        SecondaryButton { Layout.fillWidth: true; text: "Save validated G-code"; enabled: appViewModel && appViewModel.job_file !== "No G-code loaded"; onClicked: appViewModel.save_gcode() }
+                        PrimaryButton { Layout.fillWidth: true; text: "Review & run"; onClicked: window.workspace = 1 }
                     }
                 }
             }
@@ -286,21 +591,28 @@ ApplicationWindow {
                 Panel { Layout.preferredWidth: 355; Layout.minimumWidth: 355; Layout.maximumWidth: 355; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 13
                         SectionTitle { text: "Preflight" }
-                        Pill { label: "No validated job loaded"; tone: window.palette.warning }
+                        Pill { label: appViewModel && appViewModel.job_file !== "No G-code loaded" ? "Validated G-code loaded" : "No validated job loaded"; tone: appViewModel && appViewModel.job_file !== "No G-code loaded" ? window.palette.success : window.palette.warning }
                         Divider {}
-                        Label { text: "Ready when verified"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        Label { text: appViewModel && appViewModel.job_active ? appViewModel.job_state + " · " + appViewModel.job_progress + "%" : "Ready when verified"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: appViewModel ? appViewModel.job_progress : 0; visible: appViewModel && appViewModel.job_file !== "No G-code loaded" }
                         Repeater { model: ["Machine is connected and Idle", "Virtual reference is trusted", "XYZ work zero is confirmed", "Job fits the virtual envelope", "Material and tool are secure"]
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 8
-                                Rectangle { width: 17; height: 17; radius: 8.5; color: "transparent"; border.color: window.palette.subtle; border.width: 1 }
-                                Label { text: modelData; color: window.palette.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                                property bool passed: index === 0 ? (appViewModel && appViewModel.grbl_state === "Idle") : index === 1 ? (appViewModel && appViewModel.reference_trusted) : index === 2 ? (appViewModel && appViewModel.work_zero_confirmed) : index === 3 ? (appViewModel && appViewModel.job_file !== "No G-code loaded") : true
+                                Rectangle { width: 17; height: 17; radius: 8.5; color: parent.passed ? Qt.rgba(window.palette.success.r, window.palette.success.g, window.palette.success.b, 0.18) : "transparent"; border.color: parent.passed ? window.palette.success : window.palette.subtle; border.width: 1; Label { anchors.centerIn: parent; text: parent.parent.passed ? "✓" : ""; color: window.palette.success; font.bold: true } }
+                                Label { text: modelData; color: parent.passed ? window.palette.text : window.palette.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                             }
                         }
                         Item { Layout.fillHeight: true }
-                        PrimaryButton { Layout.fillWidth: true; text: "Start job"; enabled: false; opacity: 0.55 }
+                        PrimaryButton { Layout.fillWidth: true; text: "Start job"; enabled: appViewModel && appViewModel.can_start_job; opacity: enabled ? 1 : 0.55; onClicked: appViewModel.start_job() }
                         RowLayout { Layout.fillWidth: true
-                            SecondaryButton { Layout.fillWidth: true; text: "Pause"; enabled: false }
-                            SecondaryButton { Layout.fillWidth: true; text: "Resume"; enabled: false }
-                            SecondaryButton { Layout.fillWidth: true; text: "Abort"; enabled: false }
+                            SecondaryButton { Layout.fillWidth: true; text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job() }
+                            SecondaryButton { Layout.fillWidth: true; text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job() }
+                            SecondaryButton { Layout.fillWidth: true; text: "Abort"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.abort_job() }
+                        }
+                        Divider {}
+                        RowLayout { Layout.fillWidth: true
+                            SecondaryButton { Layout.fillWidth: true; text: "Spindle on"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.start_spindle(12000) }
+                            SecondaryButton { Layout.fillWidth: true; text: "Spindle off"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.stop_spindle() }
                         }
                     }
                 }
@@ -313,9 +625,12 @@ ApplicationWindow {
                 Panel { Layout.preferredWidth: 210; Layout.minimumWidth: 210; Layout.maximumWidth: 210; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 8
                         SectionTitle { text: "Machine" }
-                        Repeater { model: ["Status", "Connection", "Machine profile", "Coordinates", "Console"]
-                            delegate: SecondaryButton { Layout.fillWidth: true; text: modelData; onClicked: appViewModel.show_preview_notice(text) }
-                        }
+                        SecondaryButton { Layout.fillWidth: true; text: "Status"; onClicked: window.toastText = appViewModel.grbl_state + " · " + appViewModel.machine_position }
+                        SecondaryButton { Layout.fillWidth: true; text: "Connection"; onClicked: connectionDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Configure controller Wi-Fi"; enabled: appViewModel && appViewModel.connected; onClicked: wifiSetupDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
+                        SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
                         Item { Layout.fillHeight: true }
                         MutedLabel { text: "Reference and work zero are intentionally separate safety states." }
                     }
@@ -327,42 +642,49 @@ ApplicationWindow {
                     ScrollView { anchors.fill: parent; anchors.margins: 18; clip: true; contentWidth: availableWidth
                     ColumnLayout { width: parent.width; spacing: 12
                         SectionTitle { text: "Position the machine" }
-                        MutedLabel { text: "Jogging remains disabled until a shared motion service is connected to this Qt workspace." }
+                        MutedLabel { text: "Use small steps near the workpiece. Commands are ignored while GRBL is not Idle and are checked against the trusted envelope." }
                         RowLayout { Layout.fillWidth: true
                             Label { text: "Step"; color: window.palette.muted; font.pixelSize: 12 }
-                            ComboBox { Layout.fillWidth: true; model: ["0.1 mm", "1 mm", "10 mm"]; currentIndex: 1 }
+                            ComboBox { id: jogStepCombo; Layout.fillWidth: true; model: ["0.1 mm", "1 mm", "10 mm"]; currentIndex: 1; onActivated: window.jogStep = Number(currentText.split(" ")[0]) }
                         }
                         RowLayout { Layout.fillWidth: true
                             Label { text: "Feed"; color: window.palette.muted; font.pixelSize: 12 }
-                            Field { Layout.preferredWidth: 72; text: "500"; validator: DoubleValidator {} }
+                            Field { id: jogFeedField; Layout.preferredWidth: 78; text: "500"; validator: DoubleValidator { bottom: 1; top: 1500 } }
                             Label { text: "mm/min"; color: window.palette.subtle; font.pixelSize: 11 }
                             Item { Layout.fillWidth: true }
                         }
                         GridLayout { Layout.alignment: Qt.AlignHCenter; columns: 3; rowSpacing: 7; columnSpacing: 7
                             Item { width: 52; height: 36 }
-                            SecondaryButton { width: 52; text: "Y+"; enabled: false }
-                            SecondaryButton { width: 52; text: "Z+"; enabled: false }
-                            SecondaryButton { width: 52; text: "X−"; enabled: false }
-                            SecondaryButton { width: 52; text: "Home"; enabled: false }
-                            SecondaryButton { width: 52; text: "X+"; enabled: false }
+                            SecondaryButton { width: 52; text: "Y+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", window.jogStep) }
+                            SecondaryButton { width: 52; text: "Z+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", window.jogStep) }
+                            SecondaryButton { width: 52; text: "X−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -window.jogStep) }
+                            SecondaryButton { width: 52; text: "Cancel"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.cancel_jog() }
+                            SecondaryButton { width: 52; text: "X+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", window.jogStep) }
                             Item { width: 52; height: 36 }
-                            SecondaryButton { width: 52; text: "Y−"; enabled: false }
-                            SecondaryButton { width: 52; text: "Z−"; enabled: false }
+                            SecondaryButton { width: 52; text: "Y−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -window.jogStep) }
+                            SecondaryButton { width: 52; text: "Z−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", -window.jogStep) }
                         }
                         Divider {}
                         SectionTitle { text: "Move to virtual coordinates" }
                         GridLayout { Layout.fillWidth: true; columns: 2
                             Label { text: "X"; color: window.palette.muted }
-                            Field { text: "0.00"; Layout.fillWidth: true }
+                            Field { id: targetX; text: "0.00"; Layout.fillWidth: true; validator: DoubleValidator {} }
                             Label { text: "Y"; color: window.palette.muted }
-                            Field { text: "0.00"; Layout.fillWidth: true }
+                            Field { id: targetY; text: "0.00"; Layout.fillWidth: true; validator: DoubleValidator {} }
                             Label { text: "Z"; color: window.palette.muted }
-                            Field { text: "0.00"; Layout.fillWidth: true }
+                            Field { id: targetZ; text: "0.00"; Layout.fillWidth: true; validator: DoubleValidator {} }
                         }
-                        SecondaryButton { Layout.fillWidth: true; text: "Move safely"; enabled: false }
+                        SecondaryButton { Layout.fillWidth: true; text: "Move safely"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.move_to(Number(targetX.text), Number(targetY.text), Number(targetZ.text), Number(jogFeedField.text)) }
                         Divider {}
-                        Repeater { model: ["Retract to safe Z", "Return to work zero", "Return to virtual reference", "Establish reference here", "Set XYZ work zero"]
-                            delegate: SecondaryButton { Layout.fillWidth: true; text: modelData; enabled: false }
+                        SecondaryButton { Layout.fillWidth: true; text: "Retract to safe Z"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.retract_safe_z() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Return to work zero"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.return_to_work_zero() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Return to virtual reference"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.return_to_reference() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Establish reference here"; enabled: appViewModel && appViewModel.connected && !appViewModel.job_active; onClicked: appViewModel.establish_reference() }
+                        GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 6
+                            SecondaryButton { Layout.fillWidth: true; text: "Zero X"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("X") }
+                            SecondaryButton { Layout.fillWidth: true; text: "Zero Y"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("Y") }
+                            SecondaryButton { Layout.fillWidth: true; text: "Zero Z"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("Z") }
+                            PrimaryButton { Layout.fillWidth: true; text: "Zero XYZ"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("XYZ") }
                         }
                     }
                     }
@@ -399,50 +721,16 @@ ApplicationWindow {
                             }
                         }
                         Item { Layout.fillHeight: true }
-                        RowLayout { Layout.fillWidth: true; Item { Layout.fillWidth: true } PrimaryButton { text: "Continue to connection"; onClicked: appViewModel.show_preview_notice(text) } }
+                        RowLayout { Layout.fillWidth: true
+                            Item { Layout.fillWidth: true }
+                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
+                            PrimaryButton { text: "Continue to connection"; onClicked: connectionDialog.open() }
+                        }
                     }
                 }
             }
         }
 
-        // Commissioning
-        Item {
-            RowLayout { anchors.fill: parent; spacing: 14
-                Panel { Layout.preferredWidth: 300; Layout.minimumWidth: 300; Layout.maximumWidth: 300; Layout.fillHeight: true
-                    ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 10
-                        SectionTitle { text: "Commissioning" }
-                        MutedLabel { text: "Optional hardware setup for switches, homing, limits, and a touch probe." }
-                        Divider {}
-                        Repeater { model: ["Inputs", "Homing", "Probe", "Summary"]
-                            delegate: SecondaryButton { Layout.fillWidth: true; text: modelData; onClicked: appViewModel.show_preview_notice(text) }
-                        }
-                        Item { Layout.fillHeight: true }
-                        Pill { label: "No commands on open"; tone: window.palette.success }
-                    }
-                }
-                Panel { Layout.fillWidth: true; Layout.fillHeight: true
-                    ColumnLayout { anchors.fill: parent; anchors.margins: 42; spacing: 18
-                        Pill { label: "Commissioning is optional"; tone: window.palette.accent }
-                        Label { text: "Build trust in the machine"; color: window.palette.text; font.pixelSize: 30; font.weight: Font.Bold }
-                        Label { text: "Commission switches and probe hardware in ordered, verified steps. Opening this workspace never sends a command. Motion and settings changes remain separate, confirmed actions."; color: window.palette.muted; font.pixelSize: 16; wrapMode: Text.Wrap; Layout.maximumWidth: 760 }
-                        Divider {}
-                        GridLayout { columns: 2; Layout.fillWidth: true; rowSpacing: 12; columnSpacing: 12
-                            Repeater { model: [["1", "Test inputs", "Confirm clean press-and-release signals."], ["2", "Set homing", "Review direction, polarity, and travel."], ["3", "Verify protection", "Confirm homing before enabling limits."], ["4", "Record probe", "Store measured geometry without probe motion."]]
-                                delegate: Panel { required property var modelData; Layout.fillWidth: true; Layout.preferredHeight: 124
-                                    Column { anchors.fill: parent; anchors.margins: 14; spacing: 5
-                                        Label { text: parent.parent.modelData[0]; color: window.palette.accent; font.pixelSize: 12; font.bold: true }
-                                        Label { text: parent.parent.modelData[1]; color: window.palette.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-                                        Label { text: parent.parent.modelData[2]; color: window.palette.muted; font.pixelSize: 12; wrapMode: Text.Wrap; width: parent.width }
-                                    }
-                                }
-                            }
-                        }
-                        Item { Layout.fillHeight: true }
-                        PrimaryButton { text: "Review input checks"; onClicked: appViewModel.show_preview_notice(text) }
-                    }
-                }
-            }
-        }
     }
 
     component ToolpathCanvas: Item {
@@ -469,7 +757,7 @@ ApplicationWindow {
                 ctx.strokeStyle = "#4B5867"
                 ctx.lineWidth = 2
                 ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2)
-                if (showJob || modeLabel === "PREPARE") {
+                if ((showJob || modeLabel === "PREPARE") && (!appViewModel || appViewModel.preview_strokes.length === 0)) {
                     const l = inset + (width - inset * 2) * 0.20
                     const t = inset + (height - inset * 2) * 0.25
                     const w = (width - inset * 2) * 0.56
@@ -487,10 +775,28 @@ ApplicationWindow {
                     ctx.strokeStyle = "#657282"
                     ctx.beginPath(); ctx.moveTo(inset, height - inset); ctx.lineTo(l, t + h); ctx.stroke(); ctx.setLineDash([])
                 }
+                if (appViewModel && appViewModel.preview_strokes.length > 0) {
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+                    for (const stroke of appViewModel.preview_strokes) for (const point of stroke) {
+                        minX = Math.min(minX, point[0]); minY = Math.min(minY, point[1]); maxX = Math.max(maxX, point[0]); maxY = Math.max(maxY, point[1])
+                    }
+                    const spanX = Math.max(0.001, maxX - minX), spanY = Math.max(0.001, maxY - minY)
+                    const scale = Math.min((width - 2 * inset) / spanX, (height - 2 * inset) / spanY)
+                    const offsetX = (width - spanX * scale) / 2 - minX * scale
+                    const offsetY = height - inset + minY * scale
+                    ctx.strokeStyle = "#168BFF"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round"
+                    for (const stroke of appViewModel.preview_strokes) {
+                        if (!stroke.length) continue
+                        ctx.beginPath(); ctx.moveTo(offsetX + stroke[0][0] * scale, offsetY - stroke[0][1] * scale)
+                        for (let index = 1; index < stroke.length; index++) ctx.lineTo(offsetX + stroke[index][0] * scale, offsetY - stroke[index][1] * scale)
+                        ctx.stroke()
+                    }
+                }
                 ctx.fillStyle = "#40C4D9"
                 ctx.beginPath(); ctx.arc(inset, height - inset, 6, 0, Math.PI * 2); ctx.fill()
             }
         }
+        Connections { target: appViewModel; function onState_changed() { canvas.requestPaint() } }
         Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 14; spacing: 8
             Pill { label: parent.parent.modeLabel; tone: window.palette.accent }
             Pill { visible: parent.parent.showEnvelope; label: "Virtual envelope"; tone: window.palette.warning }

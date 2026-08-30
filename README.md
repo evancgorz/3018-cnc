@@ -1,7 +1,9 @@
 # TTC 3018 Control
 
-A small, safety-focused desktop controller for the Two Trees TTC 3018 and its
-MKS DLC32 GRBL-compatible motion controller.
+A small, safety-focused Qt Quick desktop controller for the Two Trees TTC 3018
+and its MKS DLC32 GRBL-compatible motion controller. The production launcher is
+the PySide6/Qt Quick interface; the former Tk implementation remains in the
+source tree only as a reference during the migration.
 
 ## Current capabilities
 
@@ -19,9 +21,9 @@ MKS DLC32 GRBL-compatible motion controller.
 - Checks referenced jog endpoints against the configured virtual envelope.
 - Accepts virtual XYZ targets, rejects coordinates outside the configured travel,
   and reaches them by raising to safe Z before lateral motion.
-- After a successful job, waits for spindle stop and GRBL Idle, then returns to
-  virtual X0 Y0 Z0 through the configured safe-Z clearance.
-- Invalidates position trust after disconnect, serial error, startup, or reset.
+- After a successful job, waits for spindle stop and GRBL Idle, then returns through
+  safe Z to the confirmed GRBL work X0 Y0 Z0 when it remains inside the trusted envelope.
+- Invalidates position trust after disconnect, serial error, startup, or an uncontrolled reset; a confirmed operator abort retains references while the controller remains powered and connected.
 - Sets GRBL work zero for individual axes or XYZ using `G10 L20`.
 - Retracts Z to a configured safe height at no more than 100 mm/min.
 - Loads and validates pre-sliced metric G-code files.
@@ -33,10 +35,6 @@ MKS DLC32 GRBL-compatible motion controller.
 - Provides a plaque builder with title/subtitle layouts, six centerline border styles, and a live preview.
 - After a successful job, returns through safe Z to the confirmed GRBL work X0 Y0 Z0 when it remains inside the trusted envelope.
 - Stops sending on GRBL errors or alarms and requests spindle stop on completion or failure.
-- Provides a gated commissioning workspace for home switches and an XYZ touch plate.
-- Requires isolated press-and-release electrical tests before homing can be attempted.
-- Reviews and applies only the GRBL settings needed for first commissioning.
-- Keeps hard and soft limits off for the first homing cycle, then offers a separately confirmed protection step.
 
 This version deliberately has no arbitrary command box or automatic probe motion.
 Automatic `$H` homing is unavailable until home switches have been installed and
@@ -48,7 +46,7 @@ connection/reset session before an engraving job can start.
 With no home switches or probe installed, machine reference and work zero are
 separate manual operations:
 
-For normal operation, select **Guided Setup Wizard…** after launching the app.
+For normal operation, select **Guided Setup** after launching the app.
 Guided Wizard Mode presents the complete workflow as nine explained, state-gated
 steps: manual-operation safety, controller connection, measured machine profile,
 manual machine reference, XYZ work zero, G-code loading, preview/envelope review,
@@ -75,7 +73,8 @@ explicit operator actions.
 7. Select **Start job…** and read the final preflight confirmation. The job is
    sent conservatively, one acknowledged command at a time.
 8. **Pause** uses GRBL feed hold and is resumable. **Abort** feed-holds and resets
-   GRBL; the job cannot resume and all manual references must be re-established.
+   GRBL; the job cannot resume, but references are retained while the controller
+   stays connected and powered.
 
 The MVP accepts common metric engraving programs using G0/G1 and I/J-form G2/G3
 arcs. Radius-form (`R`) arcs, inch mode, probing, automatic homing, tool changes,
@@ -84,8 +83,7 @@ from the CAM program with millimeters and I/J arc centers, or linearize the arcs
 
 ## Creating a text engraving
 
-Select **Create Text…** in the Engraving Job panel, or select **Create text
-engraving…** during the G-code step in Guided Wizard Mode. Enter one or more lines
+Select **Text engraving** in the **Prepare** workspace. Enter one or more lines
 of text and choose:
 
 - Simple, Rounded, Technical, Italic, Script, Playful, or Cursive bundled centerline font
@@ -115,46 +113,14 @@ font outlines and filled/pocketed lettering are outside the current text MVP.
 
 ## Creating a plaque
 
-Select **Create Plaque…** in the Engraving Job panel. The plaque builder places the
+Select **Plaque builder** in the **Prepare** workspace. The plaque builder places the
 lower-left plaque corner at work `X0 Y0`, supports title and optional subtitle text,
 and offers Rectangle, Rounded Rectangle, Double-line, Inset-corner, Scallop, and
 Simple Flourish borders. Its live preview is generated from the same centerline
 geometry that becomes G-code.
 
-## Commissioning new switches and probe
-
-Open **Commissioning…**. Merely opening the workspace never sends a command.
-Complete the tabs in order:
-
-1. With the machine stationary, release every switch and leave the probe circuit
-   open. The live input display should say `none`. Individually test X, Y, Z, and
-   the probe by pressing/closing and then releasing only that circuit. A coupled
-   or already-active signal fails or blocks the test.
-   If inputs are active at rest, use **Read current settings**, change only
-   `$5`/`$6`, and select **Apply input polarity…**. This cannot move the machine
-   and deliberately clears all earlier electrical test results.
-2. Confirm the already-tested positive motion directions. Read `$$` from GRBL,
-   then review every commissioning value. `$5` controls limit-input polarity,
-   `$6` controls probe polarity, and `$23` selects which homing directions are
-   reversed (X=1, Y=2, Z=4). Derive `$23` from the installed switch locations;
-   do not guess.
-3. The first settings application requires `$20=0`, `$21=0`, and `$22=1`, so
-   neither soft nor hard limits can complicate the initial homing test. Conservative
-   default homing speeds are supplied, while polarity, direction, and travel values
-   must be explicitly read or entered.
-4. Clear the machine, raise the tool away from fixtures, keep one hand at physical
-   power, and run the separately confirmed first homing cycle. Confirm success only
-   if every axis reached its intended switch, stopped, pulled off, and GRBL returned
-   to `Idle`.
-5. After successful homing, use **Enable protections…** to write `$21=1` and
-   `$20=1`. Test the limits cautiously at low speed before relying on them.
-6. Measure the XYZ plate with calipers and save its actual thickness and edge/hole
-   geometry. The plate is normally placed temporarily on the workpiece and removed
-   after setting work coordinates. Electrical probe validation is included; probe
-   motion remains intentionally locked until a separate probing routine is designed.
-
-Commissioning progress and plate measurements are saved locally in
-`config/commissioning.json`. They are not committed to Git.
+Commissioning of switches and probing is intentionally deferred from this Qt
+workflow while the machine remains switchless and probe-less.
 
 ## Establishing the virtual reference
 
@@ -184,7 +150,8 @@ Open PowerShell in this directory and run:
 
 ## Run
 
-Double-click `run.bat` in File Explorer, or run it from Command Prompt:
+Double-click `run.bat` in File Explorer, or run it from Command Prompt. This
+launches the Qt Quick interface:
 
 ```bat
 run.bat
@@ -198,7 +165,8 @@ visible. PowerShell users can alternatively run:
 .\run.ps1
 ```
 
-Select `COM3 — USB-SERIAL CH340`, connect, and wait for `Idle` before jogging.
+Select a detected serial port, connect, and wait for `Idle` before jogging. The
+same centered connection dialog also supports Wi-Fi TCP when USB is removed.
 
 ## Wireless connection
 

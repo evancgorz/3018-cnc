@@ -1,5 +1,5 @@
-"""Qt Quick migration UI for TTC 3018 Control.
+"""Production Qt Quick UI for TTC 3018 Control.
 
-The legacy Tkinter UI remains the production controller while this package gains
-feature parity. QML only observes view-model state and invokes Python slots.
+QML only observes view-model state and invokes Python slots; transport and GRBL
+safety behavior remains in the tested Python application layer.
 """

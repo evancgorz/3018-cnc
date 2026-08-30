@@ -13,9 +13,9 @@ if not exist "%TTC3018_PYTHON%" (
 
 if not exist "%TTC3018_PYTHON%" goto :setup_failed
 
-"%TTC3018_PYTHON%" -c "import serial, ttkbootstrap" >nul 2>nul
+"%TTC3018_PYTHON%" -c "import serial, PySide6" >nul 2>nul
 if errorlevel 1 (
-    echo TTC 3018 Control is updating its Python environment. Running setup now...
+    echo TTC 3018 Control is updating its Qt environment. Running setup now...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\setup.ps1"
     if errorlevel 1 goto :setup_failed
 )
@@ -36,7 +36,7 @@ if not "%TTC3018_EXIT%"=="0" (
 exit /b %TTC3018_EXIT%
 
 :check
-"%TTC3018_PYTHON%" -c "import sys; sys.path.insert(0, r'%CD%\src'); import ttc3018_control.app; print('TTC 3018 launcher check passed')"
+"%TTC3018_PYTHON%" "%CD%\run_qt.py" --check
 exit /b %errorlevel%
 
 :setup_failed

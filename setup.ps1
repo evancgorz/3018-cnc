@@ -14,5 +14,5 @@ $venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
 & $venvPython -m pip install --upgrade pip
 & $venvPython -m pip install -r (Join-Path $projectRoot "requirements-dev.txt")
 
-Write-Host "Setup complete. Start the app with .\run.ps1"
+Write-Host "Setup complete. Start the Qt app with .\run.bat"
 

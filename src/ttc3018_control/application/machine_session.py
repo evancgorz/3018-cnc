@@ -79,8 +79,11 @@ class MachineSession:
             return ActionOutcome(False, "Select at least one work-zero axis.")
         if self.status is None or not self.status.can_jog:
             return ActionOutcome(False, "GRBL must be Idle before changing work zero.")
+        # Any axis update makes the previously confirmed XYZ origin stale. A
+        # fresh WCO report is required before a job or automatic return move.
+        self.work_offset = None
+        self.invalidate_work_zero()
         if normalized == "XYZ":
-            self.work_zero_confirmed = False
             self.awaiting_work_zero_report = True
             return ActionOutcome(True, "Waiting for GRBL to report the updated XYZ work offset.")
         return ActionOutcome(True, f"{normalized} work zero requested.")

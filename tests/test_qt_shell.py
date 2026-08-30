@@ -14,7 +14,7 @@ def test_qt_shell_loads(qapp) -> None:
     roots = engine.rootObjects()
     assert len(roots) == 1
     assert roots[0].property("title") == "TTC 3018 Control — Qt Preview"
-    assert view_model.connection == "Disconnected"
+    assert view_model.connection_text == "Disconnected"
 
 
 def test_qt_view_model_projects_grbl_status(qapp) -> None:
@@ -29,7 +29,36 @@ def test_qt_view_model_projects_grbl_status(qapp) -> None:
         )
     )
 
-    assert view_model.connection == "Connected — GRBL Idle"
+    assert view_model.connection_text == "Connected — GRBL Idle"
     assert view_model.machine_position == "X10.00  Y20.00  Z3.00"
     assert view_model.work_position == "X1.00  Y2.00  Z3.00"
     assert view_model.spindle == "12000 RPM"
+
+
+def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
+    _engine, view_model = build_engine()
+
+    view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0)
+    assert view_model.preview_strokes
+    assert "strokes" in view_model.preview_summary
+
+    view_model.create_plaque(
+        "Hello",
+        "World",
+        True,
+        "Script",
+        "Simple",
+        10,
+        5,
+        100,
+        50,
+        5,
+        "Rounded rectangle",
+        -0.3,
+        3,
+        300,
+        100,
+        0,
+    )
+    assert view_model.job_file == "generated-plaque.gcode"
+    assert view_model.preview_strokes

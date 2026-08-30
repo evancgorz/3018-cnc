@@ -9,21 +9,25 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
-from .view_model import AppViewModel
+from .view_model import ControllerViewModel
 
 
 QML_ROOT = Path(__file__).with_name("qml")
+_STYLE_INITIALIZED = False
 
 
-def build_engine() -> tuple[QQmlApplicationEngine, AppViewModel]:
+def build_engine() -> tuple[QQmlApplicationEngine, ControllerViewModel]:
     """Load the Qt shell without starting the Qt event loop; useful for checks."""
-    QQuickStyle.setStyle("Basic")
+    global _STYLE_INITIALIZED
+    if not _STYLE_INITIALIZED:
+        QQuickStyle.setStyle("Basic")
+        _STYLE_INITIALIZED = True
     app = QGuiApplication.instance()
     if app is None:
         raise RuntimeError("Create QGuiApplication before loading the TTC 3018 Qt shell")
     engine = QQmlApplicationEngine()
     engine.warnings.connect(lambda warnings: [print(warning.toString(), file=sys.stderr) for warning in warnings])
-    view_model = AppViewModel()
+    view_model = ControllerViewModel()
     # The context property does not transfer Python ownership; retain it with
     # the engine for the full QML lifecycle.
     engine._ttc3018_view_model = view_model  # type: ignore[attr-defined]
@@ -39,9 +43,10 @@ def main() -> None:
     if "--check" in sys.argv:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QGuiApplication(sys.argv)
-    engine, _view_model = build_engine()
+    engine, view_model = build_engine()
     if "--check" in sys.argv:
         print("TTC 3018 Qt shell check passed")
         engine.deleteLater()
         return
+    app.aboutToQuit.connect(view_model.close)
     sys.exit(app.exec())

@@ -1,5 +1,9 @@
 # Qt Quick Production UI Migration — Agent Handoff
 
+> Implementation note: commissioning is intentionally deferred from the active
+> Qt workflow for now. The switchless manual-reference and engraving workflow is
+> the current production scope.
+
 ## Mission
 
 Replace the Tkinter/ttkbootstrap presentation layer with a production-quality Windows desktop interface built with PySide6 and Qt Quick/QML. Preserve the existing, tested Python machine-control behavior and redesign the user experience around the visual hierarchy and workflow clarity of Bambu Studio, using blue accents instead of green.
