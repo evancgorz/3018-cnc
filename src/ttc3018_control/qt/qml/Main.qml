@@ -699,17 +699,39 @@ ApplicationWindow {
                             Label { text: "mm/min"; color: window.palette.subtle; font.pixelSize: 11 }
                             Item { Layout.fillWidth: true }
                         }
-                        GridLayout { Layout.alignment: Qt.AlignHCenter; columns: 3; rowSpacing: 7; columnSpacing: 7
-                            Item { width: 52; height: 36 }
-                            SecondaryButton { width: 52; text: "Y+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", window.jogStep) }
-                            SecondaryButton { width: 52; text: "Z+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", window.jogStep) }
-                            SecondaryButton { width: 52; text: "X−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -window.jogStep) }
-                            SecondaryButton { width: 52; text: "Cancel"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.cancel_jog() }
-                            SecondaryButton { width: 52; text: "X+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", window.jogStep) }
-                            Item { width: 52; height: 36 }
-                            SecondaryButton { width: 52; text: "Y−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -window.jogStep) }
-                            SecondaryButton { width: 52; text: "Z−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", -window.jogStep) }
+                        RowLayout { Layout.alignment: Qt.AlignHCenter; spacing: 12
+                            Item {
+                                id: xyJogPad
+                                width: 208
+                                height: 208
+
+                                Rectangle { anchors.fill: parent; radius: 18; color: "#1D2025"; border.color: window.palette.divider; border.width: 1 }
+                                Label { anchors.horizontalCenter: parent.horizontalCenter; y: 74; text: "XY"; color: window.palette.subtle; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                Label { anchors.horizontalCenter: parent.horizontalCenter; y: 91; text: "1 mm fine"; color: window.palette.muted; font.pixelSize: 10 }
+
+                                // Outer ring: uses the selected step.
+                                SecondaryButton { x: 71; y: 6; width: 66; height: 48; text: "▲\nY+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", window.jogStep) }
+                                SecondaryButton { x: 6; y: 80; width: 66; height: 48; text: "◀\nX−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -window.jogStep) }
+                                SecondaryButton { x: 136; y: 80; width: 66; height: 48; text: "▶\nX+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", window.jogStep) }
+                                SecondaryButton { x: 71; y: 154; width: 66; height: 48; text: "▼\nY−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -window.jogStep) }
+
+                                // Inner ring: always moves exactly 1 mm.
+                                SecondaryButton { x: 79; y: 58; width: 50; height: 30; text: "▲"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", 1.0) }
+                                SecondaryButton { x: 58; y: 89; width: 30; height: 50; text: "◀"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", -1.0) }
+                                SecondaryButton { x: 120; y: 89; width: 30; height: 50; text: "▶"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("X", 1.0) }
+                                SecondaryButton { x: 79; y: 140; width: 50; height: 30; text: "▼"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", -1.0) }
+                            }
+
+                            ColumnLayout { Layout.alignment: Qt.AlignVCenter; spacing: 7
+                                Label { text: "Z AXIS"; color: window.palette.subtle; font.pixelSize: 10; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+                                SecondaryButton { Layout.preferredWidth: 72; Layout.preferredHeight: 48; text: "▲\nZ+"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", window.jogStep) }
+                                SecondaryButton { Layout.preferredWidth: 72; Layout.preferredHeight: 34; text: "Z+ 1 mm"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", 1.0) }
+                                SecondaryButton { Layout.preferredWidth: 72; Layout.preferredHeight: 34; text: "Z− 1 mm"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", -1.0) }
+                                SecondaryButton { Layout.preferredWidth: 72; Layout.preferredHeight: 48; text: "▼\nZ−"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", -window.jogStep) }
+                            }
                         }
+                        Label { Layout.alignment: Qt.AlignHCenter; text: "Outer XY/Z buttons: " + Number(window.jogStep).toFixed(1) + " mm  ·  Inner buttons: 1 mm"; color: window.palette.subtle; font.pixelSize: 10 }
+                        SecondaryButton { Layout.alignment: Qt.AlignHCenter; width: 108; text: "Cancel jog"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.cancel_jog() }
                         Divider {}
                         SectionTitle { text: "Move to virtual coordinates" }
                         GridLayout { Layout.fillWidth: true; columns: 2
