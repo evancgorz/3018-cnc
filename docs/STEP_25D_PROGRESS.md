@@ -51,6 +51,8 @@ streaming pipeline.
 - [x] Run flat pocket paths through a deterministic swept-cutter stock
   simulation, including reachable coverage, tool-unreachable corners, stock
   bounds, retained-material gouge checks, and physical-depth checks.
+- [x] Apply the same simulation gate independently to each detected recess or
+  boss-removal region, preserving each feature's own target depth.
 - [x] Parse the exact G-code emitted by the STEP generator before returning it
   to the shared loading pipeline.
 - [x] Preview the generated centerline toolpath before running.

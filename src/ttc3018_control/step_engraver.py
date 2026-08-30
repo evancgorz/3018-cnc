@@ -51,6 +51,14 @@ class StepMachining:
     verification: StepVerification | None = None
     operations: tuple[StepOperation, ...] = ()
     simulation: StepStockSimulation | None = None
+    feature_simulations: tuple[StepStockSimulation, ...] = ()
+
+
+@dataclass(frozen=True)
+class _DetectedFeatureGroup:
+    strokes: tuple[Stroke, ...]
+    depth: float
+    region: object
 
 
 def generate_step_gcode(
@@ -111,8 +119,14 @@ def generate_step_gcode(
             raise ValueError("The imported planar surface exceeds the supported 20 mm machining depth")
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
     depth_paths: list[float] = []
+    detected_groups: tuple[_DetectedFeatureGroup, ...] = ()
     if mode == "Detected feature":
-        detected_paths = _detected_feature_paths(model, loops, region, tool_diameter)
+        detected_groups = _detected_feature_groups(model, loops, region, tool_diameter)
+        detected_paths = [
+            (stroke, group.depth)
+            for group in detected_groups
+            for stroke in group.strokes
+        ]
         strokes = [stroke for stroke, _depth in detected_paths]
         depth_paths = [-feature_depth for _stroke, feature_depth in detected_paths]
     elif mode == "Planar surface":
@@ -156,6 +170,21 @@ def generate_step_gcode(
             stock_thickness=resolved_thickness,
             passes=passes,
         )
+    feature_simulations: tuple[StepStockSimulation, ...] = ()
+    if mode == "Detected feature":
+        feature_simulations = tuple(
+            simulate_flat_stock_paths(
+                group.strokes,
+                group.region,
+                tool_diameter / 2,
+                -group.depth,
+                stock_width=resolved_stock_width,
+                stock_height=resolved_stock_height,
+                stock_thickness=resolved_thickness,
+                passes=passes,
+            )
+            for group in detected_groups
+        )
     cutting_distance, rapid_xy_distance, retract_count = _path_metrics(strokes, passes)
     operations = build_step_operation_plan(
         model,
@@ -179,6 +208,12 @@ def generate_step_gcode(
             f"; Simulation flat stock: reachable {simulation.reachable_area:.3f} mm2, "
             f"swept {simulation.swept_area:.3f} mm2, uncovered {simulation.uncovered_area:.3f} mm2, "
             f"unreachable corners {simulation.unreachable_area:.3f} mm2"
+        )
+    for index, feature_simulation in enumerate(feature_simulations):
+        commands.append(
+            f"; Simulation feature {index + 1}: reachable {feature_simulation.reachable_area:.3f} mm2, "
+            f"swept {feature_simulation.swept_area:.3f} mm2, "
+            f"uncovered {feature_simulation.uncovered_area:.3f} mm2"
         )
     commands.extend(
         f"; Operation {operation.operation_id}: {operation.kind}, target Z{operation.target_depth:g}"
@@ -255,6 +290,7 @@ def generate_step_gcode(
         verification,
         operations,
         simulation,
+        feature_simulations,
     )
 
 
@@ -529,13 +565,13 @@ def _profile_cutout_paths(region, tool_diameter: float) -> list[tuple[Stroke, bo
     return inner_paths + outer_paths
 
 
-def _detected_feature_paths(
+def _detected_feature_groups(
     model: StepPlanarModel,
     loops: tuple[PlanarLoop, ...],
     region,
     tool_diameter: float,
-) -> list[tuple[Stroke, float]]:
-    """Generate removal paths that reproduce detected boss/recess topology."""
+) -> tuple[_DetectedFeatureGroup, ...]:
+    """Generate removal groups that reproduce detected boss/recess topology."""
     radius = tool_diameter / 2
     recess_groups: dict[float, list[object]] = {}
     for feature in model.features:
@@ -544,13 +580,40 @@ def _detected_feature_paths(
         recess_groups.setdefault(round(feature.depth, 7), []).append(
             Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
         )
-    paths: list[tuple[Stroke, float]] = []
+    groups: list[_DetectedFeatureGroup] = []
     for feature_depth, polygons in sorted(recess_groups.items(), reverse=True):
-        paths.extend((stroke, feature_depth) for stroke in _pocket_strokes(unary_union(polygons), radius, tool_diameter))
+        feature_region = unary_union(polygons)
+        groups.append(
+            _DetectedFeatureGroup(
+                tuple(_pocket_strokes(feature_region, radius, tool_diameter)),
+                feature_depth,
+                feature_region,
+            )
+        )
     if any(feature.kind == "Raised boss" for feature in model.features):
         boss_depth = max(feature.depth for feature in model.features if feature.kind == "Raised boss")
-        paths.extend((stroke, boss_depth) for stroke in _pocket_strokes(region, radius, tool_diameter))
-    return paths
+        groups.append(
+            _DetectedFeatureGroup(
+                tuple(_pocket_strokes(region, radius, tool_diameter)),
+                boss_depth,
+                region,
+            )
+        )
+    return tuple(groups)
+
+
+def _detected_feature_paths(
+    model: StepPlanarModel,
+    loops: tuple[PlanarLoop, ...],
+    region,
+    tool_diameter: float,
+) -> list[tuple[Stroke, float]]:
+    """Return detected paths while preserving the legacy helper contract."""
+    return [
+        (stroke, group.depth)
+        for group in _detected_feature_groups(model, loops, region, tool_diameter)
+        for stroke in group.strokes
+    ]
 
 
 def _planar_surface_paths(
@@ -717,8 +780,28 @@ def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]
         _connected_scanline_strokes(current, stepover),
         _offset_pocket_strokes(current, stepover),
     )
-    valid = [candidate for candidate in candidates if candidate]
+    valid = [
+        candidate
+        for candidate in candidates
+        if candidate and _pocket_candidate_is_covered(region, candidate, radius)
+    ]
     return min(valid, key=_pocket_path_cost) if valid else []
+
+
+def _pocket_candidate_is_covered(region, strokes: Iterable[Stroke], radius: float) -> bool:
+    """Reject a fast candidate when it leaves reachable pocket material."""
+    reachable = region.buffer(-radius, join_style=2)
+    if reachable.is_empty:
+        return False
+    lines = [LineString(stroke) for stroke in strokes]
+    if any(line.length <= 1e-7 or not reachable.buffer(0.02).covers(line) for line in lines):
+        return False
+    swept = unary_union([
+        line.buffer(radius, cap_style=1, join_style=1)
+        for line in lines
+    ])
+    uncovered = reachable.difference(swept).area
+    return uncovered <= max(0.05, reachable.area * 0.005)
 
 
 def _offset_pocket_strokes(region, stepover: float) -> list[Stroke]:

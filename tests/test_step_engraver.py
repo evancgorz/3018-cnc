@@ -215,6 +215,9 @@ def test_detected_features_keep_individual_depths() -> None:
     assert job.gcode.index("G1 Z-1.5 F100") < job.gcode.index("G1 Z-0.5 F100")
     assert job.operations[0].target_depth == pytest.approx(-3)
     assert job.operations[1].target_depth == pytest.approx(-1)
+    assert len(job.feature_simulations) == 2
+    assert all(simulation.passed for simulation in job.feature_simulations)
+    assert job.gcode.count("; Simulation feature ") == 2
     assert job.gcode.index("; Operation feature-depth-0:") < job.gcode.index("; Operation feature-depth-1:")
 
 
@@ -360,6 +363,10 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     assert extruded_program.bounds.minimum.z == pytest.approx(-2)
     assert removed_job.feature_summary == "Recess 2.00 mm"
     assert extruded_job.feature_summary == "Raised boss 2.00 mm"
+    assert len(removed_job.feature_simulations) == 1
+    assert len(extruded_job.feature_simulations) == 1
+    assert removed_job.feature_simulations[0].passed
+    assert extruded_job.feature_simulations[0].passed
 
 
 def test_outside_contour_rejects_stock_that_cannot_contain_tool_offset() -> None:
