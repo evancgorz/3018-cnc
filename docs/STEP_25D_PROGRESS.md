@@ -27,6 +27,10 @@ streaming pipeline.
   G-code parser.
 - [x] Use connected alternating scanlines for broad pocket regions and retain
   safe retracts around holes, islands, and disconnected material.
+- [x] Preserve individual detected-feature depth targets and avoid applying the
+  deepest recess depth to shallower recesses.
+- [x] Expose exact cut distance, rapid XY distance, and retract count for each
+  generated STEP job.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Preview the generated centerline toolpath before running.
@@ -118,6 +122,8 @@ streaming pipeline.
 - [x] Test preview geometry against generated G-code bounds.
 - [x] Verify the compensated lower-left cutout envelope reaches work X0/Y0 and
   actual emitted profile commands use the same placement translation.
+- [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
+  splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
   tests.
 
