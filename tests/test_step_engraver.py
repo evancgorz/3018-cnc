@@ -18,6 +18,11 @@ def _model() -> StepPlanarModel:
     return StepPlanarModel(Path("plate.step"), (outer, hole), 5, 5, (0, 0, 0, 40, 25, 5))
 
 
+def _solid_model() -> StepPlanarModel:
+    outer = PlanarLoop(tuple(Point2D(x, y) for x, y in ((0, 0), (40, 0), (40, 25), (0, 25))))
+    return StepPlanarModel(Path("solid-plate.step"), (outer,), 5, 5, (0, 0, 0, 40, 25, 5))
+
+
 @pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole"])
 def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     job = generate_step_gcode(
@@ -106,6 +111,35 @@ def test_lower_left_profile_applies_placement_to_emitted_profile_commands() -> N
     assert program.bounds.minimum.y == pytest.approx(0, abs=0.001)
     assert program.bounds.maximum.x == pytest.approx(43, abs=0.001)
     assert program.bounds.maximum.y == pytest.approx(28, abs=0.001)
+
+
+def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:
+    job = generate_step_gcode(
+        _solid_model(),
+        mode="Pocket",
+        stock_width=45,
+        stock_height=30,
+        tool_diameter=3,
+        depth=-1,
+    )
+
+    assert job.stroke_count == 1
+    assert len(job.strokes[0]) > 20
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.z == pytest.approx(-1)
+
+
+def test_pocket_does_not_stay_down_across_an_inner_hole() -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode="Pocket",
+        stock_width=45,
+        stock_height=30,
+        tool_diameter=3,
+        depth=-1,
+    )
+
+    assert job.stroke_count > 1
 
 
 def test_centered_cutout_retains_existing_explicit_placement() -> None:

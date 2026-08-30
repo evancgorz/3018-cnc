@@ -365,14 +365,53 @@ def _tabbed_profile_commands(
 
 def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]:
     current = region.buffer(-radius, join_style=2)
+    if current.is_empty:
+        return []
+    return _connected_scanline_strokes(current, max(0.25, tool_diameter * 0.7))
+
+
+def _connected_scanline_strokes(region, stepover: float) -> list[Stroke]:
+    """Clear a pocket with alternating lanes and only proven safe links.
+
+    The old pocket strategy emitted every inward offset boundary separately,
+    which caused a retract and a long rapid for each ring.  Scanlines make the
+    broad clearing motion predictable and allow adjacent lanes to stay down.
+    A link is added only when its straight swept segment is covered by the
+    current compensated region; holes, islands, and disconnected components
+    therefore remain protected and naturally produce separate strokes.
+    """
+    if region.is_empty:
+        return []
+    min_x, min_y, max_x, max_y = region.bounds
+    height = max_y - min_y
+    row_count = max(1, int(math.ceil(height / stepover))) + 1
     strokes: list[Stroke] = []
-    stepover = max(0.25, tool_diameter * 0.7)
-    for _index in range(500):
-        if current.is_empty:
-            break
-        strokes.extend(_strokes_from_geometry(current.boundary))
-        current = current.buffer(-stepover, join_style=2)
+    active: Stroke | None = None
+    tolerance_region = region.buffer(1e-7)
+    for row_index in range(row_count):
+        y = min_y if row_count == 1 else min(max_y, min_y + row_index * height / (row_count - 1))
+        scan = LineString(((min_x - stepover, y), (max_x + stepover, y)))
+        spans = _strokes_from_geometry(region.intersection(scan))
+        spans = [span for span in spans if len(span) >= 2 and LineString(span).length > 1e-7]
+        spans.sort(key=lambda span: min(point[0] for point in span))
+        if row_index % 2:
+            spans = [tuple(reversed(span)) for span in reversed(spans)]
+        for span in spans:
+            if active is not None and _safe_stay_down_link(tolerance_region, active[-1], span[0]):
+                active = active + (span[0],) + span[1:]
+            else:
+                if active is not None:
+                    strokes.append(active)
+                active = span
+    if active is not None:
+        strokes.append(active)
     return strokes
+
+
+def _safe_stay_down_link(region, start: tuple[float, float], end: tuple[float, float]) -> bool:
+    if math.dist(start, end) <= 1e-7:
+        return True
+    return region.covers(LineString((start, end)))
 
 
 def _hole_strokes(loops: tuple[PlanarLoop, ...], tool_diameter: float) -> list[Stroke]:
