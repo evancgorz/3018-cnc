@@ -1016,6 +1016,7 @@ class ControllerViewModel(QObject):
         self._emit_state()
 
     def _append_log(self, event) -> None:
+        self.application.publish_log(event.kind, event.text)
         line = f"{event.timestamp:%H:%M:%S}  {event.kind.upper():<11} {event.text}"
         self._log_lines = (*self._log_lines[-399:], line)
         self._emit_state()
