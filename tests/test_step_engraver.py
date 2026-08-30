@@ -480,6 +480,34 @@ def test_invalid_depth_pass_settings_are_rejected() -> None:
         generate_step_gcode(_model(), passes=0)
     with pytest.raises(ValueError, match="Tool diameter"):
         generate_step_gcode(_model(), tool_diameter=0)
+    with pytest.raises(ValueError, match="Machining depth"):
+        generate_step_gcode(_model(), depth=math.nan)
+    with pytest.raises(ValueError, match="Stock width"):
+        generate_step_gcode(_model(), stock_width=math.nan)
+
+
+def test_invalid_normalized_feature_and_surface_values_are_rejected() -> None:
+    invalid_feature = StepPlanarModel(
+        Path("bad-feature.step"),
+        _model().loops,
+        5,
+        5,
+        (0, 0, 0, 40, 25, 5),
+        features=(StepFeature("Recess", 99, 1),),
+    )
+    with pytest.raises(ValueError, match="unknown loop"):
+        generate_step_gcode(invalid_feature, mode="Detected feature")
+
+    invalid_surface = StepPlanarModel(
+        Path("bad-surface.step"),
+        _model().loops,
+        5,
+        5,
+        (0, 0, 0, 40, 25, 5),
+        surface_patches=(PlanarSurfacePatch((_model().loops[0],), math.nan, 0, 0),),
+    )
+    with pytest.raises(ValueError, match="height field"):
+        generate_step_gcode(invalid_surface, mode="Planar surface")
 
 
 def test_max_stepdown_increases_passes_without_changing_final_depth() -> None:

@@ -144,7 +144,12 @@ def generate_step_gcode(
     model_width, model_height = loop_bounds[4], loop_bounds[5]
     resolved_stock_width = float(stock_width) if stock_width is not None else model_width + tool_diameter
     resolved_stock_height = float(stock_height) if stock_height is not None else model_height + tool_diameter
-    if resolved_stock_width <= 0 or resolved_stock_height <= 0:
+    if (
+        not math.isfinite(resolved_stock_width)
+        or not math.isfinite(resolved_stock_height)
+        or resolved_stock_width <= 0
+        or resolved_stock_height <= 0
+    ):
         raise ValueError("Stock width and height must be greater than zero")
     if resolved_stock_width < model_width - 0.001 or resolved_stock_height < model_height - 0.001:
         raise ValueError("Stock must be at least as large as the imported top-face geometry")
@@ -445,23 +450,45 @@ def _validate_settings(
             raise ValueError("Imported planar geometry contains a non-finite coordinate")
         if loop.area <= 1e-7:
             raise ValueError("Imported planar geometry contains a zero-area loop")
+    for patch in model.surface_patches:
+        if not all(math.isfinite(value) for value in (patch.a, patch.b, patch.c)):
+            raise ValueError("Imported planar surface contains a non-finite height field")
+        for loop in patch.loops:
+            if len(loop.points) < 3:
+                raise ValueError("Each imported planar surface loop must contain at least three points")
+            if not all(math.isfinite(point.x) and math.isfinite(point.y) for point in loop.points):
+                raise ValueError("Imported planar surface contains a non-finite coordinate")
+    for feature in model.features:
+        if not 0 <= feature.loop_index < len(model.loops):
+            raise ValueError("Imported STEP feature references an unknown loop")
+        if not math.isfinite(feature.depth):
+            raise ValueError("Imported STEP feature contains a non-finite depth")
+        if feature.parent_loop_index is not None and not 0 <= feature.parent_loop_index < len(model.loops):
+            raise ValueError("Imported STEP feature references an unknown parent loop")
     if mode not in STEP_MODES:
         raise ValueError("Unknown STEP machining mode")
     if orientation not in STEP_ORIENTATIONS:
         raise ValueError("Unknown STEP orientation")
     if zero_location not in STEP_ZERO_LOCATIONS:
         raise ValueError("Unknown work-zero location")
-    if not 0.1 <= tool_diameter <= 20:
+    if not math.isfinite(tool_diameter) or not 0.1 <= tool_diameter <= 20:
         raise ValueError("Tool diameter must be between 0.1 and 20 mm")
-    if not -20 <= depth < 0:
+    if not math.isfinite(depth) or not -20 <= depth < 0:
         raise ValueError("Machining depth must be below work Z0 and no deeper than 20 mm")
     if not isinstance(passes, int) or not 1 <= passes <= 100:
         raise ValueError("Depth passes must be a whole number from 1 to 100")
-    if not 0.1 <= safe_z <= 100:
+    if not math.isfinite(safe_z) or not 0.1 <= safe_z <= 100:
         raise ValueError("Safe Z must be between 0.1 and 100 mm")
-    if not 1 <= cut_feed <= 3000 or not 1 <= plunge_feed <= 1000:
+    if (
+        not math.isfinite(cut_feed)
+        or not math.isfinite(plunge_feed)
+        or not 1 <= cut_feed <= 3000
+        or not 1 <= plunge_feed <= 1000
+    ):
         raise ValueError("Cut feed must be 1–3000 and plunge feed 1–1000 mm/min")
-    if spindle_rpm is not None and not 1 <= spindle_rpm <= 24000:
+    if spindle_rpm is not None and (
+        not math.isfinite(spindle_rpm) or not 1 <= spindle_rpm <= 24000
+    ):
         raise ValueError("Spindle RPM must be between 1 and 24000")
     if not math.isfinite(stock_thickness) or not 0.1 <= stock_thickness <= 20:
         raise ValueError("Stock thickness must be between 0.1 and 20 mm")
@@ -470,9 +497,11 @@ def _validate_settings(
     if mode == "Profile cutout":
         if not isinstance(tab_count, int) or not 0 <= tab_count <= 12:
             raise ValueError("Tab count must be a whole number from 0 to 12")
-        if tab_count and not 0.5 <= tab_width <= 20:
+        if tab_count and (not math.isfinite(tab_width) or not 0.5 <= tab_width <= 20):
             raise ValueError("Tab width must be between 0.5 and 20 mm")
-        if tab_count and not 0.1 <= tab_height < stock_thickness:
+        if tab_count and (
+            not math.isfinite(tab_height) or not 0.1 <= tab_height < stock_thickness
+        ):
             raise ValueError("Tab height must be at least 0.1 mm and less than stock thickness")
 
 
