@@ -209,7 +209,7 @@ class ApplicationController:
 
     @property
     def can_jog(self) -> bool:
-        return bool(self.connected and self.reference_trusted and self.session.can_move and not self.job_active and not self.manual_pending_acks and not self.motion_busy)
+        return bool(self.connected and self.session.can_move and not self.job_active and not self.manual_pending_acks and not self.motion_busy)
 
     @property
     def can_live_jog(self) -> bool:

@@ -78,6 +78,7 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
 
     controller.set_transport_for_testing(transport)
     controller.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
+    assert controller.can_jog
     assert controller.establish_reference().accepted
     controller.disconnect("link lost")
     assert not controller.reference_trusted
