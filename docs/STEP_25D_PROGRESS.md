@@ -149,6 +149,8 @@ streaming pipeline.
   streaming.
 - [x] Show stock, tool diameter, work zero, cut depth, pass count, and final
   transformed bounds in the preview/review screen.
+- [x] Draw the declared physical stock boundary in the STEP preview and place
+  the work-zero marker from the same stock/path coordinate transform.
 - [x] Add save-to-G-code support through the existing validated output path.
 
 ### 6. Safety and verification gates
@@ -226,3 +228,4 @@ streaming pipeline.
 | 2026-08-30 | `100803e` | Enforced nonnegative STEP work XY across translated paths and parsed G-code. |
 | 2026-08-30 | `23c77b7` | Generalized normalized loop topology for disconnected parts and nested islands. |
 | 2026-08-30 | `8d77881` | Detected planar-walled rectangular/slot recesses with blind/through semantics. |
+| 2026-08-30 | `508be59` | Added physical stock bounds and transformed work-zero display to the Qt preview. |
