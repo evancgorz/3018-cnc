@@ -195,3 +195,10 @@ streaming pipeline.
 | 2026-08-30 | `2922670` | Added Qt profile-cutout controls and live preview/review details. |
 | 2026-08-30 | `479edb7` | Added paired STEP feature fixtures plus automatic recess/boss detection and slicing. |
 | 2026-08-30 | `517a611` | Added normalized planar surface patches, Wedge ramp slicing, connected pocket scanlines, and nonnegative cutout placement. |
+| 2026-08-30 | `4038506` | Added deterministic flat-stock swept-cutter coverage, depth, stock, and retained-material checks. |
+| 2026-08-30 | `ab42ae1` | Applied independent simulation gates to detected recess and boss-removal regions. |
+| 2026-08-30 | `46efaec` | Added height-field coverage, Z-error, slope, and depth simulation for planar surfaces. |
+| 2026-08-30 | `77340c0` | Added compensated profile-cut simulation with intentional stock-edge cutter overhang. |
+| 2026-08-30 | `cb9e5f9` | Exposed the validated STEP operation plan and blocked stale/rejected previews in Qt. |
+| 2026-08-30 | `dc0bd44` | Connected safe concentric pocket rings into stay-down paths. |
+| 2026-08-30 | `7ba66c8` | Fixed final path orientation after bounded 2-opt optimization. |
