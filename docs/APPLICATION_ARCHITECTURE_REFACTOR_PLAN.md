@@ -4,9 +4,30 @@
 
 Implemented on branch `codex/qt-quick-ui` through the application composition,
 connection, motion, job, generation, immutable-state, Qt Quick file-dialog,
-deferred-commissioning removal, and held-jog regression work. The remaining
-cleanup is presentation confirmation/event handoff for the few legacy
-`QMessageBox` calls and any final dead-code review.
+typed-confirmation, deferred-commissioning removal, response-routing, and
+held-jog regression work. Remaining work is optional hardening of the contract
+matrix and event-sink coverage.
+
+## Shipped checklist
+
+- [x] Qt-independent application state, events, ports, and machine session.
+- [x] Single-owner USB/Wi-Fi connection service with stale-attempt handling.
+- [x] Guarded incremental, positional, live, reference, and work-zero motion.
+- [x] Acknowledgement-driven job lifecycle with spindle-stop/Idle completion.
+- [x] Text, plaque, and STEP generation through the shared validation pipeline.
+- [x] Explicit Qt Quick composition root and injected `ApplicationController`.
+- [x] QML file dialogs and centered typed confirmation handoff; no Qt Widgets
+      dialogs remain in the production Qt shell.
+- [x] Deferred commissioning removed from the active Qt workflow.
+- [x] Held-jog state remains enabled across GRBL `Idle` → `Jog` transitions,
+      with whole-millimeter release correction preserved.
+- [x] README and architecture decision record updated.
+- [x] 117 automated tests and the offscreen Qt shell check pass.
+- [x] Incremental commits are pushed to `origin/codex/qt-quick-ui`.
+
+Follow-up hardening can expand the application-controller contract matrix and
+event-sink integration, but it is not required to use the migrated production
+Qt shell.
 
 ## Mission
 
