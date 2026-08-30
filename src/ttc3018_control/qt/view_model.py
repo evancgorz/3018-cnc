@@ -151,7 +151,7 @@ class ControllerViewModel(QObject):
     @property
     def connection(self):
         """Compatibility view for tests and the temporary Qt adapter."""
-        return self.connection_service.transport
+        return self.application.transport
 
     @connection.setter
     def connection(self, value) -> None:
@@ -336,7 +336,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
-        return self.connection_service.connected
+        return self.application.connected
 
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
@@ -394,6 +394,11 @@ class ControllerViewModel(QObject):
             and not self.motion.live_jog_alignment_pending
             and (not self.motion.pending_acks or self.motion.live_jog_axis is not None)
         )
+
+    @Property(bool, notify=state_changed)
+    def live_jog_active(self) -> bool:
+        """Whether a held-jog session is active, including during GRBL state changes."""
+        return self.motion.live_jog_axis is not None or self.motion.live_jog_stop_pending or self.motion.live_jog_alignment_pending
 
     @Property(bool, notify=state_changed)
     def unreferenced_jog_allowed(self) -> bool:
@@ -757,7 +762,7 @@ class ControllerViewModel(QObject):
             self.disconnect()
             return
         port = port_label.split(" ", 1)[0].strip()
-        outcome = self.connection_service.connect_usb(port)
+        outcome = self.application.connect_usb(port)
         if not outcome.accepted:
             self._set_notice(outcome.message)
             return
@@ -771,7 +776,7 @@ class ControllerViewModel(QObject):
         if self.connected:
             self.disconnect()
             return
-        outcome = self.connection_service.begin_wifi(host, port)
+        outcome = self.application.begin_wifi(host, port)
         if not outcome.accepted:
             self._set_notice(outcome.message)
             return
@@ -808,7 +813,7 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def disconnect(self) -> None:
-        outcome = self.connection_service.disconnect()
+        outcome = self.application.disconnect()
         self._disconnected(outcome.message)
 
     @Slot(str, float)
@@ -819,7 +824,7 @@ class ControllerViewModel(QObject):
         if not self.session.envelope.trusted and not self._unreferenced_jog_allowed:
             self.unreferenced_jog_requested.emit()
             return
-        outcome = self.motion.jog(axis, distance, 500.0)
+        outcome = self.application.jog(axis, distance, 500.0)
         if not outcome.accepted:
             self._set_notice(f"Jog blocked — {outcome.message}")
 
@@ -831,13 +836,13 @@ class ControllerViewModel(QObject):
         if not self.session.envelope.trusted and not self._unreferenced_jog_allowed:
             self.unreferenced_jog_requested.emit()
             return
-        outcome = self.motion.start_live_jog(axis, direction, self._unreferenced_jog_allowed, 500.0)
+        outcome = self.application.start_live_jog(axis, direction, self._unreferenced_jog_allowed, 500.0)
         if not outcome.accepted:
             self._set_notice(outcome.message)
 
     @Slot()
     def stop_live_jog(self) -> None:
-        outcome = self.motion.stop_live_jog()
+        outcome = self.application.stop_live_jog()
         if not outcome.accepted:
             self._set_notice(outcome.message)
         self._last_status_poll = 0.0
@@ -881,13 +886,13 @@ class ControllerViewModel(QObject):
         if not self.can_jog:
             self._set_notice("Position move ignored — machine is not ready")
             return
-        outcome = self.motion.move_to(Position(x, y, z), feed)
+        outcome = self.application.move_to(Position(x, y, z), feed)
         if not outcome.accepted:
             self._set_notice(f"Position move blocked — {outcome.message}")
 
     @Slot()
     def establish_reference(self) -> None:
-        outcome = self.session.establish_reference()
+        outcome = self.application.establish_reference()
         if outcome.accepted:
             self._unreferenced_jog_allowed = False
         self._set_notice(outcome.message)
@@ -895,25 +900,16 @@ class ControllerViewModel(QObject):
 
     @Slot(str)
     def set_work_zero(self, axes: str) -> None:
-        if not self.session.can_move:
-            self._set_notice("Work-zero command ignored — GRBL is not Idle")
-            return
-        outcome = self.session.request_work_zero_confirmation(axes)
+        outcome = self.application.set_work_zero(axes)
         if not outcome.accepted:
             self._set_notice(outcome.message)
-            return
-        try:
-            self._send_manual(make_work_zero(axes))
-        except (RuntimeError, ValueError) as exc:
-            self.session.invalidate_work_zero()
-            self._set_notice(f"Work zero not sent — {exc}")
             return
         self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def return_to_work_zero(self) -> None:
-        outcome = self.motion.return_to_work_zero(500.0)
+        outcome = self.application.return_to_work_zero(500.0)
         if not outcome.accepted:
             self._set_notice(f"Return skipped — {outcome.message}")
         else:
@@ -929,7 +925,7 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def return_to_reference(self) -> None:
-        outcome = self.motion.return_to_reference(500.0)
+        outcome = self.application.return_to_reference(500.0)
         if not outcome.accepted:
             self._set_notice(f"Position move blocked — {outcome.message}")
 
@@ -1079,7 +1075,7 @@ class ControllerViewModel(QObject):
         self._poll_wifi_result()
         if self.connection is None:
             return
-        events = self.connection_service.events()
+        events = self.application.transport_events()
         try:
             while not events.empty():
                 self._handle_event(events.get_nowait())
@@ -1091,7 +1087,7 @@ class ControllerViewModel(QObject):
             self._disconnected(str(exc))
 
     def _poll_wifi_result(self) -> None:
-        outcome = self.connection_service.poll_wifi()
+        outcome = self.application.poll_wifi()
         if outcome is None:
             return
         if not outcome.accepted:
@@ -1099,7 +1095,7 @@ class ControllerViewModel(QObject):
             self._set_notice(self._connection_text)
             self._emit_state()
             return
-        self.connection = self.connection_service.transport
+        self.connection = self.application.transport
         self.wifi_host = outcome.host
         self.wifi_port = outcome.port or self.wifi_port
         try:
@@ -1222,10 +1218,10 @@ class ControllerViewModel(QObject):
         self.application.send_realtime(command)
 
     def _send_job_line(self, command: bytes) -> None:
-        self.application.connection_service.send_line(command)
+        self.application.send_line(command)
 
     def _send_motion_line(self, command: bytes) -> None:
-        self.application.connection_service.send_line(command)
+        self.application.send_line(command)
 
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:

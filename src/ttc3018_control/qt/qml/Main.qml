@@ -827,10 +827,10 @@ ApplicationWindow {
                                 Label { anchors.centerIn: parent; text: "XY"; color: window.palette.muted; font.pixelSize: 10; font.weight: Font.DemiBold }
 
                                 // Outer ring: press and hold for live jogging; release stops at the nearest whole mm.
-                                JogArrowButton { x: 76; y: 6; width: 62; height: 42; glyph: "▲\nY+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 7; y: 86; width: 58; height: 42; glyph: "◀\nX−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 149; y: 86; width: 58; height: 42; glyph: "▶\nX+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("X", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
-                                JogArrowButton { x: 76; y: 166; width: 62; height: 42; glyph: "▼\nY−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Y", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 76; y: 6; width: 62; height: 42; glyph: "▲\nY+"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("Y", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 7; y: 86; width: 58; height: 42; glyph: "◀\nX−"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("X", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 149; y: 86; width: 58; height: 42; glyph: "▶\nX+"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("X", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { x: 76; y: 166; width: 62; height: 42; glyph: "▼\nY−"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("Y", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
 
                                 // Inner ring: one click moves the selected step.
                                 JogArrowButton { x: 86; y: 58; width: 42; height: 24; glyph: "▲"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Y", 0.1) }
@@ -841,10 +841,10 @@ ApplicationWindow {
 
                             ColumnLayout { Layout.alignment: Qt.AlignVCenter; spacing: 7
                                 Label { text: "Z AXIS"; color: window.palette.subtle; font.pixelSize: 10; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
-                                JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 47; glyph: "▲\nZ+"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Z", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 47; glyph: "▲\nZ+"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("Z", 1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
                                 JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 34; glyph: "Z+"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", 0.1) }
                                 JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 34; glyph: "Z−"; fine: true; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.jog("Z", -0.1) }
-                                JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 47; glyph: "▼\nZ−"; enabled: appViewModel && appViewModel.can_live_jog; onPressed: appViewModel.start_live_jog("Z", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
+                                JogArrowButton { Layout.preferredWidth: 76; Layout.preferredHeight: 47; glyph: "▼\nZ−"; enabled: appViewModel && (appViewModel.can_live_jog || appViewModel.live_jog_active); onPressed: appViewModel.start_live_jog("Z", -1); onReleased: appViewModel.stop_live_jog(); onCanceled: appViewModel.stop_live_jog() }
                             }
                         }
                         Label { Layout.alignment: Qt.AlignHCenter; text: "Inner click: 0.1 mm  ·  Outer hold: live jog, nearest whole-mm stop"; color: window.palette.subtle; font.pixelSize: 10 }
