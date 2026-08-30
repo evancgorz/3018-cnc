@@ -189,6 +189,9 @@ streaming pipeline.
 - [x] Require explicit confirmed physical stock thickness for profile cutouts
   and detected through-features; validate stock thickness and breakthrough
   consistently before any STEP path generation.
+- [x] Add an optional maximum axial stepdown to the STEP generator and UI;
+  automatically increase passes within the 100-pass safety limit and preserve
+  exact blind, through, and ramp final depths.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -244,3 +247,4 @@ streaming pipeline.
 | 2026-08-30 | `20d6ec1` | Added fail-closed detection for ambiguous overlapping STEP surface heights. |
 | 2026-08-30 | `ed45647` | Validated serialized STEP topology metadata and rejected degenerate loop edges. |
 | 2026-08-30 | `8f80188` | Required confirmed stock thickness for all through STEP operations. |
+| 2026-08-30 | `e2de1bc` | Added configurable maximum stepdown scheduling and STEP dialog control. |
