@@ -6,3 +6,4 @@ logs/
 config/machine-profile.json
 config/connection.json
 config/commissioning.json
+config/step-prepare.json

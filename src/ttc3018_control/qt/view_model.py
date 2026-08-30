@@ -16,6 +16,7 @@ from ..grbl import (
 from ..machine_state import MachineProfile
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
+from ..step_prepare_settings import StepPrepareSettings
 from ..text_engraver import FONT_NAMES
 
 
@@ -67,6 +68,9 @@ class ControllerViewModel(QObject):
         self._preview_summary = ""
         self._step_operations: list[dict[str, object]] = []
         self._step_preview_valid = False
+        self._step_isometric_faces: list[dict[str, object]] = []
+        self._step_isometric_paths: list[dict[str, object]] = []
+        self._step_isometric_stock_thickness = 0.0
         self._step_model: StepPlanarModel | None = None
         self._step_path: Path | None = None
         self._step_source_text = "No STEP model imported"
@@ -253,6 +257,102 @@ class ControllerViewModel(QObject):
     @Property(bool, notify=state_changed)
     def step_preview_valid(self) -> bool:
         return self._step_preview_valid
+
+    @Property("QVariantList", notify=state_changed)
+    def step_isometric_faces(self) -> list[dict[str, object]]:
+        return self._step_isometric_faces
+
+    @Property("QVariantList", notify=state_changed)
+    def step_isometric_paths(self) -> list[dict[str, object]]:
+        return self._step_isometric_paths
+
+    @Property(float, notify=state_changed)
+    def step_isometric_stock_thickness(self) -> float:
+        return self._step_isometric_stock_thickness
+
+    @Property(str, notify=state_changed)
+    def step_recommended_mode(self) -> str:
+        return "Automatic part" if self._step_model is not None else ""
+
+    @Property(float, notify=state_changed)
+    def step_suggested_stock_width(self) -> float:
+        if self._step_model is None:
+            return 0.0
+        settings = self.application.step_prepare_settings
+        width = self._step_model.height if settings.orientation == "Top (YX)" else self._step_model.width
+        return width + settings.tool_diameter
+
+    @Property(float, notify=state_changed)
+    def step_suggested_stock_height(self) -> float:
+        if self._step_model is None:
+            return 0.0
+        settings = self.application.step_prepare_settings
+        height = self._step_model.width if settings.orientation == "Top (YX)" else self._step_model.height
+        return height + settings.tool_diameter
+
+    @Property(float, notify=state_changed)
+    def step_suggested_stock_thickness(self) -> float:
+        return float(self._step_model.thickness) if self._step_model is not None else 0.0
+
+    @Property(float, notify=state_changed)
+    def step_model_width(self) -> float:
+        return float(self._step_model.width) if self._step_model is not None else 0.0
+
+    @Property(float, notify=state_changed)
+    def step_model_height(self) -> float:
+        return float(self._step_model.height) if self._step_model is not None else 0.0
+
+    @Property(str, notify=state_changed)
+    def step_default_orientation(self) -> str:
+        return self.application.step_prepare_settings.orientation
+
+    @Property(str, notify=state_changed)
+    def step_default_zero_location(self) -> str:
+        return self.application.step_prepare_settings.zero_location
+
+    @Property(float, notify=state_changed)
+    def step_default_tool_diameter(self) -> float:
+        return self.application.step_prepare_settings.tool_diameter
+
+    @Property(int, notify=state_changed)
+    def step_default_passes(self) -> int:
+        return self.application.step_prepare_settings.passes
+
+    @Property(float, notify=state_changed)
+    def step_default_max_stepdown(self) -> float:
+        return self.application.step_prepare_settings.max_stepdown
+
+    @Property(float, notify=state_changed)
+    def step_default_safe_z(self) -> float:
+        return self.application.step_prepare_settings.safe_z
+
+    @Property(float, notify=state_changed)
+    def step_default_cut_feed(self) -> float:
+        return self.application.step_prepare_settings.cut_feed
+
+    @Property(float, notify=state_changed)
+    def step_default_plunge_feed(self) -> float:
+        return self.application.step_prepare_settings.plunge_feed
+
+    @Property(int, notify=state_changed)
+    def step_default_spindle_rpm(self) -> int:
+        return self.application.step_prepare_settings.spindle_rpm
+
+    @Property(float, notify=state_changed)
+    def step_default_breakthrough(self) -> float:
+        return self.application.step_prepare_settings.breakthrough
+
+    @Property(int, notify=state_changed)
+    def step_default_tab_count(self) -> int:
+        return self.application.step_prepare_settings.tab_count
+
+    @Property(float, notify=state_changed)
+    def step_default_tab_width(self) -> float:
+        return self.application.step_prepare_settings.tab_width
+
+    @Property(float, notify=state_changed)
+    def step_default_tab_height(self) -> float:
+        return self.application.step_prepare_settings.tab_height
 
     @Property(str, notify=state_changed)
     def preview_summary(self) -> str:
@@ -635,6 +735,7 @@ class ControllerViewModel(QObject):
         self._preview_summary = self.step_model_summary
         self._step_operations = []
         self._step_preview_valid = False
+        self._set_step_isometric_model(model)
         self._set_notice(f"Imported planar STEP model {model.path.name}")
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
@@ -656,6 +757,7 @@ class ControllerViewModel(QObject):
         self._preview_summary = self.step_model_summary
         self._step_operations = []
         self._step_preview_valid = False
+        self._set_step_isometric_model(model)
         self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
@@ -691,6 +793,7 @@ class ControllerViewModel(QObject):
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
             self._step_operations = []
             self._step_preview_valid = False
+            self._step_isometric_paths = []
             self._set_notice(f"STEP preview rejected — {exc}")
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
@@ -700,6 +803,46 @@ class ControllerViewModel(QObject):
             self._preview_summary = self._step_job_summary(job.result)
             self._step_operations = self._operations_for_qml(job.result)
             self._step_preview_valid = True
+            self._set_step_isometric_job(job.result, orientation)
+        self._emit_state()
+
+    @Slot(str, str, float, int, float, float, float, float, int, float, int, float, float)
+    def save_step_prepare_defaults(
+        self,
+        orientation: str,
+        zero_location: str,
+        tool_diameter: float,
+        passes: int,
+        max_stepdown: float,
+        safe_z: float,
+        cut_feed: float,
+        plunge_feed: float,
+        spindle_rpm: int,
+        breakthrough: float,
+        tab_count: int,
+        tab_width: float,
+        tab_height: float,
+    ) -> None:
+        settings = StepPrepareSettings(
+            orientation=orientation,
+            zero_location=zero_location,
+            tool_diameter=tool_diameter,
+            passes=passes,
+            max_stepdown=max_stepdown,
+            safe_z=safe_z,
+            cut_feed=cut_feed,
+            plunge_feed=plunge_feed,
+            spindle_rpm=spindle_rpm,
+            breakthrough=breakthrough,
+            tab_count=tab_count,
+            tab_width=tab_width,
+            tab_height=tab_height,
+        )
+        try:
+            self.application.save_step_prepare_settings(settings)
+        except (OSError, ValueError, TypeError) as exc:
+            self._set_notice(f"Prepare defaults were not saved — {exc}")
+            return
         self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
@@ -765,6 +908,7 @@ class ControllerViewModel(QObject):
             job.result.stock_height,
         )
         self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
+        self._set_step_isometric_job(job.result, orientation)
         self._emit_state()
 
     @Slot(QUrl)
@@ -1173,11 +1317,129 @@ class ControllerViewModel(QObject):
 
     @staticmethod
     def _recommended_step_mode(model: StepPlanarModel) -> str:
-        if any(patch.tilted for patch in model.surface_patches):
-            return "Planar surface"
-        if model.features:
-            return "Detected feature"
-        return "Engraving"
+        return "Automatic part"
+
+    def _set_step_isometric_model(
+        self,
+        model: StepPlanarModel,
+        orientation: str | None = None,
+        offset: tuple[float, float] = (0.0, 0.0),
+    ) -> None:
+        orientation = orientation or self.application.step_prepare_settings.orientation
+        offset_x, offset_y = offset
+
+        def xyz(point, z: float) -> list[float]:
+            x, y = (point.y, point.x) if orientation == "Top (YX)" else (point.x, point.y)
+            return [float(x + offset_x), float(y + offset_y), float(z)]
+
+        faces: list[dict[str, object]] = []
+        seen_surfaces: set[tuple[object, ...]] = set()
+        for patch in model.surface_patches:
+            key = (
+                round(patch.a, 7), round(patch.b, 7), round(patch.c, 7),
+                tuple(tuple((round(point.x, 6), round(point.y, 6)) for point in loop.points) for loop in patch.loops),
+            )
+            if key in seen_surfaces:
+                continue
+            seen_surfaces.add(key)
+            loops = [
+                [
+                    xyz(
+                        point,
+                        max(-model.thickness, min(0.0, patch.height_at(point.x, point.y))),
+                    )
+                    for point in loop.points
+                ]
+                for loop in patch.loops
+                if len(loop.points) >= 3
+            ]
+            if loops:
+                faces.append({"loops": loops, "kind": "ramp" if patch.tilted else "surface"})
+
+        if not faces:
+            faces.extend(
+                {"loops": [[xyz(point, 0.0) for point in loop.points]], "kind": "surface"}
+                for loop in model.loops
+            )
+
+        for loop_index in model.outer_loop_indices:
+            loop = model.loops[loop_index]
+            for point, following in zip(loop.points, loop.points[1:] + loop.points[:1]):
+                faces.append(
+                    {
+                        "loops": [[
+                            xyz(point, 0.0),
+                            xyz(following, 0.0),
+                            xyz(following, -model.thickness),
+                            xyz(point, -model.thickness),
+                        ]],
+                        "kind": "side",
+                    }
+                )
+            faces.append(
+                {
+                    "loops": [[xyz(point, -model.thickness) for point in reversed(loop.points)]],
+                    "kind": "bottom",
+                }
+            )
+
+        for feature in model.features:
+            loop = model.loops[feature.loop_index]
+            lower = -min(model.thickness, feature.depth)
+            for point, following in zip(loop.points, loop.points[1:] + loop.points[:1]):
+                faces.append(
+                    {
+                        "loops": [[
+                            xyz(point, 0.0),
+                            xyz(following, 0.0),
+                            xyz(following, lower),
+                            xyz(point, lower),
+                        ]],
+                        "kind": "feature",
+                    }
+                )
+        self._step_isometric_faces = faces
+        self._step_isometric_paths = []
+        self._step_isometric_stock_thickness = float(model.thickness)
+
+    def _set_step_isometric_job(self, job, orientation: str) -> None:
+        model = self._step_model
+        if model is None:
+            self._step_isometric_faces = []
+            self._step_isometric_paths = []
+            return
+        raw_points = [
+            (point.y, point.x) if orientation == "Top (YX)" else (point.x, point.y)
+            for loop in model.loops
+            for point in loop.points
+        ]
+        placed_points = [point for stroke in job.model_strokes for point in stroke]
+        offset = (0.0, 0.0)
+        if raw_points and placed_points:
+            offset = (
+                min(point[0] for point in placed_points) - min(point[0] for point in raw_points),
+                min(point[1] for point in placed_points) - min(point[1] for point in raw_points),
+            )
+        self._set_step_isometric_model(model, orientation, offset)
+        paths: list[dict[str, object]] = []
+        for path in job.surface_paths:
+            paths.append(
+                {
+                    "points": [[float(x), float(y), float(z) + 0.08] for x, y, z in path],
+                    "kind": "surface",
+                }
+            )
+        surface_count = len(job.surface_paths)
+        remaining = job.strokes[surface_count:]
+        for index, stroke in enumerate(remaining):
+            paths.append(
+                {
+                    "points": [[float(x), float(y), 0.12] for x, y in stroke],
+                    "kind": "profile" if index == len(remaining) - 1 and job.mode in {"Automatic part", "Profile cutout"} else "cut",
+                }
+            )
+        self._step_isometric_paths = paths
+        self._step_isometric_stock_thickness = float(job.stock_thickness or model.thickness)
 
     @staticmethod
     def _operations_for_qml(job) -> list[dict[str, object]]:

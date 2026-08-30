@@ -56,7 +56,26 @@ ApplicationWindow {
         function onStep_model_imported(recommendedMode) {
             const index = modeCombo.find(recommendedMode)
             if (index >= 0) modeCombo.currentIndex = index
+            if (appViewModel) {
+                stockWidthField.text = Number(appViewModel.step_suggested_stock_width).toFixed(3)
+                stockHeightField.text = Number(appViewModel.step_suggested_stock_height).toFixed(3)
+                stockThicknessField.text = Number(appViewModel.step_suggested_stock_thickness).toFixed(3)
+                let orientationIndex = orientationCombo.find(appViewModel.step_default_orientation)
+                if (orientationIndex >= 0) orientationCombo.currentIndex = orientationIndex
+                let zeroIndex = zeroLocationCombo.find(appViewModel.step_default_zero_location)
+                if (zeroIndex >= 0) zeroLocationCombo.currentIndex = zeroIndex
+                toolDiameterField.text = Number(appViewModel.step_default_tool_diameter).toString()
+                stepPassesField.text = Number(appViewModel.step_default_passes).toString()
+                stepMaxStepdownField.text = Number(appViewModel.step_default_max_stepdown).toString()
+                stepSafeField.text = Number(appViewModel.step_default_safe_z).toString()
+                stepCutField.text = Number(appViewModel.step_default_cut_feed).toString()
+                stepPlungeField.text = Number(appViewModel.step_default_plunge_feed).toString()
+                stepRpmField.text = Number(appViewModel.step_default_spindle_rpm).toString()
+            }
             stepDialog.refreshPreview()
+            stepWizardDialog.applySuggestions()
+            stepWizardDialog.currentStep = 1
+            stepWizardDialog.refreshPreview()
         }
     }
 
@@ -424,6 +443,286 @@ ApplicationWindow {
     }
 
     Dialog {
+        id: stepWizardDialog
+        property int currentStep: 0
+        modal: true
+        title: "Guided STEP setup · " + (currentStep + 1) + " of 4"
+        width: 1080
+        height: 780
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 14; border.color: window.palette.divider; border.width: 1 }
+
+        function loadDefaults() {
+            if (!appViewModel) return
+            let index = wizardOrientationCombo.find(appViewModel.step_default_orientation)
+            if (index >= 0) wizardOrientationCombo.currentIndex = index
+            index = wizardZeroCombo.find(appViewModel.step_default_zero_location)
+            if (index >= 0) wizardZeroCombo.currentIndex = index
+            wizardToolField.text = Number(appViewModel.step_default_tool_diameter).toString()
+            wizardPassesField.text = Number(appViewModel.step_default_passes).toString()
+            wizardStepdownField.text = Number(appViewModel.step_default_max_stepdown).toString()
+            wizardSafeField.text = Number(appViewModel.step_default_safe_z).toString()
+            wizardCutField.text = Number(appViewModel.step_default_cut_feed).toString()
+            wizardPlungeField.text = Number(appViewModel.step_default_plunge_feed).toString()
+            wizardRpmField.text = Number(appViewModel.step_default_spindle_rpm).toString()
+            wizardBreakthroughField.text = Number(appViewModel.step_default_breakthrough).toString()
+            wizardTabsField.text = Number(appViewModel.step_default_tab_count).toString()
+            wizardTabWidthField.text = Number(appViewModel.step_default_tab_width).toString()
+            wizardTabHeightField.text = Number(appViewModel.step_default_tab_height).toString()
+        }
+        function applySuggestions() {
+            if (!appViewModel || !appViewModel.step_loaded) return
+            const rotated = wizardOrientationCombo.currentText === "Top (YX)"
+            const modelWidth = rotated ? Number(appViewModel.step_model_height) : Number(appViewModel.step_model_width)
+            const modelHeight = rotated ? Number(appViewModel.step_model_width) : Number(appViewModel.step_model_height)
+            const toolDiameter = Number(wizardToolField.text || appViewModel.step_default_tool_diameter)
+            wizardStockWidthField.text = (modelWidth + toolDiameter).toFixed(3)
+            wizardStockHeightField.text = (modelHeight + toolDiameter).toFixed(3)
+            wizardThicknessField.text = Number(appViewModel.step_suggested_stock_thickness).toFixed(3)
+            const safeTabHeight = Math.min(Number(appViewModel.step_default_tab_height), Math.max(0.1, Number(appViewModel.step_suggested_stock_thickness) * 0.4))
+            wizardTabHeightField.text = safeTabHeight.toFixed(3)
+        }
+        function refreshPreview() { wizardPreviewTimer.restart() }
+        function previewNow() {
+            if (!appViewModel || !appViewModel.step_loaded) return
+            appViewModel.preview_step(
+                "Automatic part", wizardOrientationCombo.currentText,
+                Number(wizardStockWidthField.text), Number(wizardStockHeightField.text),
+                wizardZeroCombo.currentText, Number(wizardToolField.text), -0.5,
+                Number(wizardPassesField.text), Number(wizardThicknessField.text),
+                Number(wizardBreakthroughField.text), Number(wizardTabsField.text),
+                Number(wizardTabWidthField.text), Number(wizardTabHeightField.text),
+                Number(wizardSafeField.text), Number(wizardCutField.text),
+                Number(wizardPlungeField.text), Number(wizardRpmField.text),
+                Number(wizardStepdownField.text)
+            )
+        }
+        function saveDefaults() {
+            if (!appViewModel) return
+            appViewModel.save_step_prepare_defaults(
+                wizardOrientationCombo.currentText, wizardZeroCombo.currentText,
+                Number(wizardToolField.text), Number(wizardPassesField.text),
+                Number(wizardStepdownField.text), Number(wizardSafeField.text),
+                Number(wizardCutField.text), Number(wizardPlungeField.text),
+                Number(wizardRpmField.text), Number(wizardBreakthroughField.text),
+                Number(wizardTabsField.text), Number(wizardTabWidthField.text),
+                Number(wizardTabHeightField.text)
+            )
+        }
+        function generateAndLoad() {
+            saveDefaults()
+            previewNow()
+            if (!appViewModel || !appViewModel.step_preview_valid) return
+            appViewModel.create_step(
+                "Automatic part", wizardOrientationCombo.currentText,
+                Number(wizardStockWidthField.text), Number(wizardStockHeightField.text),
+                wizardZeroCombo.currentText, Number(wizardToolField.text), -0.5,
+                Number(wizardPassesField.text), Number(wizardThicknessField.text),
+                Number(wizardBreakthroughField.text), Number(wizardTabsField.text),
+                Number(wizardTabWidthField.text), Number(wizardTabHeightField.text),
+                Number(wizardSafeField.text), Number(wizardCutField.text),
+                Number(wizardPlungeField.text), Number(wizardRpmField.text),
+                Number(wizardStepdownField.text)
+            )
+            close()
+            window.workspace = 1
+        }
+        onOpened: {
+            loadDefaults()
+            currentStep = appViewModel && appViewModel.step_loaded ? 1 : 0
+            if (appViewModel && appViewModel.step_loaded) applySuggestions()
+            refreshPreview()
+        }
+        Timer { id: wizardPreviewTimer; interval: 300; repeat: false; onTriggered: stepWizardDialog.previewNow() }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Repeater {
+                    model: ["Import", "Understand", "Set up", "Review"]
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        height: 42
+                        radius: 10
+                        color: index === stepWizardDialog.currentStep ? Qt.rgba(window.palette.accent.r, window.palette.accent.g, window.palette.accent.b, 0.20) : index < stepWizardDialog.currentStep ? Qt.rgba(window.palette.success.r, window.palette.success.g, window.palette.success.b, 0.12) : window.palette.raised
+                        border.color: index === stepWizardDialog.currentStep ? window.palette.accent : index < stepWizardDialog.currentStep ? window.palette.success : window.palette.divider
+                        Label { anchors.centerIn: parent; text: (index + 1) + ". " + modelData; color: index <= stepWizardDialog.currentStep ? window.palette.text : window.palette.muted; font.weight: index === stepWizardDialog.currentStep ? Font.DemiBold : Font.Normal }
+                    }
+                }
+            }
+
+            StackLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                currentIndex: stepWizardDialog.currentStep
+
+                Item {
+                    RowLayout { anchors.fill: parent; spacing: 14
+                        Panel { Layout.preferredWidth: 390; Layout.fillHeight: true
+                            ColumnLayout { anchors.fill: parent; anchors.margins: 20; spacing: 14
+                                SectionTitle { text: "Choose the STEP model" }
+                                Label { text: "The importer finds a usable machining face, identifies recesses and raised bosses, and detects accessible ramp surfaces."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                MutedLabel { text: "Nothing moves during import or preview. The generated program still passes the normal parser, stock simulation, and machine-envelope checks." }
+                                Divider {}
+                                PrimaryButton { Layout.fillWidth: true; text: appViewModel && appViewModel.step_importing ? "Importing…" : "Import STEP file…"; enabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
+                                Label { text: appViewModel ? appViewModel.step_source : "No model selected"; color: window.palette.accent; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                Label { text: appViewModel ? appViewModel.step_model_summary : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                Item { Layout.fillHeight: true }
+                            }
+                        }
+                        Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                            IsometricCanvas { anchors.fill: parent; anchors.margins: 12; modeLabel: "MODEL" }
+                        }
+                    }
+                }
+
+                Item {
+                    RowLayout { anchors.fill: parent; spacing: 14
+                        Panel { Layout.preferredWidth: 390; Layout.fillHeight: true
+                            ColumnLayout { anchors.fill: parent; anchors.margins: 20; spacing: 13
+                                SectionTitle { text: "Automatic machining proposal" }
+                                Pill { label: appViewModel ? appViewModel.step_recommended_mode : "Automatic part"; tone: window.palette.accent }
+                                Label { text: appViewModel ? appViewModel.step_model_summary : ""; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                Divider {}
+                                MutedLabel { text: "1. Machine detected recesses, raised bosses, or accessible wedge/ramp surfaces." }
+                                MutedLabel { text: "2. Retract to safe Z between disconnected regions." }
+                                MutedLabel { text: "3. Cut the compensated outer profile last, leaving holding tabs." }
+                                MutedLabel { text: "4. Keep all XY cutter motion at or above work X0/Y0." }
+                                Item { Layout.fillHeight: true }
+                            }
+                        }
+                        Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                            IsometricCanvas { anchors.fill: parent; anchors.margins: 12; modeLabel: "3D MODEL" }
+                        }
+                    }
+                }
+
+                Item {
+                    RowLayout { anchors.fill: parent; spacing: 14
+                        Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                            ScrollView { anchors.fill: parent; anchors.margins: 18; clip: true; contentWidth: availableWidth
+                                ColumnLayout { width: parent.width; spacing: 10
+                                    SectionTitle { text: "Stock and tool" }
+                                    MutedLabel { text: "Stock dimensions are suggested from this model. Confirm the physical thickness—the automatic profile cuts through it plus breakthrough." }
+                                    GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                                        Label { text: "Stock width (mm)"; color: window.palette.muted }
+                                        Field { id: wizardStockWidthField; Layout.fillWidth: true; text: "33.175"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Stock height (mm)"; color: window.palette.muted }
+                                        Field { id: wizardStockHeightField; Layout.fillWidth: true; text: "18.175"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Stock thickness (mm)"; color: window.palette.muted }
+                                        Field { id: wizardThicknessField; Layout.fillWidth: true; text: "2"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Tool diameter (mm)"; color: window.palette.muted }
+                                        Field { id: wizardToolField; Layout.fillWidth: true; text: "3.175"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Path rotation"; color: window.palette.muted }
+                                        ComboBox { id: wizardOrientationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_orientations : ["Top (XY)"]; onActivated: { stepWizardDialog.applySuggestions(); stepWizardDialog.refreshPreview() } }
+                                        Label { text: "Work zero"; color: window.palette.muted }
+                                        ComboBox { id: wizardZeroCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_zero_locations : ["Lower-left"]; onActivated: stepWizardDialog.refreshPreview() }
+                                    }
+                                    Divider {}
+                                    SectionTitle { text: "Through cut and tabs" }
+                                    GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                                        Label { text: "Breakthrough (mm)"; color: window.palette.muted }
+                                        Field { id: wizardBreakthroughField; Layout.fillWidth: true; text: "0.2"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Holding tabs"; color: window.palette.muted }
+                                        Field { id: wizardTabsField; Layout.fillWidth: true; text: "4"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Tab width (mm)"; color: window.palette.muted }
+                                        Field { id: wizardTabWidthField; Layout.fillWidth: true; text: "4"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Tab height (mm)"; color: window.palette.muted }
+                                        Field { id: wizardTabHeightField; Layout.fillWidth: true; text: "0.8"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                    }
+                                }
+                            }
+                        }
+                        Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                            ScrollView { anchors.fill: parent; anchors.margins: 18; clip: true; contentWidth: availableWidth
+                                ColumnLayout { width: parent.width; spacing: 10
+                                    SectionTitle { text: "Reusable cutting defaults" }
+                                    MutedLabel { text: "These values persist for the next session. Model dimensions and detected geometry do not." }
+                                    GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                                        Label { text: "Minimum passes"; color: window.palette.muted }
+                                        Field { id: wizardPassesField; Layout.fillWidth: true; text: "2"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Max stepdown (mm)"; color: window.palette.muted }
+                                        Field { id: wizardStepdownField; Layout.fillWidth: true; text: "1"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Safe Z (mm)"; color: window.palette.muted }
+                                        Field { id: wizardSafeField; Layout.fillWidth: true; text: "3"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Cut feed (mm/min)"; color: window.palette.muted }
+                                        Field { id: wizardCutField; Layout.fillWidth: true; text: "300"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
+                                        Field { id: wizardPlungeField; Layout.fillWidth: true; text: "100"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                        Label { text: "Spindle RPM (0 = manual/off)"; color: window.palette.muted }
+                                        Field { id: wizardRpmField; Layout.fillWidth: true; text: "0"; onTextChanged: stepWizardDialog.refreshPreview() }
+                                    }
+                                    Divider {}
+                                    Label { text: appViewModel ? appViewModel.preview_summary : ""; color: appViewModel && appViewModel.step_preview_valid ? window.palette.success : window.palette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    RowLayout { anchors.fill: parent; spacing: 14
+                        Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                            IsometricCanvas { anchors.fill: parent; anchors.margins: 12; modeLabel: "3D TOOLPATH" }
+                        }
+                        Panel { Layout.preferredWidth: 400; Layout.minimumWidth: 400; Layout.fillHeight: true
+                            ScrollView { anchors.fill: parent; anchors.margins: 18; clip: true; contentWidth: availableWidth
+                                ColumnLayout { width: parent.width; spacing: 10
+                                    SectionTitle { text: "Review the complete proposal" }
+                                    Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                    Divider {}
+                                    SectionTitle { text: "Ordered operations" }
+                                    Repeater {
+                                        model: appViewModel ? appViewModel.step_operations : []
+                                        delegate: Rectangle {
+                                            Layout.fillWidth: true; implicitHeight: 58; radius: 9; color: window.palette.raised; border.color: window.palette.divider
+                                            Column { anchors.fill: parent; anchors.margins: 9; spacing: 3
+                                                Label { text: (index + 1) + ". " + modelData.kind; color: window.palette.text; font.weight: Font.DemiBold; width: parent.width; elide: Text.ElideRight }
+                                                Label { text: "Target Z " + Number(modelData.targetDepth).toFixed(2) + " mm · " + modelData.strategy; color: window.palette.muted; font.pixelSize: 11; width: parent.width; elide: Text.ElideRight }
+                                                Label { visible: modelData.dependsOn.length > 0; text: "Runs after " + modelData.dependsOn; color: window.palette.success; font.pixelSize: 10 }
+                                            }
+                                        }
+                                    }
+                                    Divider {}
+                                    MutedLabel { text: "Blue paths machine the model. Cyan is the final compensated outer profile. The translucent box is the confirmed physical stock." }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                SecondaryButton { text: "Cancel"; onClicked: stepWizardDialog.close() }
+                SecondaryButton { text: "Advanced settings"; onClicked: { stepWizardDialog.close(); stepDialog.open() } }
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Back"; enabled: stepWizardDialog.currentStep > 0; onClicked: stepWizardDialog.currentStep-- }
+                PrimaryButton {
+                    visible: stepWizardDialog.currentStep < 3
+                    text: "Next"
+                    enabled: appViewModel && appViewModel.step_loaded && (stepWizardDialog.currentStep !== 2 || appViewModel.step_preview_valid)
+                    onClicked: {
+                        if (stepWizardDialog.currentStep === 2) {
+                            stepWizardDialog.saveDefaults()
+                            stepWizardDialog.previewNow()
+                        }
+                        stepWizardDialog.currentStep++
+                    }
+                }
+                PrimaryButton { visible: stepWizardDialog.currentStep === 3; text: "Generate and load"; enabled: appViewModel && appViewModel.step_preview_valid; onClicked: stepWizardDialog.generateAndLoad() }
+            }
+        }
+    }
+
+    Dialog {
         id: stepDialog
         modal: true
         title: "STEP / 2.5D machining"
@@ -434,8 +733,12 @@ ApplicationWindow {
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
+            stepPreviewTimer.restart()
+        }
+        function previewNow() {
              if (appViewModel) appViewModel.preview_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text), Number(stepMaxStepdownField.text))
         }
+        Timer { id: stepPreviewTimer; interval: 250; repeat: false; onTriggered: stepDialog.previewNow() }
         onOpened: refreshPreview()
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
@@ -491,10 +794,10 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                             ColumnLayout { Layout.fillWidth: true; spacing: 7; visible: modeCombo.currentText === "Profile cutout" || modeCombo.currentText === "Detected feature"
+                             ColumnLayout { Layout.fillWidth: true; spacing: 7; visible: modeCombo.currentText === "Automatic part" || modeCombo.currentText === "Profile cutout" || modeCombo.currentText === "Detected feature"
                                 Divider {}
-                                 SectionTitle { text: modeCombo.currentText === "Profile cutout" ? "Through cut and holding tabs" : "Feature stock reference" }
-                                 MutedLabel { text: modeCombo.currentText === "Profile cutout" ? "Inner cutouts run first. The compensated outer profile runs last and leaves tabs so the finished part stays attached to the stock." : "Confirm the physical stock thickness before generating detected through-features."
+                                 SectionTitle { text: modeCombo.currentText === "Automatic part" ? "Automatic cutout and holding tabs" : modeCombo.currentText === "Profile cutout" ? "Through cut and holding tabs" : "Feature stock reference" }
+                                 MutedLabel { text: modeCombo.currentText === "Automatic part" ? "Accessible features or ramps run first. The compensated outer profile runs last and leaves holding tabs." : modeCombo.currentText === "Profile cutout" ? "Inner cutouts run first. The compensated outer profile runs last and leaves tabs so the finished part stays attached to the stock." : "Confirm the physical stock thickness before generating detected through-features."
                                  }
                                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
                                     Label { text: "Stock thickness (mm)"; color: window.palette.muted }
@@ -517,8 +820,8 @@ ApplicationWindow {
                             Divider {}
                             SectionTitle { text: "Cut parameters" }
                             GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
-                                Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : modeCombo.currentText === "Planar surface" ? "Depth (from STEP surface)" : "Depth (mm)"; color: window.palette.muted }
-                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature" && modeCombo.currentText !== "Planar surface"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                                Label { text: modeCombo.currentText === "Automatic part" ? "Depth (automatic)" : modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : modeCombo.currentText === "Planar surface" ? "Depth (from STEP surface)" : "Depth (mm)"; color: window.palette.muted }
+                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Automatic part" && modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature" && modeCombo.currentText !== "Planar surface"; validator: DoubleValidator { bottom: -20; top: -0.001 }
                                     onTextChanged: stepDialog.refreshPreview() }
                                  Label { text: "Depth passes"; color: window.palette.muted }
                                  Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
@@ -539,7 +842,7 @@ ApplicationWindow {
                                 Field { id: stepRpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
                                     onTextChanged: stepDialog.refreshPreview() }
                             }
-                            MutedLabel { text: "Planar surface follows accessible flat and ramp faces with bounded raster paths. Detected feature clears inside a recess or around a raised boss. Profile cutout treats inner loops as through cuts and uses the confirmed stock thickness. Other contour modes apply the tool radius." }
+                            MutedLabel { text: "Automatic part machines detected features or ramps first, then cuts the outer profile free. Planar surface follows accessible flat and ramp faces. Detected feature clears inside a recess or around a raised boss." }
                         }
                     }
                 }
@@ -811,13 +1114,15 @@ ApplicationWindow {
                         SectionTitle { text: "Create or load" }
                         MutedLabel { text: "Start with an existing G-code file or create a centerline engraving." }
                         Divider {}
-                        Repeater { model: ["Load G-code", "Text engraving", "Plaque builder", "STEP / 2.5D"]
+                        Repeater { model: ["Load G-code", "Text engraving", "Plaque builder"]
                             delegate: SecondaryButton {
                                 Layout.fillWidth: true
                                 text: modelData
-                                onClicked: index === 0 ? gcodeFileDialog.open() : index === 1 ? textDialog.open() : index === 2 ? plaqueDialog.open() : stepDialog.open()
+                                onClicked: index === 0 ? gcodeFileDialog.open() : index === 1 ? textDialog.open() : plaqueDialog.open()
                             }
                         }
+                        PrimaryButton { Layout.fillWidth: true; text: "Guided STEP setup"; onClicked: stepWizardDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Advanced STEP / 2.5D"; onClicked: stepDialog.open() }
                         Divider {}
                         SectionTitle { text: "Recent jobs" }
                         Repeater { model: ["Welcome plaque", "Air-cut test", "Text engraving"]
@@ -1055,6 +1360,130 @@ ApplicationWindow {
             }
         }
 
+    }
+
+    component IsometricCanvas: Item {
+        property string modeLabel: "3D PREVIEW"
+
+        Rectangle { anchors.fill: parent; radius: 9; color: "#1D2025"; border.color: window.palette.divider; border.width: 1 }
+        Canvas {
+            id: isoCanvas
+            anchors.fill: parent
+            anchors.margins: 18
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.fillStyle = "#1D2025"
+                ctx.fillRect(0, 0, width, height)
+
+                const faces = appViewModel ? appViewModel.step_isometric_faces : []
+                const paths = appViewModel ? appViewModel.step_isometric_paths : []
+                const stockWidth = appViewModel ? Number(appViewModel.preview_stock_width || appViewModel.step_suggested_stock_width || 0) : 0
+                const stockHeight = appViewModel ? Number(appViewModel.preview_stock_height || appViewModel.step_suggested_stock_height || 0) : 0
+                const stockThickness = appViewModel ? Number(appViewModel.step_isometric_stock_thickness || 0) : 0
+
+                function project(point) {
+                    return [(point[0] - point[1]) * 0.8660254, (point[0] + point[1]) * 0.5 - point[2] * 0.9]
+                }
+                const stockPoints = stockWidth > 0 && stockHeight > 0 && stockThickness > 0 ? [
+                    [0, 0, 0], [stockWidth, 0, 0], [stockWidth, stockHeight, 0], [0, stockHeight, 0],
+                    [0, 0, -stockThickness], [stockWidth, 0, -stockThickness], [stockWidth, stockHeight, -stockThickness], [0, stockHeight, -stockThickness]
+                ] : []
+                let projected = []
+                for (const face of faces) for (const loop of face.loops) for (const point of loop) projected.push(project(point))
+                for (const path of paths) for (const point of path.points) projected.push(project(point))
+                for (const point of stockPoints) projected.push(project(point))
+                if (projected.length === 0) {
+                    ctx.fillStyle = "#737B87"
+                    ctx.font = "14px sans-serif"
+                    ctx.textAlign = "center"
+                    ctx.fillText("Import a STEP model to see the 3D machining proposal", width / 2, height / 2)
+                    return
+                }
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+                for (const point of projected) {
+                    minX = Math.min(minX, point[0]); minY = Math.min(minY, point[1])
+                    maxX = Math.max(maxX, point[0]); maxY = Math.max(maxY, point[1])
+                }
+                const margin = 54
+                const scale = Math.min((width - margin * 2) / Math.max(0.001, maxX - minX), (height - margin * 2) / Math.max(0.001, maxY - minY))
+                const offsetX = (width - (maxX - minX) * scale) / 2 - minX * scale
+                const offsetY = (height - (maxY - minY) * scale) / 2 - minY * scale
+                function screen(point) {
+                    const result = project(point)
+                    return [offsetX + result[0] * scale, offsetY + result[1] * scale]
+                }
+
+                if (stockPoints.length) {
+                    const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]
+                    ctx.setLineDash([6, 5])
+                    ctx.strokeStyle = "#586575"
+                    ctx.lineWidth = 1.4
+                    for (const edge of edges) {
+                        const start = screen(stockPoints[edge[0]]), end = screen(stockPoints[edge[1]])
+                        ctx.beginPath(); ctx.moveTo(start[0], start[1]); ctx.lineTo(end[0], end[1]); ctx.stroke()
+                    }
+                    ctx.setLineDash([])
+                }
+
+                const orderedFaces = Array.prototype.slice.call(faces)
+                orderedFaces.sort(function(a, b) {
+                    function average(face) {
+                        let total = 0, count = 0
+                        for (const loop of face.loops) for (const point of loop) { total += project(point)[1]; count++ }
+                        return count ? total / count : 0
+                    }
+                    return average(a) - average(b)
+                })
+                const fills = { surface: "#315A7F", ramp: "#2E6F9E", side: "#263A4D", feature: "#5B4A36", bottom: "#202B36" }
+                for (const face of orderedFaces) {
+                    ctx.beginPath()
+                    for (const loop of face.loops) {
+                        if (!loop.length) continue
+                        const first = screen(loop[0]); ctx.moveTo(first[0], first[1])
+                        for (let index = 1; index < loop.length; index++) {
+                            const point = screen(loop[index]); ctx.lineTo(point[0], point[1])
+                        }
+                        ctx.closePath()
+                    }
+                    ctx.fillStyle = fills[face.kind] || fills.surface
+                    ctx.globalAlpha = face.kind === "bottom" ? 0.55 : 0.90
+                    ctx.fill()
+                    ctx.globalAlpha = 1
+                    ctx.strokeStyle = face.kind === "feature" ? "#B08A56" : "#7E93A9"
+                    ctx.lineWidth = 1.1
+                    ctx.stroke()
+                }
+
+                ctx.lineCap = "round"
+                ctx.lineJoin = "round"
+                for (const path of paths) {
+                    if (!path.points.length) continue
+                    ctx.strokeStyle = path.kind === "profile" ? "#40C4D9" : path.kind === "surface" ? "#168BFF" : "#63AFFF"
+                    ctx.lineWidth = path.kind === "profile" ? 3.2 : 2.3
+                    const first = screen(path.points[0]); ctx.beginPath(); ctx.moveTo(first[0], first[1])
+                    for (let index = 1; index < path.points.length; index++) {
+                        const point = screen(path.points[index]); ctx.lineTo(point[0], point[1])
+                    }
+                    ctx.stroke()
+                }
+
+                const zero = screen([0, 0, 0])
+                ctx.fillStyle = "#40C4D9"
+                ctx.beginPath(); ctx.arc(zero[0], zero[1], 5, 0, Math.PI * 2); ctx.fill()
+            }
+        }
+        Connections { target: appViewModel; function onState_changed() { isoCanvas.requestPaint() } }
+        Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 14; spacing: 8
+            Pill { label: parent.parent.modeLabel; tone: window.palette.accent }
+            Pill { visible: appViewModel && appViewModel.step_isometric_paths.length > 0; label: "Validated proposal"; tone: window.palette.success }
+        }
+        Row { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 14; spacing: 14
+            Label { text: "● Work zero"; color: window.palette.success; font.pixelSize: 11 }
+            Label { text: "— Model"; color: "#7E93A9"; font.pixelSize: 11 }
+            Label { text: "— Toolpath"; color: window.palette.accent; font.pixelSize: 11 }
+            Label { text: "— Final profile"; color: window.palette.success; font.pixelSize: 11 }
+        }
     }
 
     component ToolpathCanvas: Item {

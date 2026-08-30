@@ -12,6 +12,7 @@ from typing import Callable, Protocol
 from ..connection_settings import ConnectionSettings
 from ..machine_state import MachineProfile
 from ..work_zero_settings import SavedWorkZero
+from ..step_prepare_settings import StepPrepareSettings
 
 
 class Transport(Protocol):
@@ -46,6 +47,12 @@ class WorkZeroStorePort(Protocol):
     def save(self, saved: SavedWorkZero) -> None: ...
 
     def clear(self) -> None: ...
+
+
+class StepPrepareSettingsStorePort(Protocol):
+    def load(self) -> StepPrepareSettings: ...
+
+    def save(self, settings: StepPrepareSettings) -> None: ...
 
 
 class Clock(Protocol):

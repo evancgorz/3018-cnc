@@ -7,13 +7,17 @@ import queue
 from pathlib import Path
 import time
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ttc3018_control.qt.main import build_engine
+from ttc3018_control.qt.view_model import ControllerViewModel
+from ttc3018_control.application.controller import ApplicationController
 from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
-from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel
+from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel, load_step_isolated
 from PySide6.QtCore import QUrl
 
 
@@ -235,6 +239,75 @@ def test_step_preview_draws_physical_stock_and_work_zero_in_canvas() -> None:
     assert "ctx.arc(workZeroX, workZeroY" in qml
     assert "Max stepdown (mm, 0 = auto)" in qml
     assert "modeCombo.currentText === \"Detected feature\"" in qml
+    assert "Guided STEP setup" in qml
+    assert "component IsometricCanvas" in qml
+    assert "Automatic part" in qml
+    assert "step_isometric_faces" in qml
+
+
+@pytest.mark.parametrize(
+    ("fixture", "face_kind"),
+    (
+        ("removed-cylinder.step", "feature"),
+        ("extruded-circle.step", "feature"),
+        ("wedge.step", "ramp"),
+    ),
+)
+def test_qt_automatic_step_preview_builds_3d_model_and_complete_toolpath(
+    qapp,
+    tmp_path,
+    fixture: str,
+    face_kind: str,
+) -> None:
+    view_model = ControllerViewModel(ApplicationController(tmp_path))
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+    view_model._step_model = model
+    view_model._step_path = model.path
+    view_model._set_step_isometric_model(model)
+
+    view_model.preview_step(
+        "Automatic part",
+        "Top (XY)",
+        model.width + 3.175,
+        model.height + 3.175,
+        "Lower-left",
+        3.175,
+        -0.5,
+        2,
+        model.thickness,
+        0.2,
+        4,
+        4.0,
+        min(0.8, model.thickness * 0.4),
+        3.0,
+        300.0,
+        100.0,
+        0,
+        1.0,
+    )
+
+    assert view_model.step_preview_valid
+    assert any(face["kind"] == face_kind for face in view_model.step_isometric_faces)
+    assert any(path["kind"] == "profile" for path in view_model.step_isometric_paths)
+    assert view_model.step_operations[-1]["operationId"] == "outer-profile"
+    if fixture == "wedge.step":
+        assert any(path["kind"] == "surface" for path in view_model.step_isometric_paths)
+
+
+def test_qt_prepare_defaults_persist_across_controllers(qapp, tmp_path) -> None:
+    first = ControllerViewModel(ApplicationController(tmp_path))
+
+    first.save_step_prepare_defaults(
+        "Top (YX)", "Center", 2.0, 3, 0.5, 4.0, 450.0, 120.0,
+        12000, 0.25, 3, 5.0, 0.6,
+    )
+    restored = ControllerViewModel(ApplicationController(tmp_path))
+
+    assert restored.step_default_orientation == "Top (YX)"
+    assert restored.step_default_zero_location == "Center"
+    assert restored.step_default_tool_diameter == pytest.approx(2.0)
+    assert restored.step_default_cut_feed == pytest.approx(450.0)
+    assert restored.step_default_spindle_rpm == 12000
 
 
 def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:

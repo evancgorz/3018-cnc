@@ -12,6 +12,7 @@ from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REA
 from ..machine_state import MachineProfile, ProfileStore
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
+from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
 from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
 from .connection_service import ConnectionOutcome, ConnectionService
@@ -20,7 +21,7 @@ from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
-from .ports import ConnectionSettingsStorePort, ProfileStorePort, WorkZeroStorePort
+from .ports import ConnectionSettingsStorePort, ProfileStorePort, StepPrepareSettingsStorePort, WorkZeroStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 from .wifi_service import WifiProvisioningService
 
@@ -39,6 +40,7 @@ class ApplicationController:
         profile_store: ProfileStorePort | None = None,
         connection_store: ConnectionSettingsStorePort | None = None,
         work_zero_store: WorkZeroStorePort | None = None,
+        step_prepare_store: StepPrepareSettingsStorePort | None = None,
         usb_factory: Callable[[], object] | None = None,
         wifi_factory: Callable[[], object] | None = None,
         discover_hosts: Callable[[int], Iterable[str]] | None = None,
@@ -47,6 +49,9 @@ class ApplicationController:
         self.profile_store = profile_store or ProfileStore(root / "config" / "machine-profile.json")
         self.connection_store = connection_store or ConnectionSettingsStore(root / "config" / "connection.json")
         self.work_zero_store = work_zero_store or WorkZeroStore(root / "config" / "work-zero.json")
+        self.step_prepare_store = step_prepare_store or StepPrepareSettingsStore(
+            root / "config" / "step-prepare.json"
+        )
         try:
             profile = self.profile_store.load()
         except (OSError, ValueError, TypeError):
@@ -59,10 +64,15 @@ class ApplicationController:
             saved_work_zero = self.work_zero_store.load()
         except (OSError, ValueError, TypeError):
             saved_work_zero = None
+        try:
+            step_prepare_settings = self.step_prepare_store.load()
+        except (OSError, ValueError, TypeError):
+            step_prepare_settings = StepPrepareSettings()
 
         self.session = MachineSession(profile=profile)
         self.settings = settings
         self._saved_work_zero = saved_work_zero
+        self.step_prepare_settings = step_prepare_settings
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
         self._events: queue.Queue[ApplicationEvent] = queue.Queue()
@@ -361,6 +371,11 @@ class ApplicationController:
         profile.validate()
         self.profile_store.save(profile)
         self.session.profile = profile
+
+    def save_step_prepare_settings(self, settings: StepPrepareSettings) -> None:
+        settings.validate()
+        self.step_prepare_store.save(settings)
+        self.step_prepare_settings = settings
 
     def invalidate_machine_reference(self, reason: str = "Manually invalidated") -> None:
         self.session.invalidate_reference(reason)
