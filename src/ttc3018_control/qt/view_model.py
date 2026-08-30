@@ -38,12 +38,12 @@ class ControllerViewModel(QObject):
     unreferenced_jog_requested = Signal()
     close_requested = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, application: ApplicationController | None = None) -> None:
         super().__init__()
         root = Path.cwd()
         self.commissioning_store = CommissioningStore(root / "config" / "commissioning.json")
-        self.application = ApplicationController(
-            root,
+        self.application = application or ApplicationController(root)
+        self.application.bind_callbacks(
             on_notice=self._set_notice,
             on_change=self._emit_state,
             on_position_complete=self._on_motion_position_complete,

@@ -312,3 +312,17 @@ class MotionService:
     def _changed(self) -> None:
         self._on_change()
 
+    def bind_callbacks(
+        self,
+        *,
+        on_notice: Callable[[str], None] | None = None,
+        on_change: Callable[[], None] | None = None,
+        on_position_complete: Callable[[], None] | None = None,
+    ) -> None:
+        """Attach a presentation/event adapter without changing motion rules."""
+        if on_notice is not None:
+            self._on_notice = on_notice
+        if on_change is not None:
+            self._on_change = on_change
+        if on_position_complete is not None:
+            self._on_position_complete = on_position_complete

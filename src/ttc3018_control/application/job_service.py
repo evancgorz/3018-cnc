@@ -164,3 +164,18 @@ class JobService:
 
     def _changed(self) -> None:
         self._on_change()
+
+    def bind_callbacks(
+        self,
+        *,
+        on_notice: Callable[[str], None] | None = None,
+        on_change: Callable[[], None] | None = None,
+        on_ready_to_return: Callable[[], None] | None = None,
+    ) -> None:
+        """Attach a presentation/event adapter without exposing streamer state."""
+        if on_notice is not None:
+            self._on_notice = on_notice
+        if on_change is not None:
+            self._on_change = on_change
+        if on_ready_to_return is not None:
+            self._on_ready_to_return = on_ready_to_return

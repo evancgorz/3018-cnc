@@ -65,6 +65,26 @@ class ApplicationController:
             on_ready_to_return=on_ready_to_return,
         )
 
+    def bind_callbacks(
+        self,
+        *,
+        on_notice: Callable[[str], None] | None = None,
+        on_change: Callable[[], None] | None = None,
+        on_position_complete: Callable[[], None] | None = None,
+        on_ready_to_return: Callable[[], None] | None = None,
+    ) -> None:
+        """Bind a presentation adapter after composition is complete."""
+        self.motion.bind_callbacks(
+            on_notice=on_notice,
+            on_change=on_change,
+            on_position_complete=on_position_complete,
+        )
+        self.job.bind_callbacks(
+            on_notice=on_notice,
+            on_change=on_change,
+            on_ready_to_return=on_ready_to_return,
+        )
+
     @property
     def connected(self) -> bool:
         return self.connection_service.connected

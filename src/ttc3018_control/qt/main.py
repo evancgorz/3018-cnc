@@ -9,6 +9,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
+from ..application.controller import ApplicationController
 from .view_model import ControllerViewModel
 
 
@@ -27,7 +28,8 @@ def build_engine() -> tuple[QQmlApplicationEngine, ControllerViewModel]:
         raise RuntimeError("Create QGuiApplication before loading the TTC 3018 Qt shell")
     engine = QQmlApplicationEngine()
     engine.warnings.connect(lambda warnings: [print(warning.toString(), file=sys.stderr) for warning in warnings])
-    view_model = ControllerViewModel()
+    application = ApplicationController(Path.cwd())
+    view_model = ControllerViewModel(application)
     # The context property does not transfer Python ownership; retain it with
     # the engine for the full QML lifecycle.
     engine._ttc3018_view_model = view_model  # type: ignore[attr-defined]
