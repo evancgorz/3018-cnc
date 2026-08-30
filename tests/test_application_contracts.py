@@ -8,6 +8,7 @@ from ttc3018_control.application.events import EventLevel, NoticeEvent
 from ttc3018_control.application.connection_service import ConnectionService, WifiAttempt
 from ttc3018_control.application.generation_service import GenerationService
 from ttc3018_control.application.job_service import JobService
+from ttc3018_control.application.machine_session import MachineSession
 from ttc3018_control.application.state import ApplicationState, ConnectionMode, JobSnapshot
 from ttc3018_control.grbl import GrblStatus
 
@@ -83,7 +84,7 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     realtime: list[bytes] = []
     notices: list[str] = []
     ready: list[bool] = []
-    service = JobService(lines.append, realtime.append, notices.append, on_ready_to_return=lambda: ready.append(True))
+    service = JobService(MachineSession(), lines.append, realtime.append, notices.append, on_ready_to_return=lambda: ready.append(True))
 
     assert service.start(("G1 X1",)).accepted
     assert lines == [b"G1 X1\n"]

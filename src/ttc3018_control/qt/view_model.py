@@ -24,7 +24,7 @@ from ..grbl import (
     parse_setting,
     parse_status,
 )
-from ..machine_state import MachineProfile, check_job_bounds
+from ..machine_state import MachineProfile
 from ..serial_connection import SerialEvent, available_ports
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
@@ -391,16 +391,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def can_start_job(self) -> bool:
-        return bool(
-            self.program
-            and self.connected
-            and self.session.can_move
-            and self.session.envelope.trusted
-            and self.session.work_zero_confirmed
-            and not self._pending_manual_acks
-            and not self.motion.busy
-            and not self.job_active
-        )
+        return bool(self.connected and self.session.can_move and self.session.work_zero_confirmed and not self._pending_manual_acks and not self.motion.busy and not self.job_active and self.program and self.job_service.preflight()[0])
 
     @Property("QStringList", notify=ports_changed)
     def ports(self) -> list[str]:
@@ -992,7 +983,7 @@ class ControllerViewModel(QObject):
         if not self.can_start_job or self.program is None:
             self._set_notice("Job blocked — connect, reference, confirm XYZ work zero, and load a fitting job")
             return
-        fits, reason = self._job_fit(self.program)
+        fits, reason = self.job_service.preflight()
         if not fits:
             self._set_notice(f"Job blocked — {reason}")
             return
@@ -1232,19 +1223,6 @@ class ControllerViewModel(QObject):
 
     def _send_motion_line(self, command: bytes) -> None:
         self.connection_service.send_line(command)
-
-    def _job_fit(self, program: GCodeProgram) -> tuple[bool, str]:
-        if not self.session.envelope.trusted or self.session.envelope.reference is None:
-            return False, "Establish the manual machine reference first."
-        if self.session.work_offset is None:
-            return False, "A fresh GRBL work-offset report is required."
-        return check_job_bounds(
-            program.bounds.minimum,
-            program.bounds.maximum,
-            self.session.work_offset,
-            self.session.envelope.reference,
-            self.session.profile,
-        )
 
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:

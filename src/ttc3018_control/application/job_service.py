@@ -6,9 +6,10 @@ from typing import Callable, Sequence
 from pathlib import Path
 
 from ..gcode import GCodeProgram, load_gcode, parse_gcode
-from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME, make_jog
+from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME
 from ..job import JobStreamer
-from .machine_session import ActionOutcome
+from ..machine_state import check_job_bounds
+from .machine_session import ActionOutcome, MachineSession
 
 
 class JobService:
@@ -16,12 +17,14 @@ class JobService:
 
     def __init__(
         self,
+        session: MachineSession,
         send_line: Callable[[bytes], None],
         send_realtime: Callable[[bytes], None],
         on_notice: Callable[[str], None] | None = None,
         on_change: Callable[[], None] | None = None,
         on_ready_to_return: Callable[[], None] | None = None,
     ) -> None:
+        self.session = session
         self._send_line = send_line
         self._send_realtime = send_realtime
         self._on_notice = on_notice or (lambda _message: None)
@@ -55,6 +58,21 @@ class JobService:
         self.program = program
         self._changed()
         return program
+
+    def preflight(self) -> tuple[bool, str]:
+        if self.program is None:
+            return False, "Load a validated G-code program first."
+        if not self.session.envelope.trusted or self.session.envelope.reference is None:
+            return False, "Establish the manual machine reference first."
+        if self.session.work_offset is None:
+            return False, "A fresh GRBL work-offset report is required."
+        return check_job_bounds(
+            self.program.bounds.minimum,
+            self.program.bounds.maximum,
+            self.session.work_offset,
+            self.session.envelope.reference,
+            self.session.profile,
+        )
 
     @property
     def spindle_stop_pending(self) -> bool:

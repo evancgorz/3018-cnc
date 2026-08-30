@@ -53,6 +53,7 @@ class ApplicationController:
             on_position_complete=on_position_complete,
         )
         self.job = JobService(
+            self.session,
             self.connection_service.send_line,
             self.connection_service.send_realtime,
             on_notice=on_notice,
@@ -66,4 +67,3 @@ class ApplicationController:
 
     def close(self) -> None:
         self.connection_service.disconnect()
-
