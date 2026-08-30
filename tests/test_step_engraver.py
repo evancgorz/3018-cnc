@@ -438,6 +438,44 @@ def test_profile_operation_plan_keeps_inner_cutouts_before_outer_profile() -> No
     assert "; Operation outer-profile:" in job.gcode
 
 
+def test_nested_profile_cutout_simulates_islands_and_cutouts() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    model = StepPlanarModel(
+        Path("nested-profile.step"),
+        (square(0, 0, 40), square(5, 5, 30), square(10, 10, 20), square(15, 15, 10)),
+        5,
+        5,
+        (0, 0, 0, 40, 40, 5),
+        loop_parents=(None, 0, 1, 2),
+    )
+
+    job = generate_step_gcode(
+        model,
+        mode="Profile cutout",
+        stock_width=42,
+        stock_height=42,
+        tool_diameter=2,
+        stock_thickness=5,
+        tab_count=0,
+    )
+
+    assert job.stroke_count == 4
+    assert job.profile_simulation is not None
+    assert job.profile_simulation.passed
+    assert job.profile_simulation.gouged_area == pytest.approx(0)
+    assert [operation.feature_indices for operation in job.operations] == [(1, 3), (0, 2)]
+
+
 @pytest.mark.parametrize("removed_tool_diameter", [3.0, 3.175])
 def test_step_fixtures_distinguish_removed_and_extruded_circle_features(
     removed_tool_diameter: float,
