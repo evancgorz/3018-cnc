@@ -4,7 +4,6 @@ from pathlib import Path
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
-from PySide6.QtWidgets import QMessageBox
 
 from ..application.controller import ApplicationController
 from ..gcode import GCodeError
@@ -29,6 +28,7 @@ class ControllerViewModel(QObject):
 
     state_changed = Signal()
     toast_requested = Signal(str)
+    confirmation_requested = Signal(str, str, str)
     ports_changed = Signal()
     unreferenced_jog_requested = Signal()
     close_requested = Signal()
@@ -48,6 +48,9 @@ class ControllerViewModel(QObject):
         self._last_status_poll = 0.0
         self._unreferenced_jog_allowed = False
         self._preserve_references_on_next_reset = False
+        self._pending_confirmation: tuple[str, object] | None = None
+        self._confirmation_token = ""
+        self._confirmation_sequence = 0
         self._wifi_setup_commands: list[tuple[bytes, str]] = []
         self._wifi_setup_index = 0
         self._wifi_setup_waiting = False
@@ -112,6 +115,10 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def connection_text(self) -> str:
         return self._connection_text
+
+    @Property(str, notify=state_changed)
+    def confirmation_token(self) -> str:
+        return self._confirmation_token
 
     @Property(str, notify=state_changed)
     def grbl_state(self) -> str:
@@ -324,7 +331,7 @@ class ControllerViewModel(QObject):
             profile.validate()
             self.application.save_profile(profile)
         except (OSError, ValueError, TypeError) as exc:
-            QMessageBox.critical(None, "Machine profile rejected", str(exc))
+            self._set_notice(f"Machine profile rejected — {exc}")
             return
         self._set_notice("Machine profile saved; the current reference was retained")
         self._emit_state()
@@ -349,6 +356,61 @@ class ControllerViewModel(QObject):
         self._preserve_references_on_next_reset = False
         outcome = self.application.soft_reset()
         self._set_notice(outcome.message)
+
+    @Slot(str)
+    def confirm_pending_action(self, token: str) -> None:
+        pending = self._pending_confirmation
+        if pending is None or token != self._confirmation_token:
+            self._set_notice("Confirmation expired; review the current machine state and try again")
+            return
+        self._pending_confirmation = None
+        self._confirmation_token = ""
+        operation, payload = pending
+        if operation == "spindle_start":
+            outcome = self.application.start_spindle(int(payload))
+            self._set_notice(outcome.message)
+        elif operation == "job_start":
+            if not self.application.can_start_job:
+                self._set_notice("Job confirmation expired — the machine or loaded program is no longer ready")
+                return
+            fits, reason = self.application.preflight()
+            if not fits:
+                self._set_notice(f"Job blocked — {reason}")
+                return
+            outcome = self.application.start_job()
+            self._set_notice(outcome.message)
+        elif operation == "job_abort":
+            if not self.application.job_active:
+                self._set_notice("Abort ignored — no job is active")
+                return
+            try:
+                self._preserve_references_on_next_reset = True
+                self._send_realtime(REALTIME_HOLD)
+                self._send_realtime(REALTIME_SOFT_RESET)
+            except RuntimeError:
+                pass
+            self.application.abort_job()
+            self._set_notice("Job aborted — references retained")
+        elif operation == "wifi_setup":
+            commands = payload
+            if not isinstance(commands, list) or not self.connected or self.status is None or not self.status.can_jog:
+                self._set_notice("Wi-Fi setup confirmation expired — reconnect and wait for GRBL Idle")
+                return
+            self.application.invalidate_reference("Controller Wi-Fi reconfiguration")
+            self._wifi_setup_commands = commands
+            self._wifi_setup_index = 0
+            self._wifi_setup_waiting = False
+            self._set_notice("Configuring controller Wi-Fi; the controller will restart")
+            self._send_next_wifi_setup_command()
+        self._emit_state()
+
+    @Slot()
+    def reject_pending_action(self) -> None:
+        if self._pending_confirmation is not None:
+            self._pending_confirmation = None
+            self._confirmation_token = ""
+            self._set_notice("Action canceled")
+            self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def preview_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
@@ -462,7 +524,7 @@ class ControllerViewModel(QObject):
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
             )
         except (ValueError, TypeError) as exc:
-            QMessageBox.critical(None, "Text settings rejected", str(exc))
+            self._set_notice(f"Text settings rejected — {exc}")
             return
         result = engraving.result
         self._load_generated_program(engraving.gcode, engraving.filename, result.strokes, f"Text · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
@@ -478,7 +540,7 @@ class ControllerViewModel(QObject):
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
             )
         except (ValueError, TypeError) as exc:
-            QMessageBox.critical(None, "Plaque settings rejected", str(exc))
+            self._set_notice(f"Plaque settings rejected — {exc}")
             return
         result = plaque.result
         self._load_generated_program(plaque.gcode, plaque.filename, result.strokes, f"Plaque · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
@@ -486,7 +548,7 @@ class ControllerViewModel(QObject):
     @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
     def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         if self._step_model is None:
-            QMessageBox.critical(None, "STEP job unavailable", "Import a planar STEP model first")
+            self._set_notice("STEP job unavailable — import a planar STEP model first")
             return
         try:
             job = self.application.generate_step(
@@ -498,7 +560,7 @@ class ControllerViewModel(QObject):
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
             )
         except (ValueError, TypeError) as exc:
-            QMessageBox.critical(None, "STEP machining settings rejected", str(exc))
+            self._set_notice(f"STEP machining settings rejected — {exc}")
             return
         self._load_generated_program(
             job.gcode,
@@ -518,7 +580,7 @@ class ControllerViewModel(QObject):
         try:
             Path(path_text).write_text("\n".join(self.program.commands) + "\n", encoding="ascii")
         except OSError as exc:
-            QMessageBox.critical(None, "G-code not saved", str(exc))
+            self._set_notice(f"G-code not saved — {exc}")
             return
         self._set_notice(f"Saved validated G-code to {Path(path_text).name}")
 
@@ -565,21 +627,14 @@ class ControllerViewModel(QObject):
         try:
             commands = make_station_commands(ssid, password, self.wifi_port)
         except ValueError as exc:
-            QMessageBox.critical(None, "Invalid Wi-Fi settings", str(exc))
+            self._set_notice(f"Invalid Wi-Fi settings — {exc}")
             return
-        answer = QMessageBox.question(
-            None,
+        self._request_confirmation(
+            "wifi_setup",
+            commands,
             "Switch controller to station mode?",
             "The controller will restart and join the selected 2.4 GHz network. The current manual reference will be cleared.",
         )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        self.session.invalidate_reference("Controller Wi-Fi reconfiguration")
-        self._wifi_setup_commands = commands
-        self._wifi_setup_index = 0
-        self._wifi_setup_waiting = False
-        self._set_notice("Configuring controller Wi-Fi; the controller will restart")
-        self._send_next_wifi_setup_command()
 
     @Slot()
     def disconnect(self) -> None:
@@ -625,15 +680,12 @@ class ControllerViewModel(QObject):
         if not 1 <= rpm <= 24000:
             self._set_notice("Spindle RPM must be between 1 and 24000")
             return
-        answer = QMessageBox.question(
-            None,
+        self._request_confirmation(
+            "spindle_start",
+            rpm,
             "Start spindle?",
             f"Start the spindle clockwise at {rpm} RPM? Keep clear of the tool and be ready to cut physical power.",
         )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        outcome = self.application.start_spindle(rpm)
-        self._set_notice(outcome.message)
 
     @Slot()
     def stop_spindle(self) -> None:
@@ -710,7 +762,7 @@ class ControllerViewModel(QObject):
         try:
             program = self.application.load_program(Path(path_text))
         except (OSError, GCodeError) as exc:
-            QMessageBox.critical(None, "G-code rejected", str(exc))
+            self._set_notice(f"G-code rejected — {exc}")
             return
         bounds = program.bounds
         size = bounds.size
@@ -735,7 +787,7 @@ class ControllerViewModel(QObject):
         try:
             program = self.application.load_generated(gcode, filename)
         except GCodeError as exc:
-            QMessageBox.critical(None, "Generated G-code rejected", str(exc))
+            self._set_notice(f"Generated G-code rejected — {exc}")
             return
         self._preview_strokes = self._strokes_for_qml(strokes)
         self._preview_summary = summary
@@ -753,15 +805,12 @@ class ControllerViewModel(QObject):
         if not fits:
             self._set_notice(f"Job blocked — {reason}")
             return
-        answer = QMessageBox.question(None, "Start engraving job?", f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.")
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        outcome = self.application.start_job()
-        if not outcome.accepted:
-            self._set_notice(outcome.message)
-            return
-        self._set_notice(outcome.message)
-        self._emit_state()
+        self._request_confirmation(
+            "job_start",
+            None,
+            "Start engraving job?",
+            f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.",
+        )
 
     @Slot()
     def pause_job(self) -> None:
@@ -781,18 +830,12 @@ class ControllerViewModel(QObject):
     def abort_job(self) -> None:
         if not self.job_active:
             return
-        answer = QMessageBox.question(None, "Abort engraving?", "Feed-hold and reset GRBL? The job cannot resume. The current references will be retained while the machine remains connected and powered.")
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            self._preserve_references_on_next_reset = True
-            self._send_realtime(REALTIME_HOLD)
-            self._send_realtime(REALTIME_SOFT_RESET)
-        except RuntimeError:
-            pass
-        self.application.abort_job()
-        self._set_notice("Job aborted — references retained")
-        self._emit_state()
+        self._request_confirmation(
+            "job_abort",
+            None,
+            "Abort engraving?",
+            "Feed-hold and reset GRBL? The job cannot resume. The current references will be retained while the machine remains connected and powered.",
+        )
 
     @Slot()
     def cancel_jog(self) -> None:
@@ -992,6 +1035,13 @@ class ControllerViewModel(QObject):
 
     def _set_notice(self, message: str) -> None:
         self.toast_requested.emit(message)
+
+    def _request_confirmation(self, operation: str, payload: object, title: str, message: str) -> None:
+        self._confirmation_sequence += 1
+        self._confirmation_token = f"{operation}:{self._confirmation_sequence}"
+        self._pending_confirmation = (operation, payload)
+        self.confirmation_requested.emit(self._confirmation_token, title, message)
+        self._emit_state()
 
     def _append_log(self, event) -> None:
         line = f"{event.timestamp:%H:%M:%S}  {event.kind.upper():<11} {event.text}"

@@ -45,6 +45,12 @@ ApplicationWindow {
             window.toastText = message
             toastTimer.restart()
         }
+        function onConfirmation_requested(token, title, message) {
+            actionConfirmDialog.token = token
+            actionConfirmDialog.title = title
+            actionConfirmDialog.message = message
+            actionConfirmDialog.open()
+        }
         function onUnreferenced_jog_requested() { unreferencedJogDialog.open() }
         function onClose_requested() { window.exitBypass = true; window.close() }
     }
@@ -101,6 +107,33 @@ ApplicationWindow {
         id: toastTimer
         interval: 4200
         onTriggered: window.toastText = ""
+    }
+
+    Dialog {
+        id: actionConfirmDialog
+        property string token: ""
+        property string message: ""
+        modal: true
+        title: "Confirm action"
+        width: 560
+        height: 280
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 14
+            Label { text: actionConfirmDialog.message; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: { appViewModel.reject_pending_action(); actionConfirmDialog.close() } }
+                PrimaryButton { text: "Confirm"; onClicked: { appViewModel.confirm_pending_action(actionConfirmDialog.token); actionConfirmDialog.close() } }
+            }
+        }
     }
 
     Dialog {
