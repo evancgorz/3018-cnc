@@ -7,7 +7,7 @@ from typing import Any
 
 from ..plaque_engraver import generate_plaque_gcode
 from ..step_engraver import generate_step_gcode
-from ..step_geometry import StepPlanarModel
+from ..step_geometry import StepPlanarModel, load_step_isolated
 from ..text_engraver import generate_text_gcode
 
 
@@ -40,3 +40,6 @@ class GenerationService:
     def step(self, model: StepPlanarModel, *args, **kwargs) -> GeneratedArtifact:
         return GeneratedArtifact("STEP", "generated-step.gcode", generate_step_gcode(model, *args, **kwargs))
 
+    def import_step(self, path, plane: str | None = None) -> StepPlanarModel:
+        """Keep native STEP loading behind the application generation boundary."""
+        return load_step_isolated(path, plane)

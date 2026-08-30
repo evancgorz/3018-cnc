@@ -241,6 +241,9 @@ class ApplicationController:
     def generate_step(self, *args, **kwargs):
         return self.generation_service.step(*args, **kwargs)
 
+    def import_step(self, path, plane: str | None = None):
+        return self.generation_service.import_step(path, plane)
+
     def save_wifi_settings(self, host: str, port: int) -> None:
         self.settings = ConnectionSettings(host, port, "Wi-Fi TCP")
         self.connection_store.save(self.settings)

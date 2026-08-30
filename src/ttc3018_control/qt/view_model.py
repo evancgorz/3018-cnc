@@ -18,7 +18,7 @@ from ..grbl import (
 )
 from ..machine_state import MachineProfile
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
-from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel, load_step_isolated
+from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
 from ..text_engraver import FONT_NAMES
 from ..wifi_setup import make_station_commands
 
@@ -463,7 +463,7 @@ class ControllerViewModel(QObject):
             self._set_notice("STEP import rejected — choose a local STEP file")
             return
         try:
-            model = load_step_isolated(Path(path_text))
+            model = self.application.import_step(Path(path_text))
         except StepImportError as exc:
             self._set_notice(f"STEP import rejected — {exc}")
             return
@@ -480,7 +480,7 @@ class ControllerViewModel(QObject):
         if self._step_path is None:
             return
         try:
-            model = load_step_isolated(self._step_path, plane)
+            model = self.application.import_step(self._step_path, plane)
         except StepImportError as exc:
             self._set_notice(f"STEP face unavailable — {exc}")
             return
