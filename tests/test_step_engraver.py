@@ -125,6 +125,9 @@ def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:
 
     assert job.stroke_count == 1
     assert len(job.strokes[0]) > 20
+    assert job.cutting_distance > 500
+    assert job.rapid_xy_distance < 100
+    assert job.retract_count == 1
     program = parse_gcode(job.gcode)
     assert program.bounds.minimum.z == pytest.approx(-1)
 
