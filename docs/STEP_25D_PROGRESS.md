@@ -31,6 +31,8 @@ streaming pipeline.
   deepest recess depth to shallower recesses.
 - [x] Expose exact cut distance, rapid XY distance, and retract count for each
   generated STEP job.
+- [x] Add a deterministic geometry-only verification gate for clearing-path
+  containment and tool-reachable planar coverage before generated G-code loads.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Preview the generated centerline toolpath before running.
