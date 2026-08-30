@@ -181,6 +181,9 @@ streaming pipeline.
 - [x] Schedule detected-feature paths from the validated dependency DAG instead
   of sorting solely by depth; preserve nearest-path optimization within each
   operation while carrying the true endpoint across operation groups.
+- [x] Reject crossing overlapping planar height fields while resolving
+  consistently lower overlapping faces as occluded surfaces for Wedge-style
+  machining.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -233,3 +236,4 @@ streaming pipeline.
 | 2026-08-30 | `8d77881` | Detected planar-walled rectangular/slot recesses with blind/through semantics. |
 | 2026-08-30 | `508be59` | Added physical stock bounds and transformed work-zero display to the Qt preview. |
 | 2026-08-30 | `d910cbe` | Ordered detected-feature paths by validated operation dependencies. |
+| 2026-08-30 | `20d6ec1` | Added fail-closed detection for ambiguous overlapping STEP surface heights. |

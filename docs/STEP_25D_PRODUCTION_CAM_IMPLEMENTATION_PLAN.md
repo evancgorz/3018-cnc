@@ -204,6 +204,10 @@ features at different depths and several disconnected components.
 - Resolve the topmost accessible height at each XY position.
 - Detect discontinuities/vertical cliffs and split paths instead of making a
   diagonal cutting move between unrelated heights.
+- Treat consistently lower overlapping faces as occluded stock surfaces and
+  select the topmost height field. Reject overlaps where two height fields
+  cross within the same XY area, because no single-valued machining surface
+  can represent them safely.
 - Use raster or waterline roughing followed by parallel-plane finishing.
 - Reject overlapping patches that create a multi-valued surface or inaccessible
   underside.
