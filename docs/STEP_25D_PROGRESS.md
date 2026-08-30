@@ -36,6 +36,8 @@ streaming pipeline.
   weighted cut/rapid/retract cost and select the lower-cost valid strategy.
 - [x] Preserve individual detected-feature depth targets and avoid applying the
   deepest recess depth to shallower recesses.
+- [x] Execute detected feature groups deepest-first while keeping nearest-path
+  optimization scoped within each depth group.
 - [x] Expose exact cut distance, rapid XY distance, and retract count for each
   generated STEP job.
 - [x] Add a deterministic geometry-only verification gate for clearing-path
