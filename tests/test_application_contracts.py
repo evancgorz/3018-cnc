@@ -444,6 +444,29 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     assert any("spindle stopped" in notice for notice in notices)
 
 
+def test_job_service_uses_dlc32_reported_rx_capacity() -> None:
+    lines: list[bytes] = []
+    service = JobService(MachineSession(), lines.append, lambda _command: None)
+    service.observe_status(GrblStatus("Idle", fields={"Bf": "15,1200"}))
+
+    assert service.start(tuple("G1 X1" for _ in range(200))).accepted
+
+    assert service.streamer.buffer_capacity == 1199
+    assert len(lines) == 199
+    assert service.streamer.buffered_bytes == 1194
+
+
+def test_job_service_keeps_standard_grbl_capacity_and_resets_detection() -> None:
+    service = JobService(MachineSession(), lambda _command: None, lambda _command: None)
+    service.observe_status(GrblStatus("Idle", fields={"Bf": "15,128"}))
+    assert service.start(("G1 X1",)).accepted
+    assert service.streamer.buffer_capacity == 127
+
+    service.reset()
+    service.observe_status(GrblStatus("Idle", fields={"Bf": "invalid"}))
+    assert service.streamer.buffer_capacity == 127
+
+
 def test_generation_service_returns_stable_artifact_metadata() -> None:
     artifact = GenerationService().text("A", font="Simple", text_height=8, depth=-0.3)
 

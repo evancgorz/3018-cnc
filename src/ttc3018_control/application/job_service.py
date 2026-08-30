@@ -15,6 +15,9 @@ from .machine_session import ActionOutcome, MachineSession
 class JobService:
     """Own acknowledgement-driven streaming and post-job spindle sequencing."""
 
+    DEFAULT_RX_CAPACITY = 127
+    MAX_REPORTED_RX_CAPACITY = 4096
+
     def __init__(
         self,
         session: MachineSession,
@@ -34,6 +37,7 @@ class JobService:
         self.program: GCodeProgram | None = None
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
+        self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
 
     @property
     def state(self) -> str:
@@ -88,6 +92,7 @@ class JobService:
                 return ActionOutcome(False, "Job not started — no validated G-code is loaded")
             commands = self.program.commands
         try:
+            self.streamer.buffer_capacity = self._reported_rx_capacity
             self.streamer.start(commands)
         except (RuntimeError, ValueError) as exc:
             return ActionOutcome(False, f"Job not started — {exc}")
@@ -150,6 +155,9 @@ class JobService:
         return True
 
     def observe_status(self, status: GrblStatus) -> None:
+        reported_capacity = self._rx_capacity_from_status(status)
+        if reported_capacity is not None:
+            self._reported_rx_capacity = max(self._reported_rx_capacity, reported_capacity)
         if self._return_waiting_for_idle and status.can_jog:
             self._return_waiting_for_idle = False
             self._on_ready_to_return()
@@ -160,7 +168,33 @@ class JobService:
             self.streamer.abort("Controller reset")
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
+        self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
+        self.streamer.buffer_capacity = self.DEFAULT_RX_CAPACITY
         self._changed()
+
+    @classmethod
+    def _rx_capacity_from_status(cls, status: GrblStatus) -> int | None:
+        """Return the usable RX window advertised by GRBL's ``Bf`` field.
+
+        ``Bf`` contains planner slots and currently free serial RX bytes. Idle
+        reports expose the controller's full receive window. Keep one byte
+        unused for ring-buffer implementations and reject implausible values so
+        malformed status text can never make streaming unbounded.
+        """
+        value = status.fields.get("Bf")
+        if value is None:
+            return None
+        parts = value.split(",", 1)
+        if len(parts) != 2:
+            return None
+        try:
+            free_bytes = int(parts[1])
+        except ValueError:
+            return None
+        usable = free_bytes - 1
+        if usable < cls.DEFAULT_RX_CAPACITY or usable > cls.MAX_REPORTED_RX_CAPACITY:
+            return None
+        return usable
 
     def _changed(self) -> None:
         self._on_change()
