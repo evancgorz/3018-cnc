@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-import queue
-import threading
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ..application.machine_session import MachineSession
+from ..application.connection_service import ConnectionService
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError, GCodeProgram, load_gcode, parse_gcode
@@ -70,7 +69,8 @@ class ControllerViewModel(QObject):
             self.commissioning_profile = CommissioningProfile()
         self._commissioning_tracker = InputTestTracker()
         self._commissioning_settings: dict[int, float] = {}
-        self.connection: GrblConnection | TcpGrblConnection | None = None
+        self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
+        self.connection = None
         self.status: GrblStatus | None = None
         self.job = JobStreamer(self._send_job_line)
         self.program: GCodeProgram | None = None
@@ -87,8 +87,6 @@ class ControllerViewModel(QObject):
         self._live_jog_stop_target: float | None = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
-        self._wifi_connecting = False
-        self._wifi_results: queue.Queue[tuple[TcpGrblConnection | None, str, int]] = queue.Queue()
         self._last_status_poll = 0.0
         self._unreferenced_jog_allowed = False
         self._preserve_references_on_next_reset = False
@@ -124,6 +122,15 @@ class ControllerViewModel(QObject):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(50)
+
+    @property
+    def connection(self):
+        """Compatibility view for tests and the temporary Qt adapter."""
+        return self.connection_service.transport
+
+    @connection.setter
+    def connection(self, value) -> None:
+        self.connection_service.transport = value
 
     @Property(str, notify=state_changed)
     def connection_text(self) -> str:
@@ -299,7 +306,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
-        return self.connection is not None and self.connection.connected
+        return self.connection_service.connected
 
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
@@ -727,18 +734,13 @@ class ControllerViewModel(QObject):
         if self.connected:
             self.disconnect()
             return
-        try:
-            port = port_label.split(" ", 1)[0].strip()
-            if not port:
-                raise ValueError("Select a serial port first")
-            connection = GrblConnection()
-            connection.connect(port)
-        except (OSError, ValueError, RuntimeError) as exc:
-            self._set_notice(f"Connection failed: {exc}")
+        port = port_label.split(" ", 1)[0].strip()
+        outcome = self.connection_service.connect_usb(port)
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
             return
-        self.connection = connection
-        self.transport = "USB serial"
-        self._connection_text = f"Connected to {port}; waiting for GRBL status"
+        self.transport = outcome.mode.value if outcome.mode else "USB serial"
+        self._connection_text = outcome.message
         self._set_notice(self._connection_text)
         self._emit_state()
 
@@ -747,30 +749,13 @@ class ControllerViewModel(QObject):
         if self.connected:
             self.disconnect()
             return
-        if self._wifi_connecting:
-            self._set_notice("Wi-Fi discovery is already running")
+        outcome = self.connection_service.begin_wifi(host, port)
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
             return
-        self._wifi_connecting = True
-        self.transport = "Wi-Fi TCP"
-        self._connection_text = f"Trying {host or 'saved host'}:{port}; discovering GRBL if needed…"
+        self.transport = outcome.mode.value if outcome.mode else "Wi-Fi TCP"
+        self._connection_text = outcome.message
         self._emit_state()
-
-        def worker() -> None:
-            last_error = "No GRBL controller answered on the local network"
-            candidates = [host.strip()] if host.strip() else []
-            candidates.extend(discover_grbl_hosts(port))
-            for candidate in dict.fromkeys(candidates):
-                connection = TcpGrblConnection()
-                try:
-                    connection.connect(candidate, port, timeout=1.2)
-                except (OSError, ValueError, RuntimeError) as exc:
-                    last_error = str(exc)
-                    continue
-                self._wifi_results.put((connection, candidate, port))
-                return
-            self._wifi_results.put((None, last_error, port))
-
-        threading.Thread(target=worker, daemon=True).start()
 
     @Slot(str, str)
     def configure_wifi(self, ssid: str, password: str) -> None:
@@ -801,9 +786,8 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def disconnect(self) -> None:
-        if self.connection is not None:
-            self.connection.disconnect()
-        self._disconnected("Disconnected; physical position cannot be guaranteed")
+        outcome = self.connection_service.disconnect()
+        self._disconnected(outcome.message)
 
     @Slot(str, float)
     def jog(self, axis: str, distance: float) -> None:
@@ -1139,9 +1123,10 @@ class ControllerViewModel(QObject):
         self._poll_wifi_result()
         if self.connection is None:
             return
+        events = self.connection_service.events()
         try:
-            while not self.connection.events.empty():
-                self._handle_event(self.connection.events.get_nowait())
+            while not events.empty():
+                self._handle_event(events.get_nowait())
             now = time.monotonic()
             if self.connected and now - self._last_status_poll >= 0.5:
                 self._send_realtime(REALTIME_STATUS)
@@ -1150,24 +1135,22 @@ class ControllerViewModel(QObject):
             self._disconnected(str(exc))
 
     def _poll_wifi_result(self) -> None:
-        try:
-            connection, result, port = self._wifi_results.get_nowait()
-        except queue.Empty:
+        outcome = self.connection_service.poll_wifi()
+        if outcome is None:
             return
-        self._wifi_connecting = False
-        if connection is None:
-            self._connection_text = f"Wi-Fi connection failed: {result}"
+        if not outcome.accepted:
+            self._connection_text = outcome.message
             self._set_notice(self._connection_text)
             self._emit_state()
             return
-        self.connection = connection
-        self.wifi_host = result
-        self.wifi_port = port
+        self.connection = self.connection_service.transport
+        self.wifi_host = outcome.host
+        self.wifi_port = outcome.port or self.wifi_port
         try:
-            self.connection_store.save(ConnectionSettings(result, port, "Wi-Fi TCP"))
+            self.connection_store.save(ConnectionSettings(self.wifi_host, self.wifi_port, "Wi-Fi TCP"))
         except (OSError, ValueError):
             pass
-        self._connection_text = f"Connected to {result}:{port} over Wi-Fi"
+        self._connection_text = outcome.message
         self._set_notice(self._connection_text)
         self._emit_state()
 
