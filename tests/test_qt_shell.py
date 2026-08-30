@@ -102,6 +102,7 @@ def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
 
     view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Center", 0)
     assert view_model.preview_strokes
+    assert view_model.preview_stock_width == 0
 
     view_model.create_plaque(
         "Hello",
@@ -140,6 +141,8 @@ def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
     assert view_model.preview_strokes
     assert "Pocket" in view_model.preview_summary
     assert view_model.step_preview_valid
+    assert view_model.preview_stock_width == 50
+    assert view_model.preview_stock_height == 35
     assert view_model.step_operations == [
         {
             "operationId": "pocket",
@@ -165,6 +168,17 @@ def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
     view_model.preview_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -21, 2, 5, 0.2, 4, 4, 0.8, 3, 300, 100, 12000)
     assert not view_model.step_preview_valid
     assert view_model.step_operations == []
+
+
+def test_step_preview_draws_physical_stock_and_work_zero_in_canvas() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "preview_stock_width" in qml
+    assert "preview_stock_height" in qml
+    assert "ctx.strokeRect(offsetX, offsetY - stockHeight * scale" in qml
+    assert "ctx.arc(workZeroX, workZeroY" in qml
 
 
 def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:

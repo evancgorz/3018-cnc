@@ -1030,9 +1030,16 @@ ApplicationWindow {
                 for (let x = 0; x <= width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke() }
                 for (let y = 0; y <= height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke() }
                 const inset = Math.min(width, height) * 0.13
-                ctx.strokeStyle = "#4B5867"
-                ctx.lineWidth = 2
-                ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2)
+                let workZeroX = inset
+                let workZeroY = height - inset
+                const stockWidth = appViewModel ? Number(appViewModel.preview_stock_width || 0) : 0
+                const stockHeight = appViewModel ? Number(appViewModel.preview_stock_height || 0) : 0
+                const hasStock = stockWidth > 0 && stockHeight > 0
+                if (!hasStock) {
+                    ctx.strokeStyle = "#4B5867"
+                    ctx.lineWidth = 2
+                    ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2)
+                }
                 if ((showJob || modeLabel === "PREPARE") && (!appViewModel || appViewModel.preview_strokes.length === 0)) {
                     const l = inset + (width - inset * 2) * 0.20
                     const t = inset + (height - inset * 2) * 0.25
@@ -1058,10 +1065,21 @@ ApplicationWindow {
                     for (const stroke of allStrokes) for (const point of stroke) {
                         minX = Math.min(minX, point[0]); minY = Math.min(minY, point[1]); maxX = Math.max(maxX, point[0]); maxY = Math.max(maxY, point[1])
                     }
+                    if (hasStock) {
+                        minX = Math.min(minX, 0); minY = Math.min(minY, 0)
+                        maxX = Math.max(maxX, stockWidth); maxY = Math.max(maxY, stockHeight)
+                    }
                     const spanX = Math.max(0.001, maxX - minX), spanY = Math.max(0.001, maxY - minY)
                     const scale = Math.min((width - 2 * inset) / spanX, (height - 2 * inset) / spanY)
                     const offsetX = (width - spanX * scale) / 2 - minX * scale
                     const offsetY = height - inset + minY * scale
+                    workZeroX = offsetX
+                    workZeroY = offsetY
+                    if (hasStock) {
+                        ctx.setLineDash([6, 4]); ctx.strokeStyle = "#657282"; ctx.lineWidth = 1.8
+                        ctx.strokeRect(offsetX, offsetY - stockHeight * scale, stockWidth * scale, stockHeight * scale)
+                        ctx.setLineDash([])
+                    }
                     ctx.setLineDash([7, 5]); ctx.strokeStyle = "#F2B84B"; ctx.lineWidth = 1.8
                     for (const stroke of modelStrokes) {
                         if (!stroke.length) continue
@@ -1079,7 +1097,7 @@ ApplicationWindow {
                     }
                 }
                 ctx.fillStyle = "#40C4D9"
-                ctx.beginPath(); ctx.arc(inset, height - inset, 6, 0, Math.PI * 2); ctx.fill()
+                ctx.beginPath(); ctx.arc(workZeroX, workZeroY, 6, 0, Math.PI * 2); ctx.fill()
             }
         }
         Connections { target: appViewModel; function onState_changed() { canvas.requestPaint() } }
@@ -1094,7 +1112,8 @@ ApplicationWindow {
         }
         Row { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 14; spacing: 15
             Label { text: "● Work zero"; color: window.palette.success; font.pixelSize: 11 }
-            Label { text: "— Travel envelope"; color: window.palette.muted; font.pixelSize: 11 }
+            Label { visible: !appViewModel || appViewModel.preview_stock_width <= 0; text: "— Travel envelope"; color: window.palette.muted; font.pixelSize: 11 }
+            Label { visible: appViewModel && appViewModel.preview_stock_width > 0; text: "— Physical stock"; color: window.palette.muted; font.pixelSize: 11 }
             Label { text: "— Cutting path"; color: window.palette.accent; font.pixelSize: 11 }
         }
     }

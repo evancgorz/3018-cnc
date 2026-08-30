@@ -62,6 +62,8 @@ class ControllerViewModel(QObject):
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
         self._preview_strokes: list[list[list[float]]] = []
         self._preview_model_strokes: list[list[list[float]]] = []
+        self._preview_stock_width = 0.0
+        self._preview_stock_height = 0.0
         self._preview_summary = ""
         self._step_operations: list[dict[str, object]] = []
         self._step_preview_valid = False
@@ -233,6 +235,14 @@ class ControllerViewModel(QObject):
     @Property("QVariantList", notify=state_changed)
     def preview_model_strokes(self) -> list[list[list[float]]]:
         return self._preview_model_strokes
+
+    @Property(float, notify=state_changed)
+    def preview_stock_width(self) -> float:
+        return self._preview_stock_width
+
+    @Property(float, notify=state_changed)
+    def preview_stock_height(self) -> float:
+        return self._preview_stock_height
 
     @Property("QVariantList", notify=state_changed)
     def step_operations(self) -> list[dict[str, object]]:
@@ -442,10 +452,14 @@ class ControllerViewModel(QObject):
             )
         except (ValueError, TypeError):
             self._preview_strokes = []
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = "Enter valid text settings to preview the centerline toolpath."
         else:
             result = engraving.result
             self._preview_strokes = self._strokes_for_qml(result.strokes)
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes"
         self._emit_state()
 
@@ -461,10 +475,14 @@ class ControllerViewModel(QObject):
             )
         except (ValueError, TypeError):
             self._preview_strokes = []
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = "Enter valid plaque settings to preview the centerline toolpath."
         else:
             result = plaque.result
             self._preview_strokes = self._strokes_for_qml(result.strokes)
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes · {border}"
         self._emit_state()
 
@@ -510,6 +528,8 @@ class ControllerViewModel(QObject):
         self._step_import_status = ""
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_model_strokes = []
+        self._preview_stock_width = 0.0
+        self._preview_stock_height = 0.0
         self._preview_summary = self.step_model_summary
         self._step_operations = []
         self._step_preview_valid = False
@@ -529,6 +549,8 @@ class ControllerViewModel(QObject):
         self._step_model = model
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_model_strokes = []
+        self._preview_stock_width = 0.0
+        self._preview_stock_height = 0.0
         self._preview_summary = self.step_model_summary
         self._step_operations = []
         self._step_preview_valid = False
@@ -540,6 +562,8 @@ class ControllerViewModel(QObject):
     def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         if self._step_model is None:
             self._preview_strokes = []
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = "Import a planar STEP model first."
             self._step_operations = []
             self._step_preview_valid = False
@@ -559,6 +583,8 @@ class ControllerViewModel(QObject):
         except (ValueError, TypeError) as exc:
             self._preview_strokes = []
             self._preview_model_strokes = []
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
             self._step_operations = []
             self._step_preview_valid = False
@@ -566,6 +592,8 @@ class ControllerViewModel(QObject):
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
             self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
+            self._preview_stock_width = job.result.stock_width
+            self._preview_stock_height = job.result.stock_height
             self._preview_summary = self._step_job_summary(job.result)
             self._step_operations = self._operations_for_qml(job.result)
             self._step_preview_valid = True
@@ -629,6 +657,8 @@ class ControllerViewModel(QObject):
             job.filename,
             job.strokes,
             self._step_job_summary(job.result),
+            job.result.stock_width,
+            job.result.stock_height,
         )
         self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
         self._emit_state()
@@ -831,6 +861,8 @@ class ControllerViewModel(QObject):
         size = bounds.size
         self._preview_strokes = self._strokes_for_program(program)
         self._preview_model_strokes = []
+        self._preview_stock_width = 0.0
+        self._preview_stock_height = 0.0
         self._preview_summary = f"{len(program.commands)} commands · {size.x:.1f} × {size.y:.1f} mm"
         self._job_file_text = program.path.name
         self._job_summary_text = (
@@ -847,6 +879,8 @@ class ControllerViewModel(QObject):
         filename: str,
         strokes: tuple[tuple[tuple[float, float], ...], ...],
         summary: str,
+        stock_width: float = 0.0,
+        stock_height: float = 0.0,
     ) -> None:
         try:
             program = self.application.load_generated(gcode, filename)
@@ -855,6 +889,8 @@ class ControllerViewModel(QObject):
             return
         self._preview_strokes = self._strokes_for_qml(strokes)
         self._preview_model_strokes = []
+        self._preview_stock_width = stock_width
+        self._preview_stock_height = stock_height
         self._preview_summary = summary
         self._job_file_text = filename
         self._job_summary_text = summary
