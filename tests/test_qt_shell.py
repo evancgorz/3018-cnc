@@ -40,6 +40,20 @@ def test_qt_shell_loads(qapp) -> None:
     assert view_model.connection_text == "Disconnected"
 
 
+def test_reference_controls_follow_operator_workflow_order() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+
+    establish = qml.index('text: "Establish reference"')
+    go_to = qml.index('text: "Go to reference"')
+    safe_z = qml.index('text: "Retract to safe Z"')
+    work_zero = qml.index('text: "Return to work zero"')
+    zero_x = qml.index('text: "Zero X"')
+
+    assert establish < go_to < safe_z < work_zero < zero_x
+
+
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
     _engine, view_model = build_engine()
     path = tmp_path / "part.step"

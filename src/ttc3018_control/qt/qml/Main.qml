@@ -909,10 +909,10 @@ ApplicationWindow {
                         }
                         SecondaryButton { Layout.fillWidth: true; text: "Move safely"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.move_to(Number(targetX.text), Number(targetY.text), Number(targetZ.text), Number(jogFeedField.text)) }
                         Divider {}
+                        PrimaryButton { Layout.fillWidth: true; text: "Establish reference"; enabled: appViewModel && appViewModel.connected && !appViewModel.job_active; onClicked: appViewModel.establish_reference() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Go to reference"; enabled: appViewModel && appViewModel.can_return_to_reference; onClicked: appViewModel.return_to_reference() }
                         SecondaryButton { Layout.fillWidth: true; text: "Retract to safe Z"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.retract_safe_z() }
                         SecondaryButton { Layout.fillWidth: true; text: "Return to work zero"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.return_to_work_zero() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Return to virtual reference"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.return_to_reference() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Establish reference here"; enabled: appViewModel && appViewModel.connected && !appViewModel.job_active; onClicked: appViewModel.establish_reference() }
                         GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 6
                             SecondaryButton { Layout.fillWidth: true; text: "Zero X"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("X") }
                             SecondaryButton { Layout.fillWidth: true; text: "Zero Y"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("Y") }
