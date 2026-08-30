@@ -220,6 +220,11 @@ class ApplicationController:
         return self.job.preflight()
 
     def start_job(self) -> ActionOutcome:
+        if not self.can_start_job:
+            fits, reason = self.preflight()
+            if not fits:
+                return ActionOutcome(False, f"Job not started — {reason}")
+            return ActionOutcome(False, "Job not started — machine is not ready")
         return self.job.start()
 
     def pause_job(self) -> ActionOutcome:
@@ -237,6 +242,17 @@ class ApplicationController:
         self.job.abort(reason)
         self.motion.reset()
         self.manual_pending_acks = 0
+
+    def _motion_operation_allowed(self) -> ActionOutcome:
+        if not self.connected:
+            return ActionOutcome(False, "Motion command ignored — not connected")
+        if self.job_active:
+            return ActionOutcome(False, "Motion command ignored — a job is active")
+        if self.manual_pending_acks:
+            return ActionOutcome(False, "Motion command ignored — waiting for GRBL acknowledgement")
+        if self.motion_busy:
+            return ActionOutcome(False, "Motion command ignored — another motion operation is active")
+        return ActionOutcome(True, "Motion operation accepted")
 
     def request_status(self) -> None:
         self.send_realtime(REALTIME_STATUS)
@@ -282,9 +298,15 @@ class ApplicationController:
         self.session.invalidate_reference(reason)
 
     def jog(self, axis: str, distance: float, feed: float = 500.0) -> ActionOutcome:
+        blocked = self._motion_operation_allowed()
+        if not blocked.accepted:
+            return blocked
         return self.motion.jog(axis, distance, feed)
 
     def start_live_jog(self, axis: str, direction: float, allow_unreferenced: bool, feed: float = 500.0) -> ActionOutcome:
+        blocked = self._motion_operation_allowed()
+        if not blocked.accepted:
+            return blocked
         return self.motion.start_live_jog(axis, direction, allow_unreferenced, feed)
 
     def stop_live_jog(self) -> ActionOutcome:
@@ -295,15 +317,30 @@ class ApplicationController:
         self.send_realtime(REALTIME_JOG_CANCEL)
 
     def move_to(self, target: Position, feed: float = 500.0) -> ActionOutcome:
+        blocked = self._motion_operation_allowed()
+        if not blocked.accepted:
+            return blocked
         return self.motion.move_to(target, feed)
 
     def return_to_reference(self, feed: float = 500.0) -> ActionOutcome:
+        blocked = self._motion_operation_allowed()
+        if not blocked.accepted:
+            return blocked
         return self.motion.return_to_reference(feed)
 
     def return_to_work_zero(self, feed: float = 500.0) -> ActionOutcome:
+        blocked = self._motion_operation_allowed()
+        if not blocked.accepted:
+            return blocked
         return self.motion.return_to_work_zero(feed)
 
     def set_work_zero(self, axes: str) -> ActionOutcome:
+        if not self.connected:
+            return ActionOutcome(False, "Work-zero command ignored — not connected")
+        if self.job_active:
+            return ActionOutcome(False, "Work-zero command ignored — a job is active")
+        if self.motion_busy or self.manual_pending_acks:
+            return ActionOutcome(False, "Work-zero command ignored — another machine operation is active")
         if not self.session.can_move:
             return ActionOutcome(False, "Work-zero command ignored — GRBL is not Idle")
         outcome = self.session.request_work_zero_confirmation(axes)

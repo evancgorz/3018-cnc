@@ -47,7 +47,9 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
 
     controller = ApplicationController(tmp_path)
     controller.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
-    controller.set_transport_for_testing(_Transport())
+    transport = _Transport()
+    transport.connected = True
+    controller.set_transport_for_testing(transport)
     controller.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
 
     assert controller.establish_reference().accepted
@@ -56,6 +58,25 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
 
     controller.handle_transport_response("Grbl 1.1h")
     assert not controller.reference_trusted
+
+
+def test_controller_rejects_overlapping_motion_and_job_start_without_preflight(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    controller.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
+    transport = _Transport()
+    transport.connected = True
+    controller.set_transport_for_testing(transport)
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
+    assert controller.establish_reference().accepted
+
+    assert controller.jog("X", 1).accepted
+    overlapping = controller.jog("X", 1)
+    assert not overlapping.accepted
+    assert "another motion" in overlapping.message
+
+    assert not controller.start_job().accepted
 
 
 def test_events_are_typed_data() -> None:
