@@ -2,8 +2,7 @@
 
 A small, safety-focused Qt Quick desktop controller for the Two Trees TTC 3018
 and its MKS DLC32 GRBL-compatible motion controller. The production launcher is
-the PySide6/Qt Quick interface; the former Tk implementation remains in the
-source tree only as a reference during the migration.
+the PySide6/Qt Quick interface.
 
 ## Current capabilities
 
@@ -237,8 +236,9 @@ run.bat
 
 The batch launcher automatically runs setup if the project virtual environment
 is missing and keeps its console open when startup fails so the error remains
-visible. There is one supported application launcher; `setup.ps1` is only for
-installing or repairing the environment and desktop shortcut.
+visible. There is one supported desktop application launcher; `setup.ps1` is
+only for installing or repairing the environment and desktop shortcut. The
+Python package also exposes `ttc3018-control` for managed environments.
 
 Select a detected serial port, connect, and wait for `Idle` before jogging. The
 same centered connection dialog also supports Wi-Fi TCP when USB is removed.

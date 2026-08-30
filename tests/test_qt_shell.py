@@ -36,7 +36,7 @@ def test_qt_shell_loads(qapp) -> None:
     engine, view_model = build_engine()
     roots = engine.rootObjects()
     assert len(roots) == 1
-    assert roots[0].property("title") == "TTC 3018 Control — Qt Preview"
+    assert roots[0].property("title") == "TTC 3018 Control"
     assert view_model.connection_text == "Disconnected"
 
 

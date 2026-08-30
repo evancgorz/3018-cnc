@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 1180
     minimumHeight: 720
     visible: true
-    title: "TTC 3018 Control — Qt Preview"
+    title: "TTC 3018 Control"
     color: window.palette.background
 
     readonly property var palette: ({
