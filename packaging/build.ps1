@@ -25,8 +25,7 @@ try {
         "--output-dir=$outputDir" `
         "--output-filename=TTC 3018 Control.exe" `
         "--windows-icon-from-ico=$icon" `
-        "--include-data-dir=$projectRoot\src=src" `
-        "--include-data-dir=$projectRoot\config=config" `
+        "--include-data-dir=$projectRoot\src\ttc3018_control\qt\qml=ttc3018_control\qt\qml" `
         --include-qt-plugins=platforms,qml,qmllint,qmltooling,platforminputcontexts `
         --noinclude-qt-translations `
         --quiet
