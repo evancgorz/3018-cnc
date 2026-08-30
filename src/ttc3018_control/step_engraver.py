@@ -93,6 +93,14 @@ def generate_step_gcode(
     tab_width: float = 4.0,
     tab_height: float = 0.8,
 ) -> StepMachining:
+    if mode == "Profile cutout" and stock_thickness is None:
+        raise ValueError("A profile cutout requires confirmed physical stock thickness")
+    if (
+        mode == "Detected feature"
+        and any(feature.is_through for feature in model.features)
+        and stock_thickness is None
+    ):
+        raise ValueError("A through STEP feature requires confirmed stock thickness")
     resolved_thickness = float(stock_thickness) if stock_thickness is not None else float(model.thickness)
     if mode == "Profile cutout":
         depth = -(resolved_thickness + breakthrough)
@@ -435,11 +443,11 @@ def _validate_settings(
         raise ValueError("Cut feed must be 1–3000 and plunge feed 1–1000 mm/min")
     if spindle_rpm is not None and not 1 <= spindle_rpm <= 24000:
         raise ValueError("Spindle RPM must be between 1 and 24000")
+    if not math.isfinite(stock_thickness) or not 0.1 <= stock_thickness <= 20:
+        raise ValueError("Stock thickness must be between 0.1 and 20 mm")
+    if not math.isfinite(breakthrough) or not 0 <= breakthrough <= 2:
+        raise ValueError("Breakthrough must be between 0 and 2 mm")
     if mode == "Profile cutout":
-        if not 0.1 <= stock_thickness <= 20:
-            raise ValueError("Stock thickness must be between 0.1 and 20 mm")
-        if not 0 <= breakthrough <= 2:
-            raise ValueError("Breakthrough must be between 0 and 2 mm")
         if not isinstance(tab_count, int) or not 0 <= tab_count <= 12:
             raise ValueError("Tab count must be a whole number from 0 to 12")
         if tab_count and not 0.5 <= tab_width <= 20:

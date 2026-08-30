@@ -35,7 +35,8 @@ def _translated_model() -> StepPlanarModel:
 @pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole"])
 def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     job = generate_step_gcode(
-        _model(), mode=mode, stock_width=50, stock_height=35, zero_location="Center", depth=-1, passes=2
+        _model(), mode=mode, stock_width=50, stock_height=35, zero_location="Center", depth=-1, passes=2,
+        stock_thickness=5,
     )
 
     program = parse_gcode(job.gcode)
@@ -374,6 +375,8 @@ def test_centered_cutout_retains_existing_explicit_placement() -> None:
 
 
 def test_profile_cutout_rejects_invalid_through_cut_and_tabs() -> None:
+    with pytest.raises(ValueError, match="confirmed physical stock"):
+        generate_step_gcode(_model(), mode="Profile cutout")
     with pytest.raises(ValueError, match="Stock thickness"):
         generate_step_gcode(_model(), mode="Profile cutout", stock_thickness=0)
     with pytest.raises(ValueError, match="Tab height"):
@@ -432,7 +435,16 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     assert removed.features[0].is_through
     assert not extruded.features[0].is_through
 
-    removed_job = generate_step_gcode(removed, mode="Detected feature", tool_diameter=3.175, passes=2)
+    with pytest.raises(ValueError, match="confirmed stock thickness"):
+        generate_step_gcode(removed, mode="Detected feature", tool_diameter=3.175, passes=2)
+    removed_job = generate_step_gcode(
+        removed,
+        mode="Detected feature",
+        tool_diameter=3.175,
+        passes=2,
+        stock_thickness=2,
+        breakthrough=0.2,
+    )
     extruded_job = generate_step_gcode(extruded, mode="Detected feature", tool_diameter=3.175, passes=2)
     removed_program = parse_gcode(removed_job.gcode)
     extruded_program = parse_gcode(extruded_job.gcode)
