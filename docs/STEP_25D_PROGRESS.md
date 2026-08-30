@@ -30,6 +30,8 @@ streaming pipeline.
 - [x] Schedule independent paths by nearest endpoint with deterministic open-
   path reversal and closed-loop start rotation while preserving inner-before-
   outer profile ordering.
+- [x] Apply bounded deterministic 2-opt improvement to small path sets without
+  increasing rapid-link cost.
 - [x] Preserve individual detected-feature depth targets and avoid applying the
   deepest recess depth to shallower recesses.
 - [x] Expose exact cut distance, rapid XY distance, and retract count for each
