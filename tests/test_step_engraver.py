@@ -253,6 +253,12 @@ def test_scheduler_local_improvement_never_increases_rapid_cost() -> None:
     improved = _improve_tagged_order(paths)
 
     assert _scheduled_path_cost(improved) <= _scheduled_path_cost(paths)
+    current = (0.0, 0.0)
+    actual_cost = 0.0
+    for stroke, _is_outer in improved:
+        actual_cost += math.dist(current, stroke[0])
+        current = stroke[-1]
+    assert actual_cost == pytest.approx(_scheduled_path_cost(improved))
 
 
 def test_path_metrics_match_cross_pass_machine_position() -> None:

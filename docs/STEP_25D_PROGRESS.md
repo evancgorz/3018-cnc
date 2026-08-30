@@ -31,7 +31,8 @@ streaming pipeline.
   path reversal and closed-loop start rotation while preserving inner-before-
   outer profile ordering.
 - [x] Apply bounded deterministic 2-opt improvement to small path sets without
-  increasing rapid-link cost.
+  increasing rapid-link cost, and reorient the final sequence from each actual
+  predecessor endpoint.
 - [x] Compare connected scanline and bounded offset pocket candidates using a
   weighted cut/rapid/retract cost and select the lower-cost valid strategy.
 - [x] Preserve individual detected-feature depth targets and avoid applying the

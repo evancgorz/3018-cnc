@@ -480,7 +480,7 @@ def _improve_tagged_order(
     paths: list[tuple[Stroke, bool]],
 ) -> list[tuple[Stroke, bool]]:
     """Apply deterministic bounded 2-opt to reduce inter-path rapids."""
-    best = list(paths)
+    best = _orient_tagged_sequence(paths)
     best_cost = _scheduled_path_cost(best)
     improved = True
     while improved:
@@ -490,12 +490,25 @@ def _improve_tagged_order(
                 candidate = best[:start] + list(reversed(best[start:end + 1])) + best[end + 1:]
                 cost = _scheduled_path_cost(candidate)
                 if cost + 1e-7 < best_cost:
-                    best, best_cost = candidate, cost
+                    best, best_cost = _orient_tagged_sequence(candidate), cost
                     improved = True
                     break
             if improved:
                 break
     return best
+
+
+def _orient_tagged_sequence(
+    paths: Iterable[tuple[Stroke, bool]],
+) -> list[tuple[Stroke, bool]]:
+    """Orient each path from the actual endpoint of its predecessor."""
+    current = (0.0, 0.0)
+    oriented_paths: list[tuple[Stroke, bool]] = []
+    for stroke, is_outer in paths:
+        oriented = _best_stroke_orientation(stroke, current)
+        oriented_paths.append((oriented, is_outer))
+        current = oriented[-1]
+    return oriented_paths
 
 
 def _scheduled_path_cost(paths: Iterable[tuple[Stroke, bool]]) -> float:
