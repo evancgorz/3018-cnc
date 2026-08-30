@@ -35,6 +35,8 @@ class MotionService:
         self._live_jog_direction = 0.0
         self._live_jog_first_distance: float | None = None
         self._live_jog_position: Position | None = None
+        self._live_jog_feed = 500.0
+        self._live_jog_motion_seen = False
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
 
@@ -97,19 +99,19 @@ class MotionService:
         if position is None:
             return ActionOutcome(False, "Live jog ignored — current position is unavailable")
         current = getattr(position, axis.lower())
-        if direction > 0:
-            distance = math.ceil(current - 0.001) - current
-            if distance <= 0.001:
-                distance = 1.0
+        if self.session.envelope.trusted:
+            distance = self.session.profile.travel_for(axis) - current if direction > 0 else -current
         else:
-            distance = math.floor(current + 0.001) - current
-            if distance >= -0.001:
-                distance = -1.0
+            distance = direction * self.session.profile.travel_for(axis)
+        if abs(distance) <= 0.001:
+            return ActionOutcome(False, f"Live jog ignored — already at the {axis} travel limit")
         self._live_jog_axis = axis
         self._live_jog_axis_last = axis
         self._live_jog_direction = direction
         self._live_jog_first_distance = distance
         self._live_jog_position = position
+        self._live_jog_feed = feed
+        self._live_jog_motion_seen = False
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
         self._send_next_live_jog(feed)
@@ -159,6 +161,13 @@ class MotionService:
         return self.move_to(Position(0.0, 0.0, 0.0), feed)
 
     def observe_status(self, status: GrblStatus) -> None:
+        if self._live_jog_axis is not None:
+            if not status.can_jog:
+                self._live_jog_motion_seen = True
+            elif self._live_jog_motion_seen and not self._pending_acks:
+                axis = self._live_jog_axis
+                self._clear_live_jog()
+                self._on_notice(f"Live jog stopped at the {axis} travel limit")
         if self._live_jog_stop_pending and status.can_jog and not self._pending_acks:
             self._finish_live_jog_stop()
 
@@ -171,8 +180,6 @@ class MotionService:
         if lowered == "ok":
             if self._position_move_active:
                 self._send_next_position_move()
-            elif self._live_jog_axis is not None:
-                self._send_next_live_jog(feed)
             elif self._live_jog_alignment_pending:
                 self._clear_live_jog()
                 self._on_notice("Live jog stopped at a whole millimeter")
@@ -205,9 +212,8 @@ class MotionService:
         axis = self._live_jog_axis
         distance = self._live_jog_first_distance
         if distance is None:
-            distance = self._live_jog_direction
-        else:
-            self._live_jog_first_distance = None
+            return
+        self._live_jog_first_distance = None
         current = self._live_jog_position
         if current is None:
             self._clear_live_jog()
@@ -259,7 +265,7 @@ class MotionService:
                 self._on_notice("Live jog stopped; nearest whole-millimeter position is outside the travel envelope")
                 return
         try:
-            self._send_line(make_jog(axis, distance, 500.0))
+            self._send_line(make_jog(axis, distance, self._live_jog_feed))
         except (RuntimeError, ValueError) as exc:
             self._clear_live_jog()
             self._on_notice(f"Whole-millimeter stop correction failed — {exc}")
@@ -293,6 +299,8 @@ class MotionService:
         self._live_jog_direction = 0.0
         self._live_jog_first_distance = None
         self._live_jog_position = None
+        self._live_jog_feed = 500.0
+        self._live_jog_motion_seen = False
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
 

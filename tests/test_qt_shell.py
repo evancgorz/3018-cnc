@@ -320,13 +320,13 @@ def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
     view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
 
     view_model.start_live_jog("X", 1)
-    assert connection.lines[-1] == b"$J=G91 G21 X0.75 F500\n"
+    assert connection.lines[-1] == b"$J=G91 G21 X89.75 F500\n"
     # A live GRBL status changes from Idle to Jog. The outer button must remain
     # enabled while held; otherwise QML cancels the press after one segment.
     view_model.apply_status(GrblStatus("Jog", machine_position=Position(10.40, 0, 0)))
     assert view_model.can_live_jog
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X1 F500\n"
+    assert connection.lines == [b"$J=G91 G21 X89.75 F500\n"]
 
     view_model.apply_status(GrblStatus("Hold", machine_position=Position(10.40, 0, 0)))
     assert not view_model.can_live_jog
@@ -343,9 +343,9 @@ def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
 
     view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
     view_model.start_live_jog("X", -1)
-    assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
+    assert connection.lines[-1] == b"$J=G91 G21 X-10.25 F500\n"
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X-1 F500\n"
+    assert connection.lines[-1] == b"$J=G91 G21 X-10.25 F500\n"
     view_model.stop_live_jog()
     view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
     view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))

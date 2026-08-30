@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
 
@@ -9,18 +9,28 @@ SendLine = Callable[[bytes], None]
 
 @dataclass
 class JobStreamer:
-    """Conservative GRBL sender: one line is outstanding until GRBL acknowledges it."""
+    """Character-counting GRBL sender that keeps the controller RX buffer fed."""
 
     send_line: SendLine
     commands: Sequence[str] = ()
     next_index: int = 0
-    awaiting_ack: bool = False
+    acknowledged_count: int = 0
+    buffer_capacity: int = 128
+    outstanding_lengths: list[int] = field(default_factory=list)
     state: str = "idle"
     error: str = ""
 
     @property
     def completed(self) -> int:
-        return self.next_index - (1 if self.awaiting_ack else 0)
+        return self.acknowledged_count
+
+    @property
+    def awaiting_ack(self) -> bool:
+        return bool(self.outstanding_lengths)
+
+    @property
+    def buffered_bytes(self) -> int:
+        return sum(self.outstanding_lengths)
 
     @property
     def total(self) -> int:
@@ -37,28 +47,30 @@ class JobStreamer:
             raise ValueError("Job has no commands")
         self.commands = tuple(commands)
         self.next_index = 0
-        self.awaiting_ack = False
+        self.acknowledged_count = 0
+        self.outstanding_lengths.clear()
         self.error = ""
         self.state = "running"
         try:
-            self._send_next()
+            self._fill_buffer()
         except Exception:
             self.state = "failed"
-            self.awaiting_ack = False
+            self.outstanding_lengths.clear()
             raise
 
     def handle_response(self, response: str) -> bool:
         text = response.strip()
         lowered = text.lower()
-        if lowered == "ok" and self.awaiting_ack:
-            self.awaiting_ack = False
-            if self.next_index >= self.total:
+        if lowered == "ok" and self.outstanding_lengths:
+            self.outstanding_lengths.pop(0)
+            self.acknowledged_count += 1
+            if self.next_index >= self.total and not self.outstanding_lengths:
                 self.state = "complete"
             elif self.state == "running":
-                self._send_next()
+                self._fill_buffer()
             return True
         if (lowered.startswith("error:") or lowered.startswith("alarm:")) and self.state in {"running", "paused"}:
-            self.awaiting_ack = False
+            self.outstanding_lengths.clear()
             self.state = "failed"
             self.error = text
             return True
@@ -73,23 +85,30 @@ class JobStreamer:
         if self.state != "paused":
             raise RuntimeError("Job is not paused")
         self.state = "running"
-        if not self.awaiting_ack:
-            self._send_next()
+        self._fill_buffer()
 
     def abort(self, reason: str = "Aborted by operator") -> None:
         if self.state not in {"running", "paused"}:
             return
         self.state = "aborted"
-        self.awaiting_ack = False
+        self.outstanding_lengths.clear()
         self.error = reason
 
-    def _send_next(self) -> None:
-        if self.state != "running" or self.awaiting_ack:
+    def _fill_buffer(self) -> None:
+        if self.state != "running":
             return
-        if self.next_index >= self.total:
+        while self.next_index < self.total:
+            encoded = (self.commands[self.next_index] + "\n").encode("ascii")
+            length = len(encoded)
+            if length > self.buffer_capacity:
+                raise ValueError(
+                    f"G-code line {self.next_index + 1} is {length} bytes; "
+                    f"GRBL RX capacity is {self.buffer_capacity}"
+                )
+            if self.outstanding_lengths and self.buffered_bytes + length > self.buffer_capacity:
+                return
+            self.send_line(encoded)
+            self.outstanding_lengths.append(length)
+            self.next_index += 1
+        if not self.outstanding_lengths:
             self.state = "complete"
-            return
-        command = self.commands[self.next_index]
-        self.send_line((command + "\n").encode("ascii"))
-        self.next_index += 1
-        self.awaiting_ack = True
