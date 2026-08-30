@@ -27,7 +27,7 @@ def _write_box(path: Path, width: float = 40, height: float = 25, depth: float =
     writer.Write(str(path))
 
 
-def _write_compound_boxes(path: Path) -> None:
+def _write_compound_boxes(path: Path, *, second_left: float = 30) -> None:
     from OCP.BRep import BRep_Builder
     from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
     from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
@@ -38,7 +38,7 @@ def _write_compound_boxes(path: Path) -> None:
     builder = BRep_Builder()
     builder.MakeCompound(compound)
     builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(0, 0, 0), 20, 15, 5).Shape())
-    builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(30, 0, 0), 10, 15, 5).Shape())
+    builder.Add(compound, BRepPrimAPI_MakeBox(gp_Pnt(second_left, 0, 0), 10, 15, 5).Shape())
     writer = STEPControl_Writer()
     writer.Transfer(compound, STEPControl_AsIs)
     writer.Write(str(path))
@@ -138,6 +138,19 @@ def test_load_step_preserves_disconnected_coplanar_compound_faces(tmp_path: Path
     )
     assert job.stroke_count == 2
     assert parse_gcode(job.gcode).bounds.maximum.x == pytest.approx(42, abs=0.001)
+
+
+def test_load_step_unites_touching_coplanar_compound_faces(tmp_path: Path) -> None:
+    path = tmp_path / "touching-compound.step"
+    _write_compound_boxes(path, second_left=20)
+
+    model = load_step_isolated(path)
+
+    assert model.width == pytest.approx(30, abs=0.001)
+    assert model.height == pytest.approx(15, abs=0.001)
+    assert len(model.loops) == 1
+    assert model.outer_loop_indices == (0,)
+    assert model.outer_loop.area == pytest.approx(450, abs=0.01)
 
 
 @pytest.mark.parametrize("through", [False, True])

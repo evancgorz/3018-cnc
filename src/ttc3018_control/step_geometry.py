@@ -429,10 +429,8 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         and abs(candidate[4] - face_coordinate) <= 1e-6
         and (1 if candidate[3][axis_index] >= 0 else -1) == chosen_sign
     ]
-    loops = tuple(
-        loop
-        for candidate in matching_faces
-        for loop in candidate[2]
+    loops = _merge_coplanar_loops(
+        tuple(candidate[2] for candidate in matching_faces)
     ) or tuple(_chosen_loops)
 
     all_points = [point for loop in loops for point in loop.points]
@@ -476,6 +474,53 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         surface_patches,
         loop_parents,
     )
+
+
+def _merge_coplanar_loops(
+    loop_sets: tuple[list[PlanarLoop], ...],
+) -> tuple[PlanarLoop, ...]:
+    """Union matching planar face regions while retaining holes and parts."""
+    from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
+    from shapely.ops import unary_union
+
+    face_regions = []
+    for loops in loop_sets:
+        face_region = GeometryCollection()
+        for loop in loops:
+            polygon = Polygon((point.x, point.y) for point in loop.points)
+            if polygon.is_empty or not polygon.is_valid or polygon.area <= 1e-7:
+                raise StepImportError("Coplanar STEP face contains invalid planar geometry")
+            face_region = face_region.symmetric_difference(polygon)
+        if not face_region.is_empty:
+            face_regions.append(face_region)
+    if not face_regions:
+        return ()
+    merged = unary_union(face_regions).buffer(0)
+    polygons = (
+        [merged]
+        if isinstance(merged, Polygon)
+        else list(merged.geoms)
+        if isinstance(merged, MultiPolygon)
+        else []
+    )
+    polygons.sort(key=lambda polygon: (-polygon.area, polygon.bounds))
+    result: list[PlanarLoop] = []
+    for polygon in polygons:
+        result.append(_planar_ring_to_loop(polygon.exterior))
+        interiors = sorted(
+            polygon.interiors,
+            key=lambda ring: (-Polygon(ring).area, ring.bounds),
+        )
+        result.extend(_planar_ring_to_loop(ring) for ring in interiors)
+    return tuple(result)
+
+
+def _planar_ring_to_loop(ring: Any) -> PlanarLoop:
+    """Convert a Shapely ring to the normalized loop representation."""
+    coordinates = list(ring.coords)
+    if coordinates and coordinates[0] == coordinates[-1]:
+        coordinates.pop()
+    return PlanarLoop(tuple(Point2D(float(x), float(y)) for x, y in coordinates))
 
 
 def _machine_axis_max(bounds: tuple[float, float, float, float, float, float], plane: str) -> float:
