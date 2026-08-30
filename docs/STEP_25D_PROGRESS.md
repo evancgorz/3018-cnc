@@ -15,6 +15,8 @@ streaming pipeline.
 - [x] Generate planar pockets, engravings, and holes.
 - [x] Support multiple depth passes.
 - [x] Support safe Z, cutting/plunge feeds, and optional spindle start.
+- [x] Generate combined through-profile cutouts with inner-first ordering,
+  breakthrough allowance, and outer holding tabs.
 - [x] Preview the generated centerline toolpath before running.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
@@ -45,9 +47,9 @@ streaming pipeline.
 - [x] Add an **Import STEP…** action in the Prepare workspace.
 - [x] Show model metadata, bounding box, and top-view preview.
 - [x] Add orientation selection for the supported planar cases.
-- [x] Add stock width, stock height, tool diameter, and work zero location
-  controls. Stock thickness remains implicit in the imported solid for this
-  bounded 2.5D release.
+- [x] Add stock width, stock height, stock thickness, tool diameter, and work
+  zero location controls. Profile cutout uses the operator-confirmed stock
+  thickness instead of assuming the imported solid matches the physical stock.
 - [x] Reject non-planar or ambiguous geometry with an actionable explanation.
 
 ### 3. Planar geometry extraction
@@ -60,8 +62,8 @@ streaming pipeline.
 
 ### 4. 2.5D toolpath generation
 
-- [x] Add a machining-mode selector: engraving, outside contour, inside contour,
-  pocket, and hole.
+- [x] Add a machining-mode selector: engraving, combined profile cutout,
+  outside contour, inside contour, pocket, and hole.
 - [x] Implement tool-radius offsets for inside and outside contours.
 - [x] Define behavior for internal corners, tight radii, islands, and offset
   failures by using bounded Shapely offsets and rejecting empty/out-of-stock
@@ -69,6 +71,9 @@ streaming pipeline.
 - [x] Implement pocket clearing paths for simple planar regions.
 - [x] Implement hole paths with a documented minimum diameter rule.
 - [x] Implement multiple Z depth passes ending at the requested machining depth.
+- [x] Classify profile-cutout loops automatically, cut inner loops before outer
+  loops, derive through depth from stock thickness plus breakthrough, and leave
+  configurable outer tabs.
 - [x] Keep all generated moves within the supported metric command subset.
 
 ### 5. UI and shared job pipeline
@@ -126,3 +131,5 @@ streaming pipeline.
 | 2026-08-29 | `1e9a983` | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |
 | 2026-08-29 | `bb211a8` | Added explicit STEP review bounds/settings and malformed-loop validation. |
 | 2026-08-30 | pending | Added Auto/XY/XZ/YZ planar-face selection and verified the real Test Bracket STEP file. |
+| 2026-08-30 | `2f642b6` | Added compensated inner-first profile cutouts, through depth, breakthrough, and outer tabs. |
+| 2026-08-30 | pending | Added Qt profile-cutout controls and live preview/review details. |

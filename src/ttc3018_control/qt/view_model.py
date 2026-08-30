@@ -497,8 +497,8 @@ class ControllerViewModel(QObject):
         self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
 
-    @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
-    def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int)
+    def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         if self._step_model is None:
             self._preview_strokes = []
             self._preview_summary = "Import a planar STEP model first."
@@ -512,6 +512,8 @@ class ControllerViewModel(QObject):
                 depth=depth, passes=passes, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
+                stock_thickness=stock_thickness, breakthrough=breakthrough,
+                tab_count=tab_count, tab_width=tab_width, tab_height=tab_height,
             )
         except (ValueError, TypeError):
             self._preview_strokes = []
@@ -552,8 +554,8 @@ class ControllerViewModel(QObject):
         result = plaque.result
         self._load_generated_program(plaque.gcode, plaque.filename, result.strokes, f"Plaque · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
 
-    @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
-    def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int)
+    def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         if self._step_model is None:
             self._set_notice("STEP job unavailable — import a planar STEP model first")
             return
@@ -565,6 +567,8 @@ class ControllerViewModel(QObject):
                 depth=depth, passes=passes, safe_z=safe_z,
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
+                stock_thickness=stock_thickness, breakthrough=breakthrough,
+                tab_count=tab_count, tab_width=tab_width, tab_height=tab_height,
             )
         except (ValueError, TypeError) as exc:
             self._set_notice(f"STEP machining settings rejected — {exc}")
@@ -968,7 +972,8 @@ class ControllerViewModel(QObject):
         return (
             f"STEP {job.mode} · stock {job.stock_width:.1f} × {job.stock_height:.1f} mm · "
             f"tool {job.tool_diameter:.2f} mm · depth {job.depth:.2f} mm · {job.passes} passes · "
-            f"{job.stroke_count} paths · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
+            + (f"{job.tab_count} outer tabs · " if job.mode == "Profile cutout" else "")
+            + f"{job.stroke_count} paths · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
         )
 
     def _disconnected(self, reason: str) -> None:
