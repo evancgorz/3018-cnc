@@ -33,7 +33,6 @@ source tree only as a reference during the migration.
 - Streams one G-code command at a time and waits for GRBL acknowledgement before continuing.
 - Provides guarded spindle start/stop plus job start, pause, resume, abort, and progress controls.
 - Provides a plaque builder with title/subtitle layouts, six centerline border styles, and a live preview.
-- After a successful job, returns through safe Z to the confirmed GRBL work X0 Y0 Z0 when it remains inside the trusted envelope.
 - Stops sending on GRBL errors or alarms and requests spindle stop on completion or failure.
 
 This version deliberately has no arbitrary command box or automatic probe motion.
@@ -110,6 +109,33 @@ The lightweight centerline fonts support letters A–Z (lowercase input uses the
 same durable capital forms), digits, spaces, and common engraving punctuation.
 Unsupported characters are reported before a program is created. System TrueType
 font outlines and filled/pocketed lettering are outside the current text MVP.
+
+## Creating a STEP / 2.5D job
+
+Select **STEP / 2.5D** in the **Prepare** workspace and choose **Import STEP…**.
+The current bounded workflow imports the highest upward horizontal planar face
+from a `.step` or `.stp` file, normalizes its closed top-face loops, and shows a
+top-view preview. Tilted, open, unreadable, or otherwise unsupported geometry is
+rejected with an explanation.
+
+Choose one of these operations:
+
+- Engraving: follows the imported closed loops.
+- Outside contour or Inside contour: applies the selected tool radius.
+- Pocket: clears simple planar regions with nested rings.
+- Hole: cuts circular inner loops with a tool-center path.
+
+The dialog also supports XY/YX orientation, centered or lower-left work zero,
+stock width and height, tool diameter, negative depth, multiple depth passes,
+safe Z, cut/plunge feeds, and optional `M3` spindle startup. The preview and
+review summary show the transformed path bounds. **Generate and load** sends the
+result through the same metric parser, bounds checks, preflight, save, and
+streaming pipeline as imported G-code; generation itself never moves the machine.
+
+This release is intentionally planar. It does not yet perform arbitrary-face
+selection, 3D surface machining, adaptive clearing, collision simulation, or
+CAM-grade lead-in/lead-out compensation. Confirm the stock, tool, work zero, and
+machine envelope before starting a generated job.
 
 ## Creating a plaque
 

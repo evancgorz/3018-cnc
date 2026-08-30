@@ -123,4 +123,5 @@ streaming pipeline.
 | 2026-08-29 | `6090a37` | Baseline Qt controller, preview, safety, and agent-running-instance guard. |
 | 2026-08-29 | `9fad6ee` | Added the OCP/Shapely dependency boundary and normalized planar STEP importer. |
 | 2026-08-29 | `9707c0c` | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
-| 2026-08-29 | pending | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |
+| 2026-08-29 | `1e9a983` | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |
+| 2026-08-29 | `bb211a8` | Added explicit STEP review bounds/settings and malformed-loop validation. |
