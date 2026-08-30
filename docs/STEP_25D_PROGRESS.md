@@ -170,6 +170,9 @@ streaming pipeline.
   negative Z valid only as intentional cutting depth.
 - [x] Shift translated STEP geometry as one authoritative transform so paths,
   preview geometry, and stock simulation cannot disagree about work zero.
+- [x] Expose deterministic loop roots, containment depths, and outer/cutout/
+  island roles; reject coincident boundaries and keep disconnected roots out of
+  internal-cutout planning.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -218,3 +221,4 @@ streaming pipeline.
 | 2026-08-30 | `7ba66c8` | Fixed final path orientation after bounded 2-opt optimization. |
 | 2026-08-30 | `e6e6bef` | Clarified the hard nonnegative work-XY contract in the production plan. |
 | 2026-08-30 | `100803e` | Enforced nonnegative STEP work XY across translated paths and parsed G-code. |
+| 2026-08-30 | `23c77b7` | Generalized normalized loop topology for disconnected parts and nested islands. |
