@@ -76,6 +76,12 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
     controller.handle_transport_response("Grbl 1.1h")
     assert not controller.reference_trusted
 
+    controller.set_transport_for_testing(transport)
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
+    assert controller.establish_reference().accepted
+    controller.disconnect("link lost")
+    assert not controller.reference_trusted
+
 
 def test_controller_rejects_overlapping_motion_and_job_start_without_preflight(tmp_path) -> None:
     from ttc3018_control.application.controller import ApplicationController

@@ -22,7 +22,7 @@ matrix and event-sink coverage.
 - [x] Held-jog state remains enabled across GRBL `Idle` → `Jog` transitions,
       with whole-millimeter release correction preserved.
 - [x] README and architecture decision record updated.
-- [x] 117 automated tests and the offscreen Qt shell check pass.
+- [x] 120 automated tests and the offscreen Qt shell check pass.
 - [x] Incremental commits are pushed to `origin/codex/qt-quick-ui`.
 
 Follow-up hardening can expand the application-controller contract matrix and
@@ -405,7 +405,7 @@ with stronger coverage.
 - [ ] Keep the public QML-facing property and slot surface stable unless a
   deliberate simplification is covered by QML and Qt tests.
 - [ ] Keep QML free of machine-state inference and raw command construction.
-- [ ] Replace remaining `QtWidgets` dialogs used under `QGuiApplication` with
+- [x] Replace remaining `QtWidgets` dialogs used under `QGuiApplication` with
   Qt Quick dialogs and typed confirmation/event handoffs.
 - [ ] Add an import-boundary test that fails if the Qt adapter directly imports
   concrete transports or job-stream implementation classes.
