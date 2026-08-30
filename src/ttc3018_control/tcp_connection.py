@@ -31,8 +31,15 @@ class TcpGrblConnection:
             raise ValueError("TCP port must be between 1 and 65535")
 
         endpoint = socket.create_connection((host.strip(), port), timeout=timeout)
-        endpoint.settimeout(0.2)
-        endpoint.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        try:
+            endpoint.settimeout(0.2)
+            endpoint.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            try:
+                endpoint.close()
+            except OSError:
+                pass
+            raise
         self._socket = endpoint
         self._stop.clear()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
@@ -49,7 +56,10 @@ class TcpGrblConnection:
                 endpoint.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
-            endpoint.close()
+            try:
+                endpoint.close()
+            except OSError:
+                pass
         if self._reader is not None and self._reader.is_alive():
             self._reader.join(timeout=1.0)
         self._reader = None

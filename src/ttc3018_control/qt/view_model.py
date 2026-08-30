@@ -1059,7 +1059,21 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def close(self) -> None:
-        self.disconnect()
+        # aboutToQuit is the last reliable application lifecycle hook. Stop
+        # polling before releasing the transport so no timer callback can race
+        # the final socket/serial-handle cleanup.
+        self._timer.stop()
+        self.application.close()
+        self._close_after_return_pending = False
+        self.status = None
+        self._connection_text = "Disconnected"
+        self._state_text = "Unknown"
+        self._machine_position_text = "X—  Y—  Z—"
+        self._work_position_text = "X—  Y—  Z—"
+        self._reference_text = "Position unknown"
+        self._work_zero_text = "Not confirmed"
+        self._spindle_text = "Off"
+        self._emit_state()
 
     def _refresh_ports(self) -> None:
         self._ports = [f"{device} — {description}" for device, description in self.application.usb_ports()]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+import threading
 
 import pytest
 
@@ -217,6 +218,7 @@ class _Transport:
 
     def disconnect(self) -> None:
         self.connected = False
+        self.disconnect_calls = getattr(self, "disconnect_calls", 0) + 1
 
     def send_line(self, command: bytes, display_text: str | None = None) -> None:
         pass
@@ -227,6 +229,66 @@ class _Transport:
     @property
     def events(self):
         return ()
+
+
+def test_connection_service_close_releases_active_and_queued_transports() -> None:
+    service = ConnectionService(_Transport, _Transport, lambda _port: ())
+    active = _Transport()
+    active.connected = True
+    queued = _Transport()
+    queued.connected = True
+    service.transport = active
+    service._wifi_results.put(WifiAttempt(1, queued, "192.168.4.1", 23))  # type: ignore[attr-defined]
+
+    assert service.close().accepted
+    assert not active.connected
+    assert not queued.connected
+    assert service.transport is None
+    assert service._wifi_results.empty()  # type: ignore[attr-defined]
+    assert service.close().accepted
+
+
+def test_connection_service_canceled_wifi_worker_closes_late_socket() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+
+    class _LateTransport(_Transport):
+        def connect(self, *args, **kwargs) -> None:
+            started.set()
+            release.wait(timeout=2)
+            self.connected = True
+
+        def disconnect(self) -> None:
+            super().disconnect()
+            closed.set()
+
+    transport = _LateTransport()
+    service = ConnectionService(lambda: _Transport(), lambda: transport, lambda _port: ())
+    assert service.begin_wifi("192.168.4.1", 23).accepted
+    assert started.wait(timeout=1)
+
+    service.disconnect()
+    release.set()
+
+    assert closed.wait(timeout=2)
+    assert not transport.connected
+    assert service.close().accepted
+
+
+def test_application_controller_close_releases_transport_and_is_idempotent(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    transport = _Transport()
+    transport.connected = True
+    controller.set_transport_for_testing(transport)
+
+    controller.close()
+    controller.close()
+
+    assert not transport.connected
+    assert controller.transport is None
 
 
 def test_connection_service_owns_one_usb_transport() -> None:
@@ -240,6 +302,41 @@ def test_connection_service_owns_one_usb_transport() -> None:
     assert not service.connect_usb("COM8").accepted
     assert service.disconnect().accepted
     assert not service.connected
+
+
+def test_connection_service_releases_usb_transport_when_connect_fails() -> None:
+    class _PartiallyOpenedTransport(_Transport):
+        def connect(self, *args, **kwargs) -> None:
+            self.connected = True
+            raise RuntimeError("handshake failed")
+
+    transport = _PartiallyOpenedTransport()
+    service = ConnectionService(lambda: transport, _Transport, lambda _port: ())
+
+    result = service.connect_usb("COM7")
+
+    assert not result.accepted
+    assert not transport.connected
+    assert transport.disconnect_calls == 1
+
+
+def test_connection_service_shutdown_continues_after_adapter_disconnect_error() -> None:
+    class _BrokenTransport(_Transport):
+        def disconnect(self) -> None:
+            self.disconnect_calls = getattr(self, "disconnect_calls", 0) + 1
+            raise OSError("handle already closed")
+
+    service = ConnectionService(_Transport, _Transport, lambda _port: ())
+    broken = _BrokenTransport()
+    healthy = _Transport()
+    broken.connected = True
+    healthy.connected = True
+    service.transport = broken
+    service._wifi_results.put(WifiAttempt(1, healthy, "192.168.4.1", 23))  # type: ignore[attr-defined]
+
+    assert service.close().accepted
+    assert not healthy.connected
+    assert service.transport is None
 
 
 def test_connection_service_discards_a_stale_wifi_result_after_disconnect() -> None:

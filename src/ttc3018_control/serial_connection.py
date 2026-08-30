@@ -43,15 +43,22 @@ class GrblConnection:
             raise RuntimeError("Already connected")
 
         endpoint = serial.Serial()
-        endpoint.port = port
-        endpoint.baudrate = baudrate
-        endpoint.timeout = 0.2
-        endpoint.write_timeout = 1.0
-        endpoint.rtscts = False
-        endpoint.dsrdtr = False
-        endpoint.dtr = False
-        endpoint.rts = False
-        endpoint.open()
+        try:
+            endpoint.port = port
+            endpoint.baudrate = baudrate
+            endpoint.timeout = 0.2
+            endpoint.write_timeout = 1.0
+            endpoint.rtscts = False
+            endpoint.dsrdtr = False
+            endpoint.dtr = False
+            endpoint.rts = False
+            endpoint.open()
+        except Exception:
+            try:
+                endpoint.close()
+            except Exception:
+                pass
+            raise
 
         self._serial = endpoint
         self._stop.clear()
@@ -68,11 +75,15 @@ class GrblConnection:
         self._stop.set()
         endpoint = self._serial
         self._serial = None
-        if endpoint is not None and endpoint.is_open:
-            endpoint.close()
-        if self._reader is not None and self._reader.is_alive():
-            self._reader.join(timeout=1.0)
-        self._reader = None
+        try:
+            if endpoint is not None and endpoint.is_open:
+                endpoint.close()
+        except Exception:
+            pass
+        finally:
+            if self._reader is not None and self._reader.is_alive():
+                self._reader.join(timeout=1.0)
+            self._reader = None
         self._emit("system", "Disconnected")
 
     def send_line(self, command: bytes, display_text: str | None = None) -> None:

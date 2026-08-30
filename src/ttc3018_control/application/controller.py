@@ -485,7 +485,15 @@ class ApplicationController:
         return ActionOutcome(True, "Resume requested")
 
     def close(self) -> None:
-        self.disconnect()
+        self.wifi_setup.cancel()
+        outcome = self.connection_service.close()
+        self.motion.reset()
+        self.job.reset()
+        self.manual_pending_acks = 0
+        self._preserve_reference_on_next_reset = False
+        self.status = None
+        self.session.clear_status()
+        self.session.invalidate_reference(outcome.message)
 
     def send_manual(self, command: bytes) -> None:
         self.connection_service.send_line(command)

@@ -24,6 +24,11 @@ class _FakeConnection:
         self.events = queue.Queue()
         self.lines: list[bytes] = []
         self.realtime: list[bytes] = []
+        self.disconnect_calls = 0
+
+    def disconnect(self) -> None:
+        self.connected = False
+        self.disconnect_calls += 1
 
     def send_line(self, command: bytes, **_kwargs) -> None:
         self.lines.append(command)
@@ -38,6 +43,19 @@ def test_qt_shell_loads(qapp) -> None:
     assert len(roots) == 1
     assert roots[0].property("title") == "TTC 3018 Control"
     assert view_model.connection_text == "Disconnected"
+
+
+def test_qt_shutdown_releases_transport_once(qapp) -> None:
+    _engine, view_model = build_engine()
+    connection = _FakeConnection()
+    view_model.connection = connection
+
+    view_model.close()
+    view_model.close()
+
+    assert connection.disconnect_calls == 1
+    assert not connection.connected
+    assert view_model.application.transport is None
 
 
 def test_guided_setup_is_state_gated_and_advances_in_order(qapp) -> None:
