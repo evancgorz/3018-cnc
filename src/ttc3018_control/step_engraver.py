@@ -1134,12 +1134,19 @@ def _connected_scanline_strokes(region, stepover: float) -> list[Stroke]:
         return []
     min_x, min_y, max_x, max_y = region.bounds
     height = max_y - min_y
-    row_count = max(1, int(math.ceil(height / stepover))) + 1
+    # Place lanes at the center of evenly sized bands instead of on the
+    # compensated boundary.  Boundary-tangent scanlines collapse to points
+    # and leave an uncovered crescent in small circular/slot pockets; the
+    # band-center layout keeps the first and last cutter sweep within one
+    # half-lane of the reachable boundary while retaining the requested
+    # stepover limit.
+    row_count = max(1, int(math.ceil(height / stepover)))
     strokes: list[Stroke] = []
     active: Stroke | None = None
     tolerance_region = region.buffer(1e-7)
     for row_index in range(row_count):
-        y = min_y if row_count == 1 else min(max_y, min_y + row_index * height / (row_count - 1))
+        band_height = height / row_count if row_count else 0.0
+        y = (min_y + max_y) / 2 if row_count == 1 else min_y + (row_index + 0.5) * band_height
         scan = LineString(((min_x - stepover, y), (max_x + stepover, y)))
         spans = _strokes_from_geometry(region.intersection(scan))
         spans = [span for span in spans if len(span) >= 2 and LineString(span).length > 1e-7]

@@ -188,7 +188,7 @@ def test_pocket_strategy_selector_prefers_lower_weighted_cost() -> None:
     assert len(selected) == 1
 
 
-def test_pocket_connects_safe_concentric_rings_for_a_round_region() -> None:
+def test_pocket_uses_one_safe_connected_path_for_a_round_region() -> None:
     region = Polygon(tuple(
         (20 + 12 * math.cos(index * math.tau / 64), 15 + 12 * math.sin(index * math.tau / 64))
         for index in range(64)
@@ -197,7 +197,7 @@ def test_pocket_connects_safe_concentric_rings_for_a_round_region() -> None:
     selected = _pocket_strokes(region, 1.5, 3)
 
     assert len(selected) == 1
-    assert len(selected[0]) > 100
+    assert len(selected[0]) > 10
     assert _pocket_path_cost(selected) < 500
 
 
@@ -423,7 +423,10 @@ def test_profile_operation_plan_keeps_inner_cutouts_before_outer_profile() -> No
     assert "; Operation outer-profile:" in job.gcode
 
 
-def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> None:
+@pytest.mark.parametrize("removed_tool_diameter", [3.0, 3.175])
+def test_step_fixtures_distinguish_removed_and_extruded_circle_features(
+    removed_tool_diameter: float,
+) -> None:
     examples = Path(__file__).parents[1] / "examples"
     removed = load_step_isolated(examples / "removed-cylinder.step")
     extruded = load_step_isolated(examples / "extruded-circle.step")
@@ -440,7 +443,7 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     removed_job = generate_step_gcode(
         removed,
         mode="Detected feature",
-        tool_diameter=3.175,
+        tool_diameter=removed_tool_diameter,
         passes=2,
         stock_thickness=2,
         breakthrough=0.2,
