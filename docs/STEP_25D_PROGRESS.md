@@ -20,6 +20,15 @@ streaming pipeline.
 - [x] Distinguish axial circular recesses from raised bosses using STEP face
   topology and generate the corresponding inside-versus-surrounding clearing
   strategy at the detected feature depth.
+- [x] Preserve accessible planar surface patches, including tilted planar ramp
+  faces, as normalized height-field metadata across the isolated import worker.
+- [x] Generate bounded varying-Z raster paths for accessible planar surfaces,
+  split at abrupt vertical cliffs, and validate them through the shared metric
+  G-code parser.
+- [x] Use connected alternating scanlines for broad pocket regions and retain
+  safe retracts around holes, islands, and disconnected material.
+- [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
+  work X/Y zero and show the raw part boundary separately in the Qt preview.
 - [x] Preview the generated centerline toolpath before running.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
@@ -79,6 +88,10 @@ streaming pipeline.
 - [x] Classify profile-cutout loops automatically, cut inner loops before outer
   loops, derive through depth from stock thickness plus breakthrough, and leave
   configurable outer tabs.
+- [x] Add planar-surface mode for accessible flat/ramp patches with multiple
+  passes and cliff-safe path splitting.
+- [x] Add regression coverage for Wedge varying-Z output, parser bounds, and
+  nonnegative work coordinates.
 - [x] Keep all generated moves within the supported metric command subset.
 
 ### 5. UI and shared job pipeline
@@ -103,6 +116,8 @@ streaming pipeline.
   zero configuration.
 - [x] Test optional spindle commands and parser acceptance.
 - [x] Test preview geometry against generated G-code bounds.
+- [x] Verify the compensated lower-left cutout envelope reaches work X0/Y0 and
+  actual emitted profile commands use the same placement translation.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
   tests.
 
@@ -139,3 +154,4 @@ streaming pipeline.
 | 2026-08-30 | `2f642b6` | Added compensated inner-first profile cutouts, through depth, breakthrough, and outer tabs. |
 | 2026-08-30 | `2922670` | Added Qt profile-cutout controls and live preview/review details. |
 | 2026-08-30 | `479edb7` | Added paired STEP feature fixtures plus automatic recess/boss detection and slicing. |
+| 2026-08-30 | `517a611` | Added normalized planar surface patches, Wedge ramp slicing, connected pocket scanlines, and nonnegative cutout placement. |
