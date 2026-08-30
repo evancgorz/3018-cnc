@@ -31,6 +31,7 @@ class StepMachining:
     passes: int
     stroke_count: int
     strokes: tuple[Stroke, ...]
+    model_strokes: tuple[Stroke, ...] = ()
     stock_thickness: float | None = None
     breakthrough: float = 0.0
     tab_count: int = 0
@@ -145,6 +146,10 @@ def generate_step_gcode(
         passes,
         len(strokes),
         tuple(strokes),
+        tuple(
+            _loop_stroke(_translate_loop(loop, placement_offset_x, placement_offset_y))
+            for loop in loops
+        ),
         resolved_thickness if mode == "Profile cutout" else None,
         breakthrough if mode == "Profile cutout" else 0.0,
         tab_count if mode == "Profile cutout" else 0,

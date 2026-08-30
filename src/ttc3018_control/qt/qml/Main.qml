@@ -1037,13 +1037,23 @@ ApplicationWindow {
                 }
                 if (appViewModel && appViewModel.preview_strokes.length > 0) {
                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-                    for (const stroke of appViewModel.preview_strokes) for (const point of stroke) {
+                    const modelStrokes = appViewModel.preview_model_strokes || []
+                    const allStrokes = modelStrokes.concat(appViewModel.preview_strokes)
+                    for (const stroke of allStrokes) for (const point of stroke) {
                         minX = Math.min(minX, point[0]); minY = Math.min(minY, point[1]); maxX = Math.max(maxX, point[0]); maxY = Math.max(maxY, point[1])
                     }
                     const spanX = Math.max(0.001, maxX - minX), spanY = Math.max(0.001, maxY - minY)
                     const scale = Math.min((width - 2 * inset) / spanX, (height - 2 * inset) / spanY)
                     const offsetX = (width - spanX * scale) / 2 - minX * scale
                     const offsetY = height - inset + minY * scale
+                    ctx.setLineDash([7, 5]); ctx.strokeStyle = "#F2B84B"; ctx.lineWidth = 1.8
+                    for (const stroke of modelStrokes) {
+                        if (!stroke.length) continue
+                        ctx.beginPath(); ctx.moveTo(offsetX + stroke[0][0] * scale, offsetY - stroke[0][1] * scale)
+                        for (let index = 1; index < stroke.length; index++) ctx.lineTo(offsetX + stroke[index][0] * scale, offsetY - stroke[index][1] * scale)
+                        ctx.stroke()
+                    }
+                    ctx.setLineDash([])
                     ctx.strokeStyle = "#168BFF"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round"
                     for (const stroke of appViewModel.preview_strokes) {
                         if (!stroke.length) continue

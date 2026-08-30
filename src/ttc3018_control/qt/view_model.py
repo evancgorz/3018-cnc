@@ -61,6 +61,7 @@ class ControllerViewModel(QObject):
         self._job_file_text = "No G-code loaded"
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
         self._preview_strokes: list[list[list[float]]] = []
+        self._preview_model_strokes: list[list[list[float]]] = []
         self._preview_summary = ""
         self._step_model: StepPlanarModel | None = None
         self._step_path: Path | None = None
@@ -219,6 +220,10 @@ class ControllerViewModel(QObject):
     @Property("QVariantList", notify=state_changed)
     def preview_strokes(self) -> list[list[list[float]]]:
         return self._preview_strokes
+
+    @Property("QVariantList", notify=state_changed)
+    def preview_model_strokes(self) -> list[list[list[float]]]:
+        return self._preview_model_strokes
 
     @Property(str, notify=state_changed)
     def preview_summary(self) -> str:
@@ -487,6 +492,7 @@ class ControllerViewModel(QObject):
         self._step_source_text = model.path.name
         self._step_import_status = ""
         self._preview_strokes = self._strokes_for_step_model(model)
+        self._preview_model_strokes = []
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Imported planar STEP model {model.path.name}")
         self._emit_state()
@@ -503,6 +509,7 @@ class ControllerViewModel(QObject):
             return
         self._step_model = model
         self._preview_strokes = self._strokes_for_step_model(model)
+        self._preview_model_strokes = []
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
@@ -528,9 +535,11 @@ class ControllerViewModel(QObject):
             )
         except (ValueError, TypeError):
             self._preview_strokes = []
+            self._preview_model_strokes = []
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
+            self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
             self._preview_summary = self._step_job_summary(job.result)
         self._emit_state()
 
@@ -590,6 +599,8 @@ class ControllerViewModel(QObject):
             job.strokes,
             self._step_job_summary(job.result),
         )
+        self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
+        self._emit_state()
 
     @Slot(QUrl)
     def save_gcode_file(self, selected_file: QUrl) -> None:
@@ -788,6 +799,7 @@ class ControllerViewModel(QObject):
         bounds = program.bounds
         size = bounds.size
         self._preview_strokes = self._strokes_for_program(program)
+        self._preview_model_strokes = []
         self._preview_summary = f"{len(program.commands)} commands · {size.x:.1f} × {size.y:.1f} mm"
         self._job_file_text = program.path.name
         self._job_summary_text = (
@@ -811,6 +823,7 @@ class ControllerViewModel(QObject):
             self._set_notice(f"Generated G-code rejected — {exc}")
             return
         self._preview_strokes = self._strokes_for_qml(strokes)
+        self._preview_model_strokes = []
         self._preview_summary = summary
         self._job_file_text = filename
         self._job_summary_text = summary
