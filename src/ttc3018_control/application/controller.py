@@ -176,6 +176,18 @@ class ApplicationController:
         return self.session.work_zero_confirmed
 
     @property
+    def machine_position(self) -> Position | None:
+        return self.session.machine_position
+
+    @property
+    def virtual_position(self) -> Position | None:
+        return self.session.virtual_position
+
+    @property
+    def work_offset(self) -> Position | None:
+        return self.session.work_offset
+
+    @property
     def motion_busy(self) -> bool:
         return self.motion.busy
 

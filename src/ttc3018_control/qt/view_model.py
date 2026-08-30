@@ -262,7 +262,7 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=state_changed)
     def at_reference(self) -> bool:
-        position = self.session.virtual_position
+        position = self.application.virtual_position
         return bool(self.connected and position is not None and self._is_reference_position(position))
 
     @Property(bool, notify=state_changed)
@@ -622,7 +622,7 @@ class ControllerViewModel(QObject):
         if not self.can_jog:
             self._set_notice("Jog ignored — machine is not ready or GRBL is not Idle")
             return
-        if not self.session.envelope.trusted and not self._unreferenced_jog_allowed:
+        if not self.application.reference_trusted and not self._unreferenced_jog_allowed:
             self.unreferenced_jog_requested.emit()
             return
         outcome = self.application.jog(axis, distance, 500.0)
@@ -634,7 +634,7 @@ class ControllerViewModel(QObject):
         if not self.can_live_jog:
             self._set_notice("Live jog ignored — machine is not ready or GRBL is not Idle")
             return
-        if not self.session.envelope.trusted and not self._unreferenced_jog_allowed:
+        if not self.application.reference_trusted and not self._unreferenced_jog_allowed:
             self.unreferenced_jog_requested.emit()
             return
         outcome = self.application.start_live_jog(axis, direction, self._unreferenced_jog_allowed, 500.0)
@@ -707,11 +707,11 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def retract_safe_z(self) -> None:
-        current = self.session.virtual_position
+        current = self.application.virtual_position
         if current is None:
             self._set_notice("Safe-Z move ignored — no trusted machine position")
             return
-        self.move_to(current.x, current.y, self.session.profile.safe_z, 500.0)
+        self.move_to(current.x, current.y, self.application.profile.safe_z, 500.0)
 
     @Slot()
     def return_to_reference(self) -> None:
@@ -907,11 +907,11 @@ class ControllerViewModel(QObject):
         self._pins_text = status.pins or "None"
         self._machine_position_text = self._format_position(status.machine_position)
         work = status.work_position
-        if work is None and status.machine_position and self.session.work_offset:
-            work = status.machine_position.minus(self.session.work_offset)
+        if work is None and status.machine_position and self.application.work_offset:
+            work = status.machine_position.minus(self.application.work_offset)
         self._work_position_text = self._format_position(work)
-        self._reference_text = "Trusted" if self.session.envelope.trusted else "Position unknown"
-        self._work_zero_text = "Confirmed" if self.session.work_zero_confirmed else "Not confirmed"
+        self._reference_text = "Trusted" if self.application.reference_trusted else "Position unknown"
+        self._work_zero_text = "Confirmed" if self.application.work_zero_confirmed else "Not confirmed"
         self._emit_state()
 
     @staticmethod
