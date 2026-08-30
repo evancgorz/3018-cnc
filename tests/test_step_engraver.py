@@ -92,6 +92,8 @@ def test_lower_left_cutout_anchors_compensated_envelope_at_work_zero(mode: str) 
     assert job.placement_offset_x == pytest.approx(1.5)
     assert job.placement_offset_y == pytest.approx(1.5)
     assert "G0 X0 Y0" in job.gcode
+    assert "; Placement offset X1.5 Y1.5; path envelope is nonnegative" in job.gcode
+    assert "; Metrics cut " in job.gcode
     program = parse_gcode(job.gcode)
     assert program.bounds.minimum.x >= -0.001
     assert program.bounds.minimum.y >= -0.001
