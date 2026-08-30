@@ -353,6 +353,21 @@ def test_path_metrics_match_cross_pass_machine_position() -> None:
         if segment.rapid
     )
     assert job.rapid_xy_distance == pytest.approx(actual_rapid)
+    assert job.estimated_minutes > 0
+    assert "; Estimated duration " in job.gcode
+
+
+def test_duration_estimate_uses_explicit_motion_assumptions() -> None:
+    from ttc3018_control.step_engraver import _estimate_duration_minutes
+
+    # 60 mm cutting at 60 mm/min is one minute; the remaining motion is
+    # 30 mm of rapid XY and one 3 mm retract/plunge cycle.
+    estimate = _estimate_duration_minutes(60, 30, 1, 3, -2, 60, 120)
+    expected = 1 + 30 / 3000 + 3 / 3000 + 2 / 120
+    assert estimate == pytest.approx(expected)
+
+    with pytest.raises(ValueError, match="non-finite"):
+        _estimate_duration_minutes(math.inf, 0, 1, 3, -1, 60, 120)
 
 
 def test_centered_cutout_retains_existing_explicit_placement() -> None:

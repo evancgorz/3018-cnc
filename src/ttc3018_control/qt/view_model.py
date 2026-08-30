@@ -1100,7 +1100,7 @@ class ControllerViewModel(QObject):
             f"tool {job.tool_diameter:.2f} mm · depth {job.depth:.2f} mm · {job.passes} passes · "
             + (f"{job.tab_count} outer tabs · " if job.mode == "Profile cutout" else "")
             + f"{len(job.operations)} operation(s) · {job.stroke_count} paths · {job.cutting_distance:.0f} mm cut · {job.rapid_xy_distance:.0f} mm rapid · "
-            + f"{job.retract_count} retracts · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
+            + f"{job.retract_count} retracts · ~{job.estimated_minutes:.1f} min · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
             + simulation_summary
         )
 
