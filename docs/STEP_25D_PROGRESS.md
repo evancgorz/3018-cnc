@@ -7,16 +7,16 @@ streaming pipeline.
 
 ## Scope
 
-- [ ] Import simple planar STEP files.
-- [ ] Display an imported model and its extracted top view.
-- [ ] Let the user select model orientation, stock size, work-zero location,
+- [x] Import simple planar STEP files.
+- [x] Display an imported model's extracted top view.
+- [x] Let the user select model orientation, stock size, work-zero location,
   and fixed tool diameter.
-- [ ] Generate validated outside and inside contours.
-- [ ] Generate planar pockets, engravings, and holes.
-- [ ] Support multiple depth passes.
-- [ ] Support safe Z, cutting/plunge feeds, and optional spindle start.
-- [ ] Preview the generated centerline toolpath before running.
-- [ ] Reject geometry or generated motion outside the trusted virtual envelope.
+- [x] Generate validated outside and inside contours.
+- [x] Generate planar pockets, engravings, and holes.
+- [x] Support multiple depth passes.
+- [x] Support safe Z, cutting/plunge feeds, and optional spindle start.
+- [x] Preview the generated centerline toolpath before running.
+- [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
 ## Completed foundation
 
@@ -42,18 +42,19 @@ streaming pipeline.
 
 ### 2. Model inspection and setup
 
-- [ ] Add an **Import STEP…** action in the Prepare workspace.
-- [ ] Show model metadata, bounding box, and top-view preview.
-- [ ] Add orientation selection for the supported planar cases.
-- [ ] Add stock width, stock height, stock thickness, tool diameter, and work
-  zero location controls.
-- [ ] Reject non-planar or ambiguous geometry with an actionable explanation.
+- [x] Add an **Import STEP…** action in the Prepare workspace.
+- [x] Show model metadata, bounding box, and top-view preview.
+- [x] Add orientation selection for the supported planar cases.
+- [x] Add stock width, stock height, tool diameter, and work zero location
+  controls. Stock thickness remains implicit in the imported solid for this
+  bounded 2.5D release.
+- [x] Reject non-planar or ambiguous geometry with an actionable explanation.
 
 ### 3. Planar geometry extraction
 
-- [ ] Extract closed top-view loops from the selected top face.
-- [ ] Classify outer boundaries, holes, and islands.
-- [ ] Preserve loop winding and identify open or self-intersecting geometry.
+- [x] Extract closed top-view loops from the selected top face.
+- [x] Classify outer boundaries and holes for the supported planar cases.
+- [x] Preserve loop winding and reject open or unusable geometry.
 - [x] Add a geometry normalization layer independent of OCP objects.
 - [x] Add deterministic geometry unit tests using an OCC-generated planar box.
 
@@ -62,8 +63,9 @@ streaming pipeline.
 - [x] Add a machining-mode selector: engraving, outside contour, inside contour,
   pocket, and hole.
 - [x] Implement tool-radius offsets for inside and outside contours.
-- [ ] Define behavior for internal corners, tight radii, islands, and offset
-  failures.
+- [x] Define behavior for internal corners, tight radii, islands, and offset
+  failures by using bounded Shapely offsets and rejecting empty/out-of-stock
+  results. CAM-grade lead-ins remain deferred.
 - [x] Implement pocket clearing paths for simple planar regions.
 - [x] Implement hole paths with a documented minimum diameter rule.
 - [x] Implement multiple Z depth passes ending at the requested machining depth.
@@ -71,25 +73,27 @@ streaming pipeline.
 
 ### 5. UI and shared job pipeline
 
-- [ ] Add a STEP/2.5D job dialog with live settings and toolpath preview.
-- [ ] Reuse the existing generated-program loading and parser validation path.
-- [ ] Reuse existing bounds checks, preflight, spindle controls, and job
+- [x] Add a STEP/2.5D job dialog with live settings and toolpath preview.
+- [x] Reuse the existing generated-program loading and parser validation path.
+- [x] Reuse existing bounds checks, preflight, spindle controls, and job
   streaming.
-- [ ] Show stock, tool diameter, work zero, cut depth, pass count, and final
+- [x] Show stock, tool diameter, work zero, cut depth, pass count, and final
   transformed bounds in the preview/review screen.
-- [ ] Add save-to-G-code support through the existing validated output path.
+- [x] Add save-to-G-code support through the existing validated output path.
 
 ### 6. Safety and verification gates
 
-- [ ] Reject invalid stock dimensions, zero/negative tool diameters, impossible
+- [x] Reject invalid stock dimensions, zero/negative tool diameters, impossible
   offsets, invalid depths, and unsafe safe-Z values.
-- [ ] Reject geometry extending beyond stock or the configured machine envelope.
-- [ ] Verify no rapid or cutting move crosses the trusted envelope.
-- [ ] Verify every depth pass and final depth against the selected stock/work
+- [x] Reject geometry extending beyond stock; the existing start preflight
+  rejects motion outside the configured machine envelope.
+- [x] Verify no rapid or cutting move crosses the trusted envelope before a
+  job can start.
+- [x] Verify every depth pass and final depth against the selected stock/work
   zero configuration.
-- [ ] Test optional spindle commands and parser acceptance.
-- [ ] Test preview geometry against generated G-code bounds.
-- [ ] Preserve all existing text, plaque, parser, motion-safety, and streaming
+- [x] Test optional spindle commands and parser acceptance.
+- [x] Test preview geometry against generated G-code bounds.
+- [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
   tests.
 
 ## Deferred deliberately
@@ -117,5 +121,6 @@ streaming pipeline.
 | Date | Commit | Update |
 | --- | --- | --- |
 | 2026-08-29 | `6090a37` | Baseline Qt controller, preview, safety, and agent-running-instance guard. |
-| 2026-08-29 | pending | Added the OCP/Shapely dependency boundary and normalized planar STEP importer. |
-| 2026-08-29 | pending | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
+| 2026-08-29 | `9fad6ee` | Added the OCP/Shapely dependency boundary and normalized planar STEP importer. |
+| 2026-08-29 | `9707c0c` | Added validated engraving, contour, pocket, and hole paths with tool offsets and depth passes. |
+| 2026-08-29 | pending | Integrated the STEP/2.5D dialog, live preview, generated-program loading, and Qt view-model coverage. |

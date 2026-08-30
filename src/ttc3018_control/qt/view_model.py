@@ -31,6 +31,8 @@ from ..grbl import (
 from ..job import JobStreamer
 from ..machine_state import MachineProfile, ProfileStore, check_job_bounds
 from ..serial_connection import GrblConnection, SerialEvent, available_ports
+from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS, generate_step_gcode
+from ..step_geometry import StepImportError, StepPlanarModel, load_step
 from ..tcp_connection import TcpGrblConnection
 from ..text_engraver import FONT_NAMES, generate_text_gcode
 from ..wifi_setup import make_station_commands
@@ -106,6 +108,8 @@ class ControllerViewModel(QObject):
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
         self._preview_strokes: list[list[list[float]]] = []
         self._preview_summary = ""
+        self._step_model: StepPlanarModel | None = None
+        self._step_source_text = "No STEP model imported"
         self._log_lines: list[str] = []
         self._commissioning_pins_text = "Active inputs: none"
         self._commissioning_status_text = "No commissioning checks recorded"
@@ -178,6 +182,33 @@ class ControllerViewModel(QObject):
     @Property("QStringList", constant=True)
     def borders(self) -> list[str]:
         return list(BORDER_STYLES)
+
+    @Property("QStringList", constant=True)
+    def step_modes(self) -> list[str]:
+        return list(STEP_MODES)
+
+    @Property("QStringList", constant=True)
+    def step_orientations(self) -> list[str]:
+        return list(STEP_ORIENTATIONS)
+
+    @Property("QStringList", constant=True)
+    def step_zero_locations(self) -> list[str]:
+        return list(STEP_ZERO_LOCATIONS)
+
+    @Property(str, notify=state_changed)
+    def step_source(self) -> str:
+        return self._step_source_text
+
+    @Property(str, notify=state_changed)
+    def step_model_summary(self) -> str:
+        if self._step_model is None:
+            return "Import a planar STEP model to begin."
+        model = self._step_model
+        return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · thickness {model.thickness:.2f} mm"
+
+    @Property(bool, notify=state_changed)
+    def step_loaded(self) -> bool:
+        return self._step_model is not None
 
     @Property("QVariantList", notify=state_changed)
     def preview_strokes(self) -> list[list[list[float]]]:
@@ -533,6 +564,52 @@ class ControllerViewModel(QObject):
             self._preview_summary = f"{plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes · {border}"
         self._emit_state()
 
+    @Slot()
+    def import_step(self) -> None:
+        path_text, _ = QFileDialog.getOpenFileName(
+            None,
+            "Import planar STEP model",
+            "",
+            "STEP files (*.step *.stp);;All files (*.*)",
+        )
+        if not path_text:
+            return
+        try:
+            model = load_step(Path(path_text))
+        except StepImportError as exc:
+            QMessageBox.critical(None, "STEP import rejected", str(exc))
+            return
+        self._step_model = model
+        self._step_source_text = model.path.name
+        self._preview_strokes = self._strokes_for_step_model(model)
+        self._preview_summary = self.step_model_summary
+        self._set_notice(f"Imported planar STEP model {model.path.name}")
+        self._emit_state()
+
+    @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
+    def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+        if self._step_model is None:
+            self._preview_strokes = []
+            self._preview_summary = "Import a planar STEP model first."
+            self._emit_state()
+            return
+        try:
+            job = generate_step_gcode(
+                self._step_model, mode=mode, orientation=orientation,
+                stock_width=stock_width, stock_height=stock_height,
+                zero_location=zero_location, tool_diameter=tool_diameter,
+                depth=depth, passes=passes, safe_z=safe_z,
+                cut_feed=cut_feed, plunge_feed=plunge_feed,
+                spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
+            )
+        except (ValueError, TypeError):
+            self._preview_strokes = []
+            self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
+        else:
+            self._preview_strokes = self._strokes_for_qml(job.strokes)
+            self._preview_summary = f"{job.mode} · {job.width:.1f} × {job.height:.1f} mm · {job.stroke_count} paths · {job.passes} passes"
+        self._emit_state()
+
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
     def create_text(self, text: str, font: str, height: float, depth: float, safe_z: float, cut_feed: float, plunge_feed: float, letter_spacing: float, line_spacing: float, alignment: str, spindle_rpm: int) -> None:
         try:
@@ -561,6 +638,30 @@ class ControllerViewModel(QObject):
             QMessageBox.critical(None, "Plaque settings rejected", str(exc))
             return
         self._load_generated_program(plaque.gcode, "generated-plaque.gcode", plaque.strokes, f"Plaque · {plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes")
+
+    @Slot(str, str, float, float, str, float, float, int, float, float, float, int)
+    def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+        if self._step_model is None:
+            QMessageBox.critical(None, "STEP job unavailable", "Import a planar STEP model first")
+            return
+        try:
+            job = generate_step_gcode(
+                self._step_model, mode=mode, orientation=orientation,
+                stock_width=stock_width, stock_height=stock_height,
+                zero_location=zero_location, tool_diameter=tool_diameter,
+                depth=depth, passes=passes, safe_z=safe_z,
+                cut_feed=cut_feed, plunge_feed=plunge_feed,
+                spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
+            )
+        except (ValueError, TypeError) as exc:
+            QMessageBox.critical(None, "STEP machining settings rejected", str(exc))
+            return
+        self._load_generated_program(
+            job.gcode,
+            "generated-step.gcode",
+            job.strokes,
+            f"STEP {job.mode} · {job.width:.1f} × {job.height:.1f} mm · {job.stroke_count} paths · {job.passes} passes",
+        )
 
     @Slot()
     def save_gcode(self) -> None:
@@ -1296,6 +1397,15 @@ class ControllerViewModel(QObject):
     @classmethod
     def _strokes_for_program(cls, program: GCodeProgram) -> list[list[list[float]]]:
         return cls._strokes_for_qml(tuple(tuple((segment.start.x, segment.start.y), (segment.end.x, segment.end.y)) for segment in program.segments))
+
+    @classmethod
+    def _strokes_for_step_model(cls, model: StepPlanarModel) -> list[list[list[float]]]:
+        return cls._strokes_for_qml(
+            tuple(
+                tuple((point.x, point.y) for point in loop.points + (loop.points[0],))
+                for loop in model.loops
+            )
+        )
 
     def _disconnected(self, reason: str) -> None:
         self.session.invalidate_reference(reason)

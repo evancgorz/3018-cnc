@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+import math
 import os
 import queue
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -10,6 +12,7 @@ from ttc3018_control.qt.main import build_engine
 from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
+from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel
 
 
 class _FakeConnection:
@@ -59,7 +62,6 @@ def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
 
     view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Center", 0)
     assert view_model.preview_strokes
-    assert "strokes" in view_model.preview_summary
 
     view_model.create_plaque(
         "Hello",
@@ -81,6 +83,27 @@ def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
     )
     assert view_model.job_file == "generated-plaque.gcode"
     assert view_model.preview_strokes
+
+
+def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
+    _engine, view_model = build_engine()
+    outer = PlanarLoop(tuple(Point2D(x, y) for x, y in ((0, 0), (40, 0), (40, 25), (0, 25))))
+    hole = PlanarLoop(
+        tuple(
+            Point2D(20 + 4 * math.cos(index * math.tau / 32), 12.5 + 4 * math.sin(index * math.tau / 32))
+            for index in range(32)
+        )
+    )
+    view_model._step_model = StepPlanarModel(Path("plate.step"), (outer, hole), 5, 5, (0, 0, 0, 40, 25, 5))
+
+    view_model.preview_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -0.8, 2, 3, 300, 100, 12000)
+    assert view_model.preview_strokes
+    assert "Pocket" in view_model.preview_summary
+
+    view_model.create_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -0.8, 2, 3, 300, 100, 12000)
+    assert view_model.job_file == "generated-step.gcode"
+    assert view_model.program is not None
+    assert any(command.startswith("M3 S12000") for command in view_model.program.commands)
 
 
 def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:

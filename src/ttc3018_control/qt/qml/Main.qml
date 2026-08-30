@@ -385,6 +385,89 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: stepDialog
+        modal: true
+        title: "STEP / 2.5D machining"
+        width: 980
+        height: 760
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.height - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        function refreshPreview() {
+            if (appViewModel) appViewModel.preview_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text))
+        }
+        onOpened: refreshPreview()
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 20; spacing: 10
+            Label { text: "Import a simple planar STEP top face and generate a bounded 2.5D toolpath."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            RowLayout { Layout.fillWidth: true; spacing: 10
+                SecondaryButton { text: "Import STEP…"; onClicked: { appViewModel.import_step(); stepDialog.refreshPreview() } }
+                Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
+            }
+            Label { text: appViewModel ? appViewModel.step_model_summary : "Import a planar STEP model to begin."; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
+                Panel { Layout.fillWidth: true; Layout.fillHeight: true
+                    ToolpathCanvas { anchors.fill: parent; anchors.margins: 12; modeLabel: "STEP PREVIEW" }
+                }
+                Panel { Layout.preferredWidth: 390; Layout.minimumWidth: 390; Layout.maximumWidth: 390; Layout.fillHeight: true
+                    ScrollView { anchors.fill: parent; anchors.margins: 14; clip: true; contentWidth: availableWidth
+                        ColumnLayout { width: parent.width; spacing: 8
+                            SectionTitle { text: "Model and stock" }
+                            Label { text: "Machining mode"; color: window.palette.muted; font.pixelSize: 11 }
+                            ComboBox { id: modeCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_modes : ["Engraving"]; onActivated: stepDialog.refreshPreview() }
+                            Label { text: "Top-face orientation"; color: window.palette.muted; font.pixelSize: 11 }
+                            ComboBox { id: orientationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_orientations : ["Top (XY)"]; onActivated: stepDialog.refreshPreview() }
+                            Label { text: "Work zero"; color: window.palette.muted; font.pixelSize: 11 }
+                            ComboBox { id: zeroLocationCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.step_zero_locations : ["Center"]; currentIndex: 1; onActivated: stepDialog.refreshPreview() }
+                            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
+                                Label { text: "Stock width (mm)"; color: window.palette.muted }
+                                Field { id: stockWidthField; Layout.fillWidth: true; text: "50"; validator: DoubleValidator { bottom: 0.1; top: 1000 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Stock height (mm)"; color: window.palette.muted }
+                                Field { id: stockHeightField; Layout.fillWidth: true; text: "35"; validator: DoubleValidator { bottom: 0.1; top: 1000 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Tool diameter (mm)"; color: window.palette.muted }
+                                Field { id: toolDiameterField; Layout.fillWidth: true; text: "3.175"; validator: DoubleValidator { bottom: 0.1; top: 20 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                            }
+                            Divider {}
+                            SectionTitle { text: "Cut parameters" }
+                            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
+                                Label { text: "Depth (mm)"; color: window.palette.muted }
+                                Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Depth passes"; color: window.palette.muted }
+                                Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Safe Z (mm)"; color: window.palette.muted }
+                                Field { id: stepSafeField; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Cut feed (mm/min)"; color: window.palette.muted }
+                                Field { id: stepCutField; Layout.fillWidth: true; text: "300"; validator: DoubleValidator { bottom: 1; top: 3000 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
+                                Field { id: stepPlungeField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                                Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
+                                Field { id: stepRpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
+                                    onTextChanged: stepDialog.refreshPreview() }
+                            }
+                            MutedLabel { text: "Outside/inside contours apply the tool radius. Pocket uses nested clearing rings. Hole mode requires circular inner loops." }
+                        }
+                    }
+                }
+            }
+            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                SecondaryButton { text: "Cancel"; onClicked: stepDialog.close() }
+                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
+            }
+        }
+    }
+
     component Panel: Rectangle {
         color: window.palette.surface
         radius: 12
@@ -618,11 +701,11 @@ ApplicationWindow {
                         SectionTitle { text: "Create or load" }
                         MutedLabel { text: "Start with an existing G-code file or create a centerline engraving." }
                         Divider {}
-                        Repeater { model: ["Load G-code", "Text engraving", "Plaque builder"]
+                        Repeater { model: ["Load G-code", "Text engraving", "Plaque builder", "STEP / 2.5D"]
                             delegate: SecondaryButton {
                                 Layout.fillWidth: true
                                 text: modelData
-                                onClicked: index === 0 ? appViewModel.load_gcode() : index === 1 ? textDialog.open() : plaqueDialog.open()
+                                onClicked: index === 0 ? appViewModel.load_gcode() : index === 1 ? textDialog.open() : index === 2 ? plaqueDialog.open() : stepDialog.open()
                             }
                         }
                         Divider {}
