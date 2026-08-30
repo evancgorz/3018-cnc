@@ -40,6 +40,17 @@ Automatic `$H` homing is unavailable until home switches have been installed and
 commissioned. Manual machine reference and work-zero setup are required for every
 connection/reset session before an engraving job can start.
 
+## Application architecture
+
+The production app is a modular monolith: Qt Quick/QML is the presentation
+layer, `ControllerViewModel` is a thin Qt adapter, and the Qt-independent
+`ApplicationController` coordinates connection, motion, job, generation, and
+machine-session services. The controller owns transport access and command
+ordering; QML never sends GRBL commands or makes safety decisions. This keeps
+the local desktop deployment simple while leaving a clean seam for a future CLI
+or API adapter if headless or remote control becomes a real requirement. See
+[`docs/ARCHITECTURE_DECISION_RECORD.md`](docs/ARCHITECTURE_DECISION_RECORD.md).
+
 ## Manual setup and engraving workflow
 
 With no home switches or probe installed, machine reference and work zero are

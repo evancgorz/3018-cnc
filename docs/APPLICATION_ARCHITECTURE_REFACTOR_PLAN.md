@@ -1,5 +1,13 @@
 # Application Architecture Refactor — Agent Handoff
 
+## Implementation status
+
+Implemented on branch `codex/qt-quick-ui` through the application composition,
+connection, motion, job, generation, immutable-state, Qt Quick file-dialog,
+deferred-commissioning removal, and held-jog regression work. The remaining
+cleanup is presentation confirmation/event handoff for the few legacy
+`QMessageBox` calls and any final dead-code review.
+
 ## Mission
 
 Refactor TTC 3018 Control into a clean modular-monolith architecture while
@@ -509,4 +517,3 @@ The refactor is complete only when:
 - [ ] Full tests and the offscreen Qt shell check pass.
 - [ ] Documentation describes the architecture that actually shipped.
 - [ ] All phase commits are pushed and the working tree is clean.
-
