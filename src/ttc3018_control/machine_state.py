@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 from pathlib import Path
 
 from .grbl import Position
@@ -102,4 +103,69 @@ class VirtualEnvelope:
                 f"{axis} jog would end at {proposed:.3f} mm; allowed range is 0.000 to {maximum:.3f} mm",
             )
         return True, f"{axis} target {proposed:.3f} mm is within the virtual envelope"
+
+
+def plan_safe_position_jogs(
+    current: Position,
+    target: Position,
+    profile: MachineProfile,
+) -> list[tuple[str, float]]:
+    """Plan axis jogs to a virtual target, keeping lateral motion at a safe Z."""
+    profile.validate()
+    tolerance = VirtualEnvelope.TOLERANCE_MM
+    for label, position in (("Current", current), ("Target", target)):
+        for axis, value, maximum in zip("XYZ", (position.x, position.y, position.z), profile.travels):
+            if not math.isfinite(value):
+                raise ValueError(f"{label} {axis} coordinate must be a finite number")
+            if value < -tolerance or value > maximum + tolerance:
+                raise ValueError(
+                    f"{label} {axis} coordinate {value:.3f} mm is outside the allowed range "
+                    f"0.000 to {maximum:.3f} mm"
+                )
+
+    clearance_z = max(current.z, target.z, profile.safe_z)
+    moves: list[tuple[str, float]] = []
+    if clearance_z - current.z > tolerance:
+        moves.append(("Z", clearance_z - current.z))
+    for axis, distance in (("X", target.x - current.x), ("Y", target.y - current.y)):
+        if abs(distance) > tolerance:
+            moves.append((axis, distance))
+    if abs(target.z - clearance_z) > tolerance:
+        moves.append(("Z", target.z - clearance_z))
+    return moves
+
+
+def work_zero_virtual_target(machine_reference: Position, work_offset: Position) -> Position:
+    """Return the virtual-machine coordinate of GRBL work X0 Y0 Z0."""
+    return work_offset.minus(machine_reference)
+
+
+def check_job_bounds(
+    minimum: Position,
+    maximum: Position,
+    work_offset: Position,
+    machine_reference: Position,
+    profile: MachineProfile,
+) -> tuple[bool, str]:
+    """Transform work-coordinate job bounds into the virtual machine envelope."""
+    profile.validate()
+    work_origin = Position(
+        work_offset.x - machine_reference.x,
+        work_offset.y - machine_reference.y,
+        work_offset.z - machine_reference.z,
+    )
+    for axis, low, high, offset, travel in (
+        ("X", minimum.x, maximum.x, work_origin.x, profile.travel_x),
+        ("Y", minimum.y, maximum.y, work_origin.y, profile.travel_y),
+        ("Z", minimum.z, maximum.z, work_origin.z, profile.travel_z),
+    ):
+        machine_low = offset + low
+        machine_high = offset + high
+        if machine_low < -0.001 or machine_high > travel + 0.001:
+            return (
+                False,
+                f"{axis} job range would be {machine_low:.3f}…{machine_high:.3f} mm in the virtual machine "
+                f"envelope; allowed range is 0.000…{travel:.3f} mm.",
+            )
+    return True, "The transformed job bounds fit inside the virtual machine envelope."
 

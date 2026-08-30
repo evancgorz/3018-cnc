@@ -22,6 +22,8 @@ def test_extract_controller_ip_rejects_invalid_or_missing_address() -> None:
     assert extract_controller_ip("[MSG:Connecting....]") is None
     assert extract_controller_ip("[MSG:Connected with 999.1.1.1]") is None
     assert extract_controller_ip("IP=0.0.0.0") is None
+    assert extract_controller_ip("[MSG:Mode=STA:SSID=hidden:Status=Not connected:IP=0.0.0.0]") is None
+    assert extract_controller_ip("[MSG:Mode=AP:SSID=MKS_DLC:IP=192.168.4.1]") is None
 
 
 def test_connection_settings_round_trip(tmp_path: Path) -> None:

@@ -43,6 +43,9 @@ class ConnectionSettingsStore:
 
 def extract_controller_ip(message: str) -> str | None:
     """Extract an address from supported DLC32 network-status formats."""
+    lowered = message.lower()
+    if "mode=ap" in lowered or ("mode=sta" in lowered and "status=connected" not in lowered):
+        return None
     match = re.search(
         r"(?:\bIP=|\bConnected with\s+)(\d{1,3}(?:\.\d{1,3}){3})",
         message,
