@@ -436,7 +436,7 @@ ApplicationWindow {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
             Label { text: "Import a simple planar STEP top face and generate a bounded 2.5D toolpath."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             RowLayout { Layout.fillWidth: true; spacing: 10
-                SecondaryButton { text: "Import STEP…"; onClicked: stepFileDialog.open() }
+                SecondaryButton { text: appViewModel && appViewModel.step_importing ? "Importing…" : "Import STEP…"; enabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
                 Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
             }
             Label { text: appViewModel ? appViewModel.step_model_summary : "Import a planar STEP model to begin."; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
@@ -501,7 +501,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Cancel"; onClicked: stepDialog.close() }
-                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
+                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded && !appViewModel.step_importing; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
             }
         }
     }

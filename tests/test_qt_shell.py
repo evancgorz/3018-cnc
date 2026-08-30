@@ -5,6 +5,7 @@ import math
 import os
 import queue
 from pathlib import Path
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -13,6 +14,7 @@ from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel
+from PySide6.QtCore import QUrl
 
 
 class _FakeConnection:
@@ -32,12 +34,36 @@ class _FakeConnection:
 
 def test_qt_shell_loads(qapp) -> None:
     engine, view_model = build_engine()
-
     roots = engine.rootObjects()
     assert len(roots) == 1
     assert roots[0].property("title") == "TTC 3018 Control — Qt Preview"
     assert view_model.connection_text == "Disconnected"
 
+
+def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
+    _engine, view_model = build_engine()
+    path = tmp_path / "part.step"
+    path.write_text("placeholder", encoding="ascii")
+    model = StepPlanarModel(
+        path,
+        (PlanarLoop((Point2D(0, 0), Point2D(10, 0), Point2D(10, 5), Point2D(0, 5))),),
+        0,
+        2,
+        (0, 0, 0, 10, 5, 2),
+    )
+    view_model.application.import_step = lambda selected: model
+
+    view_model.import_step_file(QUrl.fromLocalFile(str(path)))
+
+    assert view_model.step_importing
+    assert view_model.step_source.startswith("Importing")
+    deadline = time.monotonic() + 2
+    while view_model.step_importing and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert not view_model.step_importing
+    assert view_model.step_loaded
+    assert view_model.step_source == "part.step"
 
 def test_qt_view_model_projects_grbl_status(qapp) -> None:
     _engine, view_model = build_engine()

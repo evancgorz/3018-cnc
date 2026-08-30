@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
@@ -27,6 +28,7 @@ class ControllerViewModel(QObject):
     ports_changed = Signal()
     unreferenced_jog_requested = Signal()
     close_requested = Signal()
+    step_import_completed = Signal(object, str)
 
     def __init__(self, application: ApplicationController | None = None) -> None:
         super().__init__()
@@ -62,12 +64,15 @@ class ControllerViewModel(QObject):
         self._step_model: StepPlanarModel | None = None
         self._step_path: Path | None = None
         self._step_source_text = "No STEP model imported"
+        self._step_import_status = "Import a planar STEP model to begin."
+        self._step_importing = False
         self._log_lines: list[str] = []
         self.transport = self.application.settings.preferred_transport
         self.port = ""
         self.wifi_host = self.application.settings.wifi_host
         self.wifi_port = self.application.settings.wifi_port
         self._refresh_ports()
+        self.step_import_completed.connect(self._finish_step_import)
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
@@ -190,13 +195,17 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def step_model_summary(self) -> str:
         if self._step_model is None:
-            return "Import a planar STEP model to begin."
+            return self._step_import_status
         model = self._step_model
         return f"{model.width:.2f} × {model.height:.2f} mm · {len(model.loops)} closed loop(s) · {model.face_plane} face · thickness {model.thickness:.2f} mm"
 
     @Property(bool, notify=state_changed)
     def step_loaded(self) -> bool:
         return self._step_model is not None
+
+    @Property(bool, notify=state_changed)
+    def step_importing(self) -> bool:
+        return self._step_importing
 
     @Property("QVariantList", notify=state_changed)
     def preview_strokes(self) -> list[list[list[float]]]:
@@ -432,18 +441,42 @@ class ControllerViewModel(QObject):
     def import_step_file(self, selected_file: QUrl) -> None:
         """Import a STEP URL selected by Qt Quick's file dialog."""
 
+        if self._step_importing:
+            self._set_notice("STEP import is already in progress")
+            return
         path_text = selected_file.toLocalFile()
         if not path_text:
             self._set_notice("STEP import rejected — choose a local STEP file")
             return
+        path = Path(path_text)
+        self._step_importing = True
+        self._step_source_text = f"Importing {path.name}…"
+        self._step_import_status = "Reading STEP geometry and finding planar machining faces…"
+        self._emit_state()
+        threading.Thread(target=self._import_step_worker, args=(path,), daemon=True).start()
+
+    def _import_step_worker(self, path: Path) -> None:
         try:
-            model = self.application.import_step(Path(path_text))
-        except StepImportError as exc:
-            self._set_notice(f"STEP import rejected — {exc}")
+            model = self.application.import_step(path)
+        except Exception as exc:
+            self.step_import_completed.emit(None, str(exc))
+        else:
+            self.step_import_completed.emit(model, "")
+
+    @Slot(object, str)
+    def _finish_step_import(self, model: object, error: str) -> None:
+        self._step_importing = False
+        if not isinstance(model, StepPlanarModel):
+            detail = error or "The STEP importer returned no model"
+            self._step_source_text = "STEP import failed"
+            self._step_import_status = f"Import failed: {detail}"
+            self._set_notice(f"STEP import rejected — {detail}")
+            self._emit_state()
             return
         self._step_model = model
         self._step_path = model.path
         self._step_source_text = model.path.name
+        self._step_import_status = ""
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_summary = self.step_model_summary
         self._set_notice(f"Imported planar STEP model {model.path.name}")
