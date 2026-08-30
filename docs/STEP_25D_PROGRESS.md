@@ -82,6 +82,8 @@ streaming pipeline.
 - [x] Use the validated loop-containment roots when recognizing axial STEP
   features, excluding disconnected roots and sorting feature metadata
   deterministically.
+- [x] Expose a deterministic STEP duration estimate in the review summary and
+  generated G-code, including its explicit 3000 mm/min rapid-rate assumption.
 - [x] Build and serialize deterministic projected-loop containment metadata,
   attach parent indices to detected features, and reject partial overlaps or
   self-intersecting loops before machining.
@@ -272,3 +274,4 @@ streaming pipeline.
 | 2026-08-30 | `d7b783b` | Added fail-closed validation for non-finite STEP settings and normalized metadata. |
 | 2026-08-30 | `c3338cb` | Added deterministic real-fixture job and work-zero bound regressions. |
 | 2026-08-30 | `94b1b9c` | Restricted axial feature recognition to contained loops and stabilized feature ordering. |
+| 2026-08-30 | `ff6c30e` | Added deterministic STEP duration estimates to job metadata and Qt review. |
