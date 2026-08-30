@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ttc3018_control.gcode import GCodeError, Point, parse_gcode
+from ttc3018_control.gcode import GCodeError, Point, parse_gcode, validate_nonnegative_work_xy
 
 
 def test_parses_metric_absolute_program_and_bounds() -> None:
@@ -23,6 +23,26 @@ def test_ij_arc_includes_extrema() -> None:
     program = parse_gcode("G21 G90\nG0 X1 Y0\nG3 X-1 Y0 I-1 J0")
     assert program.bounds.maximum.y == pytest.approx(1, abs=0.01)
     assert program.bounds.minimum.x == pytest.approx(-1, abs=0.01)
+
+
+def test_work_xy_gate_rejects_negative_arc_extrema_even_when_endpoints_are_safe() -> None:
+    program = parse_gcode("G21 G90\nG0 X2 Y0\nG3 X2 Y0 I-1 J0")
+
+    with pytest.raises(GCodeError, match="negative work [XY]"):
+        validate_nonnegative_work_xy(program)
+
+
+def test_work_xy_gate_allows_negative_cutting_z() -> None:
+    program = parse_gcode("G21 G90\nG0 X1 Y1 Z1\nG1 X2 Y2 Z-3 F100")
+
+    validate_nonnegative_work_xy(program)
+
+
+def test_work_xy_gate_rejects_negative_linear_coordinate() -> None:
+    program = parse_gcode("G21 G90\nG0 X1 Y1\nG1 X-0.01 Y1 F100")
+
+    with pytest.raises(GCodeError, match="negative work X"):
+        validate_nonnegative_work_xy(program)
 
 
 @pytest.mark.parametrize(

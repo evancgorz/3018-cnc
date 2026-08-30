@@ -158,6 +158,35 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
     return GCodeProgram(path or Path("<memory>"), tuple(commands), tuple(segments), Bounds(minimum, maximum))
 
 
+def validate_nonnegative_work_xy(program: GCodeProgram, tolerance: float = 0.001) -> None:
+    """Reject a program that crosses the lower-left work-XY boundary.
+
+    The parser expands I/J arcs into their swept points before calculating
+    bounds, so this check covers arc extrema as well as ordinary segment
+    endpoints.  Negative Z remains valid because cutting below work Z0 is a
+    separate, intentional operation.
+    """
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("Work-coordinate tolerance must be finite and nonnegative")
+    minimum = program.bounds.minimum
+    if minimum.x < -tolerance or minimum.y < -tolerance:
+        axis = "X" if minimum.x < -tolerance else "Y"
+        value = minimum.x if axis == "X" else minimum.y
+        raise GCodeError(
+            f"Program crosses negative work {axis} at {value:.6f} mm; "
+            "all work X/Y coordinates must be nonnegative"
+        )
+    for index, segment in enumerate(program.segments, start=1):
+        for point in (segment.start, segment.end):
+            if point.x < -tolerance or point.y < -tolerance:
+                axis = "X" if point.x < -tolerance else "Y"
+                value = point.x if axis == "X" else point.y
+                raise GCodeError(
+                    f"Segment {index} crosses negative work {axis} at {value:.6f} mm; "
+                    "all work X/Y coordinates must be nonnegative"
+                )
+
+
 def _target(current: float, values: list[float] | None, absolute: bool) -> float:
     if not values:
         return current
@@ -192,9 +221,23 @@ def _arc_points(
         sweep = -math.tau if clockwise else math.tau
 
     steps = max(8, math.ceil(abs(sweep) / math.radians(5)))
+    ratios = {index / steps for index in range(steps + 1)}
+    # Sampling at a fixed angular interval can skip a cardinal point by a
+    # small amount.  Add the exact circle extrema so bounds and safety checks
+    # cover the complete arc sweep, not just its endpoints and samples.
+    for cardinal in (0.0, math.pi / 2, math.pi, -math.pi / 2):
+        if sweep > 0:
+            delta = (cardinal - start_angle) % math.tau
+            if delta <= sweep + 1e-12:
+                ratios.add(max(0.0, min(1.0, delta / sweep)))
+        else:
+            delta = (start_angle - cardinal) % math.tau
+            if delta <= -sweep + 1e-12:
+                ratios.add(max(0.0, min(1.0, delta / (-sweep))))
     result = [start]
-    for index in range(1, steps + 1):
-        ratio = index / steps
+    for ratio in sorted(ratios):
+        if ratio <= 1e-12:
+            continue
         angle = start_angle + sweep * ratio
         result.append(
             Point(

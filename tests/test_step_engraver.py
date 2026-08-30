@@ -24,6 +24,14 @@ def _solid_model() -> StepPlanarModel:
     return StepPlanarModel(Path("solid-plate.step"), (outer,), 5, 5, (0, 0, 0, 40, 25, 5))
 
 
+def _translated_model() -> StepPlanarModel:
+    outer = PlanarLoop(tuple(Point2D(x, y) for x, y in ((-10, -8), (30, -8), (30, 17), (-10, 17))))
+    hole = PlanarLoop(
+        tuple(Point2D(-5 + 4 * math.cos(index * math.tau / 32), 4.5 + 4 * math.sin(index * math.tau / 32)) for index in range(32))
+    )
+    return StepPlanarModel(Path("translated-plate.step"), (outer, hole), 5, 5, (-10, -8, 0, 30, 17, 5))
+
+
 @pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole"])
 def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     job = generate_step_gcode(
@@ -120,6 +128,30 @@ def test_lower_left_profile_applies_placement_to_emitted_profile_commands() -> N
     assert program.bounds.minimum.y == pytest.approx(0, abs=0.001)
     assert program.bounds.maximum.x == pytest.approx(43, abs=0.001)
     assert program.bounds.maximum.y == pytest.approx(28, abs=0.001)
+
+
+@pytest.mark.parametrize("mode", ["Engraving", "Outside contour", "Inside contour", "Pocket", "Hole", "Profile cutout"])
+def test_translated_step_geometry_is_shifted_into_nonnegative_work_xy(mode: str) -> None:
+    job = generate_step_gcode(
+        _translated_model(),
+        mode=mode,
+        orientation="Top (XY)",
+        zero_location="Lower-left",
+        stock_width=45,
+        stock_height=30,
+        tool_diameter=3,
+        stock_thickness=5 if mode == "Profile cutout" else None,
+        tab_count=0,
+        depth=-1,
+    )
+
+    program = parse_gcode(job.gcode)
+    assert program.bounds.minimum.x >= -0.001
+    assert program.bounds.minimum.y >= -0.001
+    assert min(point[0] for stroke in job.strokes for point in stroke) >= -0.001
+    assert min(point[1] for stroke in job.strokes for point in stroke) >= -0.001
+    assert job.placement_offset_x > 0
+    assert job.placement_offset_y >= 0
 
 
 def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:

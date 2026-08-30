@@ -6,10 +6,11 @@ from dataclasses import dataclass
 import math
 from typing import Iterable
 
+from shapely.affinity import translate as shapely_translate
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
-from .gcode import parse_gcode
+from .gcode import parse_gcode, validate_nonnegative_work_xy
 from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
 from .step_simulation import (
@@ -156,15 +157,30 @@ def generate_step_gcode(
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
     placement_offset_x, placement_offset_y = _cutout_placement_offset(
-        strokes, mode, zero_location
+        strokes, mode, zero_location, tool_diameter
     )
     if placement_offset_x or placement_offset_y:
+        loops = tuple(_translate_loop(loop, placement_offset_x, placement_offset_y) for loop in loops)
+        region = _even_odd_region(loops)
         strokes = [_translate_stroke(stroke, placement_offset_x, placement_offset_y) for stroke in strokes]
+        surface_paths = tuple(
+            tuple((x + placement_offset_x, y + placement_offset_y, z) for x, y, z in path)
+            for path in surface_paths
+        )
         depth_paths = list(depth_paths)
         profile_paths = [
             (_translate_stroke(stroke, placement_offset_x, placement_offset_y), is_outer)
             for stroke, is_outer in profile_paths
         ]
+        detected_groups = tuple(
+            _DetectedFeatureGroup(
+                tuple(_translate_stroke(stroke, placement_offset_x, placement_offset_y) for stroke in group.strokes),
+                group.depth,
+                _translate_geometry(group.region, placement_offset_x, placement_offset_y),
+                _translate_geometry(group.retained_region, placement_offset_x, placement_offset_y),
+            )
+            for group in detected_groups
+        )
     if mode == "Detected feature":
         scheduled = _schedule_depth_paths(tuple(zip(strokes, depth_paths)))
         strokes = [stroke for stroke, _depth in scheduled]
@@ -210,7 +226,8 @@ def generate_step_gcode(
     surface_simulation: StepSurfaceSimulation | None = None
     if mode == "Planar surface":
         transformed_patches = _transformed_surface_patches(
-            model.surface_patches, orientation, offset_x, offset_y
+            model.surface_patches, orientation,
+            offset_x + placement_offset_x, offset_y + placement_offset_y,
         )
         patch_regions = [(_even_odd_region(patch.loops), patch) for patch in transformed_patches]
         surface_target = unary_union(
@@ -228,13 +245,9 @@ def generate_step_gcode(
         )
     profile_simulation: StepProfileSimulation | None = None
     if mode == "Profile cutout":
-        simulation_region = _even_odd_region(
-            _translate_loop(loop, placement_offset_x, placement_offset_y)
-            for loop in loops
-        )
         profile_simulation = simulate_profile_paths(
             [stroke for stroke, _is_outer in profile_paths],
-            simulation_region,
+            region,
             tool_diameter / 2,
             depth,
             stock_width=resolved_stock_width,
@@ -327,7 +340,8 @@ def generate_step_gcode(
     # Validate the exact emitted program before returning it to the shared
     # loading pipeline.  This keeps generator and parser semantics in lockstep
     # and fails closed if a future strategy emits an unsupported command.
-    parse_gcode(gcode)
+    parsed_program = parse_gcode(gcode)
+    validate_nonnegative_work_xy(parsed_program)
     return StepMachining(
         gcode,
         mode,
@@ -341,7 +355,7 @@ def generate_step_gcode(
         len(strokes),
         tuple(strokes),
         tuple(
-            _loop_stroke(_translate_loop(loop, placement_offset_x, placement_offset_y))
+            _loop_stroke(loop)
             for loop in loops
         ),
         resolved_thickness if mode == "Profile cutout" else None,
@@ -447,6 +461,12 @@ def _translate_loop(loop: PlanarLoop, offset_x: float, offset_y: float) -> Plana
 
 def _translate_stroke(stroke: Stroke, offset_x: float, offset_y: float) -> Stroke:
     return tuple((x + offset_x, y + offset_y) for x, y in stroke)
+
+
+def _translate_geometry(geometry, offset_x: float, offset_y: float):
+    if geometry is None or geometry.is_empty or (not offset_x and not offset_y):
+        return geometry
+    return shapely_translate(geometry, xoff=offset_x, yoff=offset_y)
 
 
 def _translate_surface_patch(
@@ -575,27 +595,29 @@ def _best_stroke_orientation(stroke: Stroke, current: tuple[float, float]) -> St
 
 
 def _cutout_placement_offset(
-    strokes: Iterable[Stroke], mode: str, zero_location: str
+    strokes: Iterable[Stroke], mode: str, zero_location: str, tool_diameter: float = 0.0
 ) -> tuple[float, float]:
-    """Anchor compensated outside-cut paths at the nonnegative work origin.
+    """Anchor every generated path at or above the nonnegative work origin.
 
-    The raw STEP loops are normalized independently from cutter compensation.
-    For an outer contour/profile, compensation expands the cutter-center path
-    outside the part, so a part starting at (0, 0) would otherwise generate
-    negative XY coordinates.  The physical work-zero convention for these
-    operations is the lower-left of the completed compensated envelope.  Other
-    modes retain their existing part-relative placement because their cutter
-    paths are inside the raw geometry and shifting them would move the part
-    outside the declared stock.
+    The correction is derived from the final cutter-center paths, after model
+    orientation, stock placement, and compensation.  This handles translated
+    STEP files and all machining modes consistently.  It deliberately shifts
+    the complete job rather than clamping individual points, preserving the
+    geometry and keeping simulation, preview, and G-code in the same frame.
     """
-    if zero_location != "Lower-left" or mode not in {"Outside contour", "Profile cutout"}:
-        return 0.0, 0.0
     points = [point for stroke in strokes for point in stroke]
     if not points:
         return 0.0, 0.0
     min_x = min(point[0] for point in points)
     min_y = min(point[1] for point in points)
-    return max(0.0, -min_x), max(0.0, -min_y)
+    # Internal paths are cutter-center paths inset from the raw material
+    # boundary.  Include the cutter radius when anchoring them so the swept
+    # cutter, not just its centerline, remains inside the nonnegative stock
+    # envelope.  Outside/profile paths already include outward compensation.
+    sweep_padding = tool_diameter / 2 if mode in {
+        "Detected feature", "Inside contour", "Pocket", "Hole", "Planar surface"
+    } else 0.0
+    return max(0.0, sweep_padding - min_x), max(0.0, sweep_padding - min_y)
 
 
 def _loop_bounds(loops: Iterable[PlanarLoop]) -> tuple[float, float, float, float, float, float]:
