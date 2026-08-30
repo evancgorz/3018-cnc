@@ -51,7 +51,7 @@ def test_reference_controls_follow_operator_workflow_order() -> None:
     work_zero = qml.index('text: "Return to work zero"')
     zero_x = qml.index('text: "Zero X"')
 
-    assert establish < go_to < safe_z < work_zero < zero_x
+    assert establish < go_to < safe_z < zero_x < work_zero
 
 
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
