@@ -6,7 +6,7 @@ import queue
 import threading
 import time
 
-from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ..application.machine_session import MachineSession
@@ -570,20 +570,23 @@ class ControllerViewModel(QObject):
             self._preview_summary = f"{plaque.width:.1f} × {plaque.height:.1f} mm · {plaque.stroke_count} strokes · {border}"
         self._emit_state()
 
-    @Slot()
-    def import_step(self) -> None:
-        path_text, _ = QFileDialog.getOpenFileName(
-            None,
-            "Import planar STEP model",
-            "",
-            "STEP files (*.step *.stp);;All files (*.*)",
-        )
+    @Slot(QUrl)
+    def import_step_file(self, selected_file: QUrl) -> None:
+        """Import a STEP URL selected by Qt Quick's file dialog.
+
+        The application is hosted by ``QGuiApplication``.  Creating a Widgets
+        ``QFileDialog`` from this slot is unsupported and can terminate the
+        process on Windows, so file selection remains entirely in QML.
+        """
+
+        path_text = selected_file.toLocalFile()
         if not path_text:
+            self._set_notice("STEP import rejected — choose a local STEP file")
             return
         try:
             model = load_step_isolated(Path(path_text))
         except StepImportError as exc:
-            QMessageBox.critical(None, "STEP import rejected", str(exc))
+            self._set_notice(f"STEP import rejected — {exc}")
             return
         self._step_model = model
         self._step_path = model.path
