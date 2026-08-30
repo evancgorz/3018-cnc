@@ -69,6 +69,8 @@ def test_nested_detected_features_are_topologically_ordered_inner_first() -> Non
 
     assert [operation.feature_indices for operation in operations] == [(1,), (0,)]
     assert operations[1].depends_on == ("feature-depth-0",)
+    assert all(operation.strategy == "connected pocket clearing" for operation in operations)
+    assert all(operation.feature_kinds == ("Recess",) for operation in operations)
     validate_operation_plan(operations)
 
 

@@ -1071,6 +1071,8 @@ class ControllerViewModel(QObject):
                 "kind": operation.kind,
                 "targetDepth": operation.target_depth,
                 "dependsOn": ", ".join(operation.depends_on),
+                "strategy": operation.strategy,
+                "featureKinds": ", ".join(operation.feature_kinds),
             }
             for operation in job.operations
         ]

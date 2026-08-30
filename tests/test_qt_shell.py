@@ -149,6 +149,8 @@ def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
             "kind": "Pocket",
             "targetDepth": -0.8,
             "dependsOn": "",
+            "strategy": "connected scanline/offset clearing",
+            "featureKinds": "",
         }
     ]
 

@@ -486,7 +486,7 @@ ApplicationWindow {
                                         Column {
                                             anchors.fill: parent; anchors.margins: 8; spacing: 2
                                             Label { text: (index + 1) + ". " + modelData.kind; color: window.palette.text; font.pixelSize: 11; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                            Label { text: "Target Z " + Number(modelData.targetDepth).toFixed(2) + " mm" + (modelData.dependsOn ? " · after " + modelData.dependsOn : ""); color: window.palette.muted; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                                             Label { text: "Target Z " + Number(modelData.targetDepth).toFixed(2) + " mm" + (modelData.strategy ? " · " + modelData.strategy : "") + (modelData.dependsOn ? " · after " + modelData.dependsOn : ""); color: window.palette.muted; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
                                         }
                                     }
                                 }

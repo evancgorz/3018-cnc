@@ -15,6 +15,8 @@ class StepOperation:
     target_depth: float
     feature_indices: tuple[int, ...] = ()
     depends_on: tuple[str, ...] = ()
+    strategy: str = ""
+    feature_kinds: tuple[str, ...] = ()
 
 
 def build_step_operation_plan(
@@ -38,7 +40,13 @@ def build_step_operation_plan(
         operations = []
         if inner:
             operations.append(
-                StepOperation("internal-through", "Internal through-cutouts", -(stock_thickness + breakthrough), inner)
+                StepOperation(
+                    "internal-through",
+                    "Internal through-cutouts",
+                    -(stock_thickness + breakthrough),
+                    inner,
+                    strategy="compensated inner profiles",
+                )
             )
         operations.append(
             StepOperation(
@@ -46,6 +54,7 @@ def build_step_operation_plan(
                 "Outer profile",
                 -(stock_thickness + breakthrough),
                 depends_on=("internal-through",) if inner else (),
+                strategy="compensated outer profile with retention tabs",
             )
         )
         return tuple(operations)
@@ -88,19 +97,42 @@ def build_step_operation_plan(
 
         operations = []
         for index, (feature_depth, feature_indices) in enumerate(sorted_groups):
+            feature_kinds = tuple(sorted({model.features[feature_index].kind for feature_index in feature_indices}))
+            if feature_kinds == ("Raised boss",):
+                strategy = "connected boss-surround clearing"
+            elif feature_kinds == ("Recess",):
+                strategy = "connected pocket clearing"
+            else:
+                strategy = "connected mixed-feature clearing"
             operations.append(
                 StepOperation(
                     f"feature-depth-{index}",
-                    "Detected feature group",
+                    " / ".join(feature_kinds) + " clearing",
                     -feature_depth,
                     tuple(feature_indices),
                     tuple(sorted(dependencies_by_operation[f"feature-depth-{index}"])),
+                    strategy,
+                    feature_kinds,
                 )
             )
         return _topological_operation_order(tuple(operations))
     if mode == "Planar surface":
-        return (StepOperation("planar-surface", "Planar surface raster", depth),)
-    return (StepOperation(mode.lower().replace(" ", "-"), mode, depth),)
+        return (StepOperation("planar-surface", "Planar surface raster", depth, strategy="height-field raster"),)
+    strategies = {
+        "Engraving": "single-pass centerline",
+        "Outside contour": "compensated outside contour",
+        "Inside contour": "compensated inside contour",
+        "Pocket": "connected scanline/offset clearing",
+        "Hole": "circular compensated bore",
+    }
+    return (
+        StepOperation(
+            mode.lower().replace(" ", "-"),
+            mode,
+            depth,
+            strategy=strategies.get(mode, ""),
+        ),
+    )
 
 
 def validate_operation_plan(operations: tuple[StepOperation, ...]) -> None:
