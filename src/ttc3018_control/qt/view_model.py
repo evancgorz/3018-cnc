@@ -72,6 +72,8 @@ class ControllerViewModel(QObject):
         self._step_source_text = "No STEP model imported"
         self._step_import_status = "Import a planar STEP model to begin."
         self._step_importing = False
+        self._guided_step = 0
+        self._guided_preflight_confirmed = False
         self._log_lines: list[str] = []
         self.transport = self.application.settings.preferred_transport
         self.port = ""
@@ -347,6 +349,68 @@ class ControllerViewModel(QObject):
     def can_start_job(self) -> bool:
         return self.application.can_start_job
 
+    @Property(int, notify=state_changed)
+    def guided_step(self) -> int:
+        return self._guided_step
+
+    @Property(int, constant=True)
+    def guided_step_count(self) -> int:
+        return 9
+
+    @Property("QStringList", constant=True)
+    def guided_step_names(self) -> list[str]:
+        return [
+            "Safety",
+            "Connect",
+            "Machine profile",
+            "Machine reference",
+            "Work zero",
+            "Create or load",
+            "Review",
+            "Physical preflight",
+            "Run",
+        ]
+
+    @Property(str, notify=state_changed)
+    def guided_step_title(self) -> str:
+        return (
+            "Start safely",
+            "Connect to GRBL",
+            "Confirm the machine profile",
+            "Establish machine reference",
+            "Set the work zero",
+            "Create or load a job",
+            "Review the validated path",
+            "Complete physical preflight",
+            "Run the job",
+        )[self._guided_step]
+
+    @Property(str, notify=state_changed)
+    def guided_step_description(self) -> str:
+        return (
+            "Keep physical power removal or an emergency stop within reach. This app has no home switches or probe to discover the machine's location.",
+            "Connect over USB serial or Wi-Fi TCP and wait for a fresh GRBL Idle report with machine coordinates.",
+            "Enter measured usable X, Y, and Z travel and a safe-Z height. The profile protects every trusted motion and generated job.",
+            "Jog manually to the chosen physical reference, then establish it here. All trusted virtual coordinates are measured from this point.",
+            "Jog to the material's intended origin and set XYZ work zero. Wait for GRBL to confirm the new work offset before continuing.",
+            "Load validated metric G-code or create text, plaque, or STEP toolpaths. Generation never sends machine motion.",
+            "Review the exact loaded file, dimensions, operation plan, and envelope result. A job cannot run unless the transformed bounds fit.",
+            "Secure the material and tool, verify the spindle state, safe Z, feed, and emergency power. This acknowledgement is reset for each guided run.",
+            "Start the guarded acknowledged stream. Pause, resume, or abort remain available in Preview & Run; completion returns safely to work zero.",
+        )[self._guided_step]
+
+    @Property(bool, notify=state_changed)
+    def guided_step_ready(self) -> bool:
+        return self._guided_ready()[0]
+
+    @Property(str, notify=state_changed)
+    def guided_step_reason(self) -> str:
+        return self._guided_ready()[1]
+
+    @Property(bool, notify=state_changed)
+    def guided_preflight_confirmed(self) -> bool:
+        return self._guided_preflight_confirmed
+
     @Property("QStringList", notify=ports_changed)
     def ports(self) -> list[str]:
         return self._ports
@@ -364,6 +428,44 @@ class ControllerViewModel(QObject):
     @Slot()
     def show_connection_notice(self) -> None:
         self._set_notice("Use the Connect control to choose USB serial or Wi-Fi TCP.")
+
+    @Slot()
+    def guided_next(self) -> None:
+        ready, reason = self._guided_ready()
+        if not ready:
+            self._set_notice(f"Guided setup blocked — {reason}")
+            return
+        if self._guided_step < self.guided_step_count - 1:
+            self._guided_step += 1
+            if self._guided_step < 7:
+                self._guided_preflight_confirmed = False
+            self._emit_state()
+
+    @Slot()
+    def guided_previous(self) -> None:
+        if self._guided_step > 0:
+            self._guided_step -= 1
+            self._emit_state()
+
+    @Slot()
+    def guided_reset(self) -> None:
+        self._guided_step = 0
+        self._guided_preflight_confirmed = False
+        self._emit_state()
+
+    @Slot()
+    def confirm_guided_preflight(self) -> None:
+        if self._guided_step != 7:
+            return
+        self._guided_preflight_confirmed = True
+        self._set_notice("Physical preflight acknowledged for this guided run")
+        self._emit_state()
+
+    @Slot()
+    def guided_start_job(self) -> None:
+        if self._guided_step != 8:
+            return
+        self.start_job()
 
     @Slot(str, float, float, float, float)
     def save_profile(self, name: str, travel_x: float, travel_y: float, travel_z: float, safe_z: float) -> None:
@@ -1116,7 +1218,37 @@ class ControllerViewModel(QObject):
         self._reference_text = "Position unknown"
         self._work_zero_text = "Not confirmed"
         self._spindle_text = "Off"
+        self._guided_preflight_confirmed = False
         self._emit_state()
+
+    def _guided_ready(self) -> tuple[bool, str]:
+        step = self._guided_step
+        if step == 0:
+            return True, "Safety guidance reviewed."
+        if step == 1:
+            return bool(self.connected and self.status is not None and self.status.can_jog), "Connect and wait for GRBL Idle with a machine position."
+        if step == 2:
+            try:
+                self.application.profile.validate()
+            except ValueError as exc:
+                return False, str(exc)
+            return True, "The configured machine profile is valid."
+        if step == 3:
+            return self.application.reference_trusted, "Establish the machine reference from the Machine workspace."
+        if step == 4:
+            return self.application.work_zero_confirmed, "Set XYZ work zero and wait for a fresh GRBL work-offset report."
+        if step == 5:
+            return self.program is not None, "Load G-code or create a text, plaque, or STEP job."
+        if step == 6:
+            fits, reason = self.application.preflight()
+            return bool(self.program is not None and fits), reason
+        if step == 7:
+            if not self._guided_preflight_confirmed:
+                return False, "Confirm the material, tool, spindle, safe Z, feed, and emergency power."
+            return True, "Physical preflight acknowledged."
+        if step == 8:
+            return True, "The guarded job-start confirmation is ready."
+        return False, "Unknown guided setup step."
 
     def _set_notice(self, message: str) -> None:
         self.toast_requested.emit(message)

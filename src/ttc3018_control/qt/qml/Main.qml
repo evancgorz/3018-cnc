@@ -978,33 +978,77 @@ ApplicationWindow {
                 Panel { Layout.preferredWidth: 265; Layout.minimumWidth: 265; Layout.maximumWidth: 265; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 6
                         SectionTitle { text: "Guided setup" }
-                        MutedLabel { text: "A clear, safety-gated path from connection to engraving." }
+                        MutedLabel { text: "A clear, safety-gated path from connection to engraving."; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Divider {}
-                        Repeater { model: ["1  Safety", "2  Connect", "3  Machine profile", "4  Machine reference", "5  Work zero", "6  Create or load", "7  Review", "8  Physical preflight", "9  Run"]
+                        Repeater { model: appViewModel ? appViewModel.guided_step_names : []
                             delegate: RowLayout { Layout.fillWidth: true; Layout.preferredHeight: 32; spacing: 9
-                                Rectangle { width: 19; height: 19; radius: 9.5; color: index === 0 ? window.palette.accent : window.palette.raised; Label { anchors.centerIn: parent; text: index + 1; color: index === 0 ? "white" : window.palette.muted; font.pixelSize: 10; font.bold: true } }
-                                Label { text: modelData.substring(3); color: index === 0 ? window.palette.text : window.palette.muted; font.pixelSize: 12; Layout.fillWidth: true }
+                                Rectangle {
+                                    width: 19; height: 19; radius: 9.5
+                                    color: index === appViewModel.guided_step ? window.palette.accent : index < appViewModel.guided_step ? window.palette.success : window.palette.raised
+                                    Label { anchors.centerIn: parent; text: index < appViewModel.guided_step ? "✓" : index + 1; color: index <= appViewModel.guided_step ? "white" : window.palette.muted; font.pixelSize: 10; font.bold: true }
+                                }
+                                Label { text: modelData; color: index === appViewModel.guided_step ? window.palette.text : window.palette.muted; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
                             }
                         }
+                        Item { Layout.fillHeight: true }
+                        SecondaryButton { Layout.fillWidth: true; text: "Start over"; onClicked: appViewModel.guided_reset() }
                     }
                 }
                 Panel { Layout.fillWidth: true; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 48; spacing: 18
-                        Pill { label: "Step 1 of 9"; tone: window.palette.accent }
-                        Label { text: "Start safe"; color: window.palette.text; font.pixelSize: 30; font.weight: Font.Bold }
-                        Label { text: "This workspace guides a complete manual-reference engraving workflow. It keeps reference, work zero, and physical preflight distinct so that each action is clear and deliberate."; color: window.palette.muted; font.pixelSize: 16; wrapMode: Text.Wrap; Layout.maximumWidth: 680 }
+                        Pill { label: "Step " + (appViewModel ? appViewModel.guided_step + 1 : 1) + " of " + (appViewModel ? appViewModel.guided_step_count : 9); tone: window.palette.accent }
+                        Label { text: appViewModel ? appViewModel.guided_step_title : "Guided setup"; color: window.palette.text; font.pixelSize: 30; font.weight: Font.Bold }
+                        Label { text: appViewModel ? appViewModel.guided_step_description : ""; color: window.palette.muted; font.pixelSize: 16; wrapMode: Text.Wrap; Layout.maximumWidth: 760; Layout.fillWidth: true }
                         Divider {}
-                        Repeater { model: ["Keep physical power removal or an emergency stop within reach.", "Do not drive axes into mechanical stops.", "Confirm the spindle is off before reference and setup moves.", "No homing switches or probe are assumed in this workflow."]
-                            delegate: RowLayout { Layout.fillWidth: true; spacing: 10
-                                Rectangle { width: 19; height: 19; radius: 4; color: Qt.rgba(window.palette.accent.r, window.palette.accent.g, window.palette.accent.b, 0.18); Label { anchors.centerIn: parent; text: "✓"; color: window.palette.accent; font.bold: true } }
-                                Label { text: modelData; color: window.palette.text; font.pixelSize: 14; Layout.fillWidth: true; wrapMode: Text.Wrap }
+
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 0; Layout.fillWidth: true; spacing: 12
+                            Repeater { model: ["Keep physical power removal or an emergency stop within reach.", "Do not drive axes into mechanical stops.", "Confirm the spindle is off before reference and setup moves.", "No homing switches or probe are assumed in this workflow."]
+                                delegate: RowLayout { Layout.fillWidth: true; spacing: 10
+                                    Rectangle { width: 19; height: 19; radius: 4; color: Qt.rgba(window.palette.accent.r, window.palette.accent.g, window.palette.accent.b, 0.18); Label { anchors.centerIn: parent; text: "✓"; color: window.palette.accent; font.bold: true } }
+                                    Label { text: modelData; color: window.palette.text; font.pixelSize: 14; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                                }
                             }
                         }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 1; Layout.fillWidth: true; spacing: 12
+                            PrimaryButton { text: "Open connection"; onClicked: connectionDialog.open() }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 2; Layout.fillWidth: true; spacing: 12
+                            Label { text: appViewModel ? appViewModel.profile_summary : ""; color: window.palette.text; font.pixelSize: 15 }
+                            SecondaryButton { text: "Edit machine profile"; onClicked: profileDialog.open() }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 3; Layout.fillWidth: true; spacing: 12
+                            Label { text: "Current machine: " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
+                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 4; Layout.fillWidth: true; spacing: 12
+                            Label { text: "Current work position: " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
+                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 5; Layout.fillWidth: true; spacing: 12
+                            Label { text: appViewModel ? appViewModel.job_file : "No job loaded"; color: window.palette.text; font.pixelSize: 15 }
+                            RowLayout { Layout.fillWidth: true; spacing: 10
+                                SecondaryButton { text: "Open Prepare"; onClicked: window.workspace = 0 }
+                                SecondaryButton { text: "Open Preview & Run"; onClicked: window.workspace = 1 }
+                            }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 6; Layout.fillWidth: true; spacing: 12
+                            Label { text: appViewModel ? appViewModel.job_summary : ""; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            SecondaryButton { text: "Review job"; onClicked: window.workspace = 1 }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 7; Layout.fillWidth: true; spacing: 12
+                            Label { text: "Confirm that the material is secured, the tool is tightened, the spindle behavior is understood, safe Z is clear, and emergency power removal is available."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            CheckBox { id: guidedPreflightCheck; text: "I have completed the physical preflight"; checked: appViewModel ? appViewModel.guided_preflight_confirmed : false; onClicked: appViewModel.confirm_guided_preflight(); contentItem: Text { text: parent.text; color: window.palette.text; font.pixelSize: 14; leftPadding: parent.indicator.width + parent.spacing } }
+                        }
+                        ColumnLayout { visible: appViewModel && appViewModel.guided_step === 8; Layout.fillWidth: true; spacing: 12
+                            Label { text: "The job will be streamed one acknowledged command at a time. Keep watching the machine throughout the run."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            PrimaryButton { text: "Start guarded job"; enabled: appViewModel && appViewModel.can_start_job; onClicked: appViewModel.guided_start_job() }
+                        }
+                        Label { text: appViewModel ? appViewModel.guided_step_reason : ""; color: appViewModel && appViewModel.guided_step_ready ? window.palette.success : window.palette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Item { Layout.fillHeight: true }
                         RowLayout { Layout.fillWidth: true
+                            SecondaryButton { text: "Back"; enabled: appViewModel && appViewModel.guided_step > 0; onClicked: appViewModel.guided_previous() }
                             Item { Layout.fillWidth: true }
-                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
-                            PrimaryButton { text: "Continue to connection"; onClicked: connectionDialog.open() }
+                            PrimaryButton { text: appViewModel && appViewModel.guided_step === appViewModel.guided_step_count - 1 ? "Done" : "Next"; enabled: appViewModel && appViewModel.guided_step_ready; onClicked: appViewModel.guided_next() }
                         }
                     }
                 }
