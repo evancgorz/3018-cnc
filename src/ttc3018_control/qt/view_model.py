@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from ..application.machine_session import MachineSession
 from ..application.connection_service import ConnectionService
+from ..application.job_service import JobService
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
 from ..gcode import GCodeError, GCodeProgram, load_gcode, parse_gcode
@@ -72,10 +73,16 @@ class ControllerViewModel(QObject):
         self.connection_service = ConnectionService(GrblConnection, TcpGrblConnection, discover_grbl_hosts)
         self.connection = None
         self.status: GrblStatus | None = None
-        self.job = JobStreamer(self._send_job_line)
+        self.job_service = JobService(
+            self._send_job_line,
+            self._send_realtime,
+            on_notice=self._set_notice,
+            on_change=self._emit_state,
+            on_ready_to_return=self.return_to_work_zero,
+        )
+        self.job = self.job_service.streamer
         self.program: GCodeProgram | None = None
         self._pending_manual_acks = 0
-        self._return_after_job_pending = False
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
         self._unreferenced_jog_allowed = False
@@ -984,30 +991,25 @@ class ControllerViewModel(QObject):
         answer = QMessageBox.question(None, "Start engraving job?", f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.")
         if answer != QMessageBox.StandardButton.Yes:
             return
-        try:
-            self.job.start(self.program.commands)
-        except (RuntimeError, ValueError) as exc:
-            self._set_notice(f"Job not started — {exc}")
+        outcome = self.job_service.start(self.program.commands)
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
             return
-        self._set_notice("Engraving job started")
+        self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def pause_job(self) -> None:
-        try:
-            self._send_realtime(REALTIME_HOLD)
-            self.job.pause()
-        except RuntimeError as exc:
-            self._set_notice(f"Pause failed — {exc}")
+        outcome = self.job_service.pause()
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def resume_job(self) -> None:
-        try:
-            self._send_realtime(REALTIME_RESUME)
-            self.job.resume()
-        except RuntimeError as exc:
-            self._set_notice(f"Resume failed — {exc}")
+        outcome = self.job_service.resume()
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
@@ -1023,7 +1025,7 @@ class ControllerViewModel(QObject):
             self._send_realtime(REALTIME_SOFT_RESET)
         except RuntimeError:
             pass
-        self.job.abort()
+        self.job_service.abort()
         self._pending_manual_acks = 0
         self.motion.reset()
         self._set_notice("Job aborted — references retained")
@@ -1114,29 +1116,21 @@ class ControllerViewModel(QObject):
         motion_handled = self.motion.handle_response(text, 500.0)
         if not motion_handled and self._pending_manual_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
             self._pending_manual_acks -= 1
-        elif self.job.handle_response(text):
-            if self.job.state == "complete":
-                self._return_after_job_pending = True
-                try:
-                    self._send_manual(b"M5\n")
-                except RuntimeError:
-                    self._return_after_job_pending = False
+        elif self.job_service.handle_response(text):
+            pass
         status = parse_status(text)
         if status is not None:
             self.status = status
             self.session.update_status(status)
             self._update_commissioning(status)
-            if self._return_after_job_pending and status.can_jog and not self._pending_manual_acks:
-                self._return_after_job_pending = False
-                self.return_to_work_zero()
+            self.job_service.observe_status(status)
             self.motion.observe_status(status)
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
             self._project_status(status)
         if text.startswith("Grbl ") or "[MSG:Reset" in text:
-            if self.job.state in {"running", "paused"}:
-                self.job.abort("Controller reset")
+            self.job_service.reset()
             self._pending_manual_acks = 0
             self.motion.reset()
             if self._preserve_references_on_next_reset:
@@ -1279,7 +1273,6 @@ class ControllerViewModel(QObject):
         self.status = None
         self.motion.reset()
         self._pending_manual_acks = 0
-        self._return_after_job_pending = False
         self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False
         self._preserve_references_on_next_reset = False

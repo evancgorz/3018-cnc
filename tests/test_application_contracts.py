@@ -6,7 +6,9 @@ import pytest
 
 from ttc3018_control.application.events import EventLevel, NoticeEvent
 from ttc3018_control.application.connection_service import ConnectionService, WifiAttempt
+from ttc3018_control.application.job_service import JobService
 from ttc3018_control.application.state import ApplicationState, ConnectionMode, JobSnapshot
+from ttc3018_control.grbl import GrblStatus
 
 
 def test_application_state_is_immutable_and_qt_independent() -> None:
@@ -73,3 +75,22 @@ def test_connection_service_discards_a_stale_wifi_result_after_disconnect() -> N
 
     assert service.poll_wifi() is None
     assert not stale_transport.connected
+
+
+def test_job_service_streams_and_stops_spindle_before_return() -> None:
+    lines: list[bytes] = []
+    realtime: list[bytes] = []
+    notices: list[str] = []
+    ready: list[bool] = []
+    service = JobService(lines.append, realtime.append, notices.append, on_ready_to_return=lambda: ready.append(True))
+
+    assert service.start(("G1 X1",)).accepted
+    assert lines == [b"G1 X1\n"]
+    assert service.handle_response("ok")
+    assert lines[-1] == b"M5\n"
+    assert service.spindle_stop_pending
+    assert service.handle_response("ok")
+    service.observe_status(GrblStatus("Idle"))
+
+    assert ready == [True]
+    assert any("spindle stopped" in notice for notice in notices)
