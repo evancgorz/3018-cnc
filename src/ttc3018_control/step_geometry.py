@@ -166,9 +166,14 @@ class StepPlanarModel:
     @property
     def resolved_loop_parents(self) -> tuple[int | None, ...]:
         """Return containment metadata, including for synthetic test models."""
+        computed = loop_containment_parents(self.loops)
         if len(self.loop_parents) == len(self.loops):
+            if self.loop_parents != computed:
+                raise StepImportError(
+                    "Serialized STEP loop containment does not match projected geometry"
+                )
             return self.loop_parents
-        return loop_containment_parents(self.loops)
+        return computed
 
 
 def loop_containment_parents(loops: tuple[PlanarLoop, ...]) -> tuple[int | None, ...]:
@@ -184,6 +189,14 @@ def loop_containment_parents(loops: tuple[PlanarLoop, ...]) -> tuple[int | None,
 
     polygons = []
     for loop in loops:
+        if any(
+            math.dist(
+                (point.x, point.y),
+                (following.x, following.y),
+            ) <= 1e-7
+            for point, following in zip(loop.points, loop.points[1:] + loop.points[:1])
+        ):
+            raise StepImportError("Projected planar geometry contains a zero-length loop edge")
         polygon = Polygon((point.x, point.y) for point in loop.points)
         if polygon.is_empty:
             raise StepImportError("Projected planar geometry contains an empty loop")

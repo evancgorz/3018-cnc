@@ -185,6 +185,26 @@ def test_loop_containment_parents_rejects_partial_overlap_and_self_intersection(
         loop_containment_parents(
             (PlanarLoop((Point2D(0, 0), Point2D(10, 10), Point2D(0, 10), Point2D(10, 0))),)
         )
+    with pytest.raises(StepImportError, match="zero-length"):
+        loop_containment_parents(
+            (PlanarLoop((Point2D(0, 0), Point2D(10, 0), Point2D(10, 0), Point2D(0, 10))),)
+        )
+
+
+def test_supplied_loop_parent_metadata_must_match_projected_geometry() -> None:
+    outer = PlanarLoop((Point2D(0, 0), Point2D(20, 0), Point2D(20, 20), Point2D(0, 20)))
+    inner = PlanarLoop((Point2D(5, 5), Point2D(15, 5), Point2D(15, 15), Point2D(5, 15)))
+    model = StepPlanarModel(
+        Path("inconsistent-topology.step"),
+        (outer, inner),
+        5,
+        5,
+        (0, 0, 0, 20, 20, 5),
+        loop_parents=(None, None),
+    )
+
+    with pytest.raises(StepImportError, match="does not match"):
+        _ = model.resolved_loop_parents
 
 
 def test_load_step_isolated_reports_worker_errors(tmp_path: Path) -> None:
