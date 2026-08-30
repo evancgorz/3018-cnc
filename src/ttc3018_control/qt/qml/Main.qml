@@ -475,6 +475,22 @@ ApplicationWindow {
                                 Field { id: toolDiameterField; Layout.fillWidth: true; text: "3.175"; validator: DoubleValidator { bottom: 0.1; top: 20 }
                                     onTextChanged: stepDialog.refreshPreview() }
                             }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 5; visible: appViewModel && appViewModel.step_operations.length > 0
+                                Divider {}
+                                SectionTitle { text: "Operation plan" }
+                                Repeater {
+                                    model: appViewModel ? appViewModel.step_operations : []
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true; implicitHeight: modelData.dependsOn ? 49 : 38
+                                        radius: 8; color: window.palette.elevated; border.color: window.palette.divider; border.width: 1
+                                        Column {
+                                            anchors.fill: parent; anchors.margins: 8; spacing: 2
+                                            Label { text: (index + 1) + ". " + modelData.kind; color: window.palette.text; font.pixelSize: 11; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                                            Label { text: "Target Z " + Number(modelData.targetDepth).toFixed(2) + " mm" + (modelData.dependsOn ? " · after " + modelData.dependsOn : ""); color: window.palette.muted; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                                        }
+                                    }
+                                }
+                            }
                             ColumnLayout { Layout.fillWidth: true; spacing: 7; visible: modeCombo.currentText === "Profile cutout"
                                 Divider {}
                                 SectionTitle { text: "Through cut and holding tabs" }
@@ -528,7 +544,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Cancel"; onClicked: stepDialog.close() }
-                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded && !appViewModel.step_importing; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
+                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded && !appViewModel.step_importing && appViewModel.step_preview_valid; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
             }
         }
     }

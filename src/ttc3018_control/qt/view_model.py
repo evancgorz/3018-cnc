@@ -63,6 +63,8 @@ class ControllerViewModel(QObject):
         self._preview_strokes: list[list[list[float]]] = []
         self._preview_model_strokes: list[list[list[float]]] = []
         self._preview_summary = ""
+        self._step_operations: list[dict[str, object]] = []
+        self._step_preview_valid = False
         self._step_model: StepPlanarModel | None = None
         self._step_path: Path | None = None
         self._step_source_text = "No STEP model imported"
@@ -227,6 +229,14 @@ class ControllerViewModel(QObject):
     @Property("QVariantList", notify=state_changed)
     def preview_model_strokes(self) -> list[list[list[float]]]:
         return self._preview_model_strokes
+
+    @Property("QVariantList", notify=state_changed)
+    def step_operations(self) -> list[dict[str, object]]:
+        return self._step_operations
+
+    @Property(bool, notify=state_changed)
+    def step_preview_valid(self) -> bool:
+        return self._step_preview_valid
 
     @Property(str, notify=state_changed)
     def preview_summary(self) -> str:
@@ -497,6 +507,8 @@ class ControllerViewModel(QObject):
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_model_strokes = []
         self._preview_summary = self.step_model_summary
+        self._step_operations = []
+        self._step_preview_valid = False
         self._set_notice(f"Imported planar STEP model {model.path.name}")
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
@@ -514,6 +526,8 @@ class ControllerViewModel(QObject):
         self._preview_strokes = self._strokes_for_step_model(model)
         self._preview_model_strokes = []
         self._preview_summary = self.step_model_summary
+        self._step_operations = []
+        self._step_preview_valid = False
         self._set_notice(f"Selected {model.face_plane} machining face")
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
@@ -523,6 +537,8 @@ class ControllerViewModel(QObject):
         if self._step_model is None:
             self._preview_strokes = []
             self._preview_summary = "Import a planar STEP model first."
+            self._step_operations = []
+            self._step_preview_valid = False
             self._emit_state()
             return
         try:
@@ -540,11 +556,15 @@ class ControllerViewModel(QObject):
             self._preview_strokes = []
             self._preview_model_strokes = []
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
+            self._step_operations = []
+            self._step_preview_valid = False
             self._set_notice(f"STEP preview rejected — {exc}")
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
             self._preview_model_strokes = self._strokes_for_qml(job.result.model_strokes)
             self._preview_summary = self._step_job_summary(job.result)
+            self._step_operations = self._operations_for_qml(job.result)
+            self._step_preview_valid = True
         self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
@@ -582,6 +602,9 @@ class ControllerViewModel(QObject):
     def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
         if self._step_model is None:
             self._set_notice("STEP job unavailable — import a planar STEP model first")
+            return
+        if not self._step_preview_valid:
+            self._set_notice("STEP job unavailable — resolve the rejected preview first")
             return
         try:
             job = self.application.generate_step(
@@ -997,6 +1020,18 @@ class ControllerViewModel(QObject):
         if model.features:
             return "Detected feature"
         return "Engraving"
+
+    @staticmethod
+    def _operations_for_qml(job) -> list[dict[str, object]]:
+        return [
+            {
+                "operationId": operation.operation_id,
+                "kind": operation.kind,
+                "targetDepth": operation.target_depth,
+                "dependsOn": ", ".join(operation.depends_on),
+            }
+            for operation in job.operations
+        ]
 
     @staticmethod
     def _step_job_summary(job) -> str:

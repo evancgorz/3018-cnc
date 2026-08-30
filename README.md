@@ -167,6 +167,11 @@ uncovered reachable area. **Generate and load** sends the result through
 the same metric parser, bounds checks, preflight, save, and streaming pipeline as
 imported G-code; generation itself never moves the machine.
 
+The STEP dialog shows the validated operation plan, target depths, and
+dependencies from the same records embedded in the generated G-code. The
+generate button stays disabled until the current settings have produced a
+valid preview and simulation result.
+
 The `examples/removed-cylinder.step` and `examples/extruded-circle.step` fixtures
 exercise the topology distinction. They have the same top-view rectangle and
 circle, but the first contains a 2 mm circular recess while the second contains

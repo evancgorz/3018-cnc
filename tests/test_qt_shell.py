@@ -139,6 +139,15 @@ def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
     view_model.preview_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -0.8, 2, 5, 0.2, 4, 4, 0.8, 3, 300, 100, 12000)
     assert view_model.preview_strokes
     assert "Pocket" in view_model.preview_summary
+    assert view_model.step_preview_valid
+    assert view_model.step_operations == [
+        {
+            "operationId": "pocket",
+            "kind": "Pocket",
+            "targetDepth": -0.8,
+            "dependsOn": "",
+        }
+    ]
 
     view_model.create_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -0.8, 2, 5, 0.2, 4, 4, 0.8, 3, 300, 100, 12000)
     assert view_model.job_file == "generated-step.gcode"
@@ -148,6 +157,14 @@ def test_qt_step_generator_preview_and_load_use_shared_parser(qapp) -> None:
     view_model.preview_step("Profile cutout", "Top (XY)", 50, 35, "Center", 3.175, -0.8, 3, 5, 0.2, 4, 4, 0.8, 3, 300, 100, 12000)
     assert "Profile cutout" in view_model.preview_summary
     assert "4 outer tabs" in view_model.preview_summary
+    assert view_model.step_preview_valid
+    assert [operation["operationId"] for operation in view_model.step_operations] == [
+        "internal-through", "outer-profile"
+    ]
+
+    view_model.preview_step("Pocket", "Top (XY)", 50, 35, "Center", 3.175, -21, 2, 5, 0.2, 4, 4, 0.8, 3, 300, 100, 12000)
+    assert not view_model.step_preview_valid
+    assert view_model.step_operations == []
 
 
 def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:

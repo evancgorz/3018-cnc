@@ -62,6 +62,8 @@ streaming pipeline.
 - [x] Parse the exact G-code emitted by the STEP generator before returning it
   to the shared loading pipeline.
 - [x] Preview the generated centerline toolpath before running.
+- [x] Show the current validated operation plan with target depths and
+  dependencies, and disable generation when the preview is stale or rejected.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
 ## Completed foundation
