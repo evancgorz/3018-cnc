@@ -1345,7 +1345,7 @@ ApplicationWindow {
                             CheckBox { id: guidedPreflightCheck; text: "I have completed the physical preflight"; checked: appViewModel ? appViewModel.guided_preflight_confirmed : false; onClicked: appViewModel.confirm_guided_preflight(); contentItem: Text { text: parent.text; color: window.palette.text; font.pixelSize: 14; leftPadding: parent.indicator.width + parent.spacing } }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 8; Layout.fillWidth: true; spacing: 12
-                            Label { text: "The job will be streamed one acknowledged command at a time. Keep watching the machine throughout the run."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            Label { text: "The job will use acknowledged, capacity-limited GRBL streaming. Keep watching the machine throughout the run."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
                             PrimaryButton { text: "Start guarded job"; enabled: appViewModel && appViewModel.can_start_job; onClicked: appViewModel.guided_start_job() }
                         }
                         Label { text: appViewModel ? appViewModel.guided_step_reason : ""; color: appViewModel && appViewModel.guided_step_ready ? window.palette.success : window.palette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }

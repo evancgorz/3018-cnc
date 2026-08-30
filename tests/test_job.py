@@ -33,9 +33,24 @@ def test_refills_only_after_ack_frees_rx_capacity() -> None:
 
     assert sent == [b"G1 X1\n", b"G1 X2\n"]
     assert job.buffered_bytes == 12
+
+
+def test_default_streamer_never_fills_the_reserved_grbl_ring_slot() -> None:
+    sent: list[bytes] = []
+    commands = ["G1 X12345"] * 13  # 10 bytes each including newline.
+    job = JobStreamer(sent.append)
+
+    job.start(commands)
+
+    assert job.buffer_capacity == 127
+    assert job.buffered_bytes == 120
+    assert len(sent) == 12
     job.handle_response("ok")
-    assert sent[-1] == b"G1 X3\n"
-    assert job.buffered_bytes == 12
+    assert job.buffered_bytes == 120
+    assert len(sent) == 13
+    job.handle_response("ok")
+    assert sent[-1] == b"G1 X12345\n"
+    assert job.buffered_bytes == 110
 
 
 def test_error_fails_job_without_sending_more() -> None:

@@ -15,7 +15,10 @@ class JobStreamer:
     commands: Sequence[str] = ()
     next_index: int = 0
     acknowledged_count: int = 0
-    buffer_capacity: int = 128
+    # GRBL declares a 128-byte RX ring, but its head/tail implementation must
+    # leave one slot empty to distinguish full from empty. The usable payload
+    # is therefore 127 bytes including each command's trailing newline.
+    buffer_capacity: int = 127
     outstanding_lengths: list[int] = field(default_factory=list)
     state: str = "idle"
     error: str = ""

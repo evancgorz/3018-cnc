@@ -12,6 +12,12 @@ from .machine_session import ActionOutcome, MachineSession
 class MotionService:
     """Own jog sequencing, acknowledgements, and motion-only transient state."""
 
+    # Never issue a live-jog command for the entire remaining axis travel.
+    # Release/cancel is still the normal stop path, but bounding each command
+    # makes a short click safe even if the release event or realtime cancel is
+    # delayed or lost.
+    LIVE_JOG_CHUNK_MM = 1.0
+
     def __init__(
         self,
         session: MachineSession,
@@ -180,6 +186,8 @@ class MotionService:
         if lowered == "ok":
             if self._position_move_active:
                 self._send_next_position_move()
+            elif self._live_jog_axis is not None:
+                self._send_next_live_jog(feed)
             elif self._live_jog_alignment_pending:
                 self._clear_live_jog()
                 self._on_notice("Live jog stopped at a whole millimeter")
@@ -218,7 +226,11 @@ class MotionService:
         if current is None:
             self._clear_live_jog()
             return
-        proposed = self._position_with_axis_delta(current, axis, distance)
+        direction = 1.0 if distance > 0 else -1.0
+        chunk = direction * min(abs(distance), self.LIVE_JOG_CHUNK_MM)
+        remaining = distance - chunk
+        self._live_jog_first_distance = remaining if abs(remaining) > 0.001 else None
+        proposed = self._position_with_axis_delta(current, axis, chunk)
         if self.session.envelope.trusted:
             maximum = self.session.profile.travel_for(axis)
             proposed_value = getattr(proposed, axis.lower())
@@ -227,13 +239,19 @@ class MotionService:
                 self._on_notice(f"Live jog stopped at the {axis} travel limit")
                 return
         try:
-            self._send_line(make_jog(axis, distance, feed))
+            self._send_line(make_jog(axis, chunk, feed))
         except (RuntimeError, ValueError) as exc:
             self._clear_live_jog()
             self._on_notice(f"Live jog stopped — {exc}")
             return
         self._pending_acks += 1
         self._live_jog_position = proposed
+
+        # The final bounded segment has reached the trusted travel limit. It
+        # remains active until its acknowledgement so a held button still has
+        # a deterministic end state, but no further segment will be emitted.
+        if self._live_jog_first_distance is None and abs(distance) <= self.LIVE_JOG_CHUNK_MM + 0.001:
+            self._live_jog_first_distance = None
 
     def _finish_live_jog_stop(self) -> None:
         if not self._live_jog_stop_pending or self._pending_acks:
