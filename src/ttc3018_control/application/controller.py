@@ -58,8 +58,9 @@ class ApplicationController:
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
         self._events: queue.Queue[ApplicationEvent] = queue.Queue()
-        self._on_notice = on_notice or (lambda _message: None)
+        self._on_notice = on_notice
         self._on_change = on_change or (lambda: None)
+        self._preserve_reference_on_next_reset = False
         self._usb_ports = usb_ports or available_ports
         self.connection_service = ConnectionService(
             usb_factory or GrblConnection,
@@ -122,8 +123,10 @@ class ApplicationController:
         self._events.put(LogEvent(kind, text))
 
     def _publish_notice(self, message: str) -> None:
-        self._events.put(NoticeEvent(message))
-        self._on_notice(message)
+        if self._on_notice is None:
+            self._events.put(NoticeEvent(message))
+        else:
+            self._on_notice(message)
 
     def _publish_change(self) -> None:
         self._on_change()
@@ -288,11 +291,14 @@ class ApplicationController:
         return self.job.resume()
 
     def abort_job(self, reason: str = "Aborted by operator") -> None:
+        reset_sent = False
         try:
             self.send_realtime(REALTIME_HOLD)
             self.send_realtime(REALTIME_SOFT_RESET)
+            reset_sent = True
         except RuntimeError:
             pass
+        self._preserve_reference_on_next_reset = reset_sent
         self.job.abort(reason)
         self.motion.reset()
         self.manual_pending_acks = 0
@@ -357,6 +363,9 @@ class ApplicationController:
         self.motion.reset()
         self.job.reset()
         self.manual_pending_acks = 0
+        self._preserve_reference_on_next_reset = False
+        self.status = None
+        self.session.clear_status()
         self.session.invalidate_reference(reason or outcome.message)
         return outcome
 
@@ -446,6 +455,7 @@ class ApplicationController:
         if not self.connected:
             return ActionOutcome(False, "Soft reset ignored — not connected")
         try:
+            self._preserve_reference_on_next_reset = False
             self.send_realtime(b"\x18")
         except RuntimeError as exc:
             return ActionOutcome(False, f"Soft reset failed — {exc}")
@@ -497,9 +507,13 @@ class ApplicationController:
         return self.job.handle_response(text)
 
     def reset(self, preserve_reference: bool = False) -> None:
+        preserve_reference = preserve_reference or self._preserve_reference_on_next_reset
+        self._preserve_reference_on_next_reset = False
         self.manual_pending_acks = 0
         self.motion.reset()
         self.job.reset()
+        self.status = None
+        self.session.clear_status(retain_work_zero=preserve_reference)
         if not preserve_reference:
             self.session.invalidate_reference("GRBL reset")
 

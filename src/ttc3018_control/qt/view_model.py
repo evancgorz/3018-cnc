@@ -42,7 +42,6 @@ class ControllerViewModel(QObject):
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
         self._unreferenced_jog_allowed = False
-        self._preserve_references_on_next_reset = False
         self._pending_confirmation: tuple[str, object] | None = None
         self._confirmation_token = ""
         self._confirmation_sequence = 0
@@ -345,7 +344,6 @@ class ControllerViewModel(QObject):
         if not self.connected:
             self._set_notice("Soft reset ignored — not connected")
             return
-        self._preserve_references_on_next_reset = False
         outcome = self.application.soft_reset()
         self._set_notice(outcome.message)
 
@@ -375,7 +373,6 @@ class ControllerViewModel(QObject):
             if not self.application.job_active:
                 self._set_notice("Abort ignored — no job is active")
                 return
-            self._preserve_references_on_next_reset = True
             self.application.abort_job()
             self._set_notice("Job aborted — references retained")
         elif operation == "wifi_setup":
@@ -884,7 +881,6 @@ class ControllerViewModel(QObject):
         status, reset = self.application.handle_transport_response(
             text,
             500.0,
-            preserve_reference=self._preserve_references_on_next_reset,
         )
         if status is not None:
             if self._close_after_return_pending and self.at_reference:
@@ -892,8 +888,6 @@ class ControllerViewModel(QObject):
                 self.close_requested.emit()
             self._project_status(status)
         if reset:
-            if self._preserve_references_on_next_reset:
-                self._preserve_references_on_next_reset = False
             if self.status is not None:
                 self._project_status(self.status)
             else:
@@ -949,7 +943,6 @@ class ControllerViewModel(QObject):
         self.status = None
         self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False
-        self._preserve_references_on_next_reset = False
         self._connection_text = "Disconnected"
         self._state_text = "Unknown"
         self._machine_position_text = "X—  Y—  Z—"
@@ -970,7 +963,6 @@ class ControllerViewModel(QObject):
         self._emit_state()
 
     def _append_log(self, event) -> None:
-        self.application.publish_log(event.kind, event.text)
         line = f"{event.timestamp:%H:%M:%S}  {event.kind.upper():<11} {event.text}"
         self._log_lines = (*self._log_lines[-399:], line)
         self._emit_state()

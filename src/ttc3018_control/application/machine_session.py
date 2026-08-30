@@ -57,6 +57,14 @@ class MachineSession:
                 self.work_zero_confirmed = True
                 self.awaiting_work_zero_report = False
 
+    def clear_status(self, *, retain_work_zero: bool = False) -> None:
+        """Require a fresh GRBL report before motion can be accepted again."""
+        had_confirmed_work_zero = self.work_zero_confirmed
+        self.status = None
+        self.work_offset = None
+        self.work_zero_confirmed = False
+        self.awaiting_work_zero_report = retain_work_zero and had_confirmed_work_zero
+
     def establish_reference(self) -> ActionOutcome:
         if not self.can_move:
             return ActionOutcome(False, "Connect and wait for GRBL Idle with a machine position.")

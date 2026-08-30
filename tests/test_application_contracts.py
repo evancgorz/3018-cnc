@@ -72,6 +72,9 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
     assert controller.establish_reference().accepted
     controller.handle_transport_response("Grbl 1.1h", preserve_reference=True)
     assert controller.reference_trusted
+    assert controller.status is None
+    assert controller.session.status is None
+    assert not controller.can_jog
 
     controller.handle_transport_response("Grbl 1.1h")
     assert not controller.reference_trusted
@@ -82,6 +85,59 @@ def test_controller_reset_can_retain_or_invalidate_reference(tmp_path) -> None:
     assert controller.establish_reference().accepted
     controller.disconnect("link lost")
     assert not controller.reference_trusted
+    assert controller.status is None
+    assert controller.session.status is None
+    assert not controller.can_jog
+
+
+def test_abort_owns_one_shot_reference_retention_and_requires_fresh_status(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    controller.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
+    transport = _Transport()
+    transport.connected = True
+    controller.set_transport_for_testing(transport)
+    controller.apply_status(
+        GrblStatus(
+            "Idle",
+            machine_position=Position(10, 10, 10),
+            work_offset=Position(5, 5, 5),
+        )
+    )
+    assert controller.establish_reference().accepted
+    controller.session.work_zero_confirmed = True
+
+    controller.abort_job()
+    controller.handle_transport_response("Grbl 1.1h")
+
+    assert controller.reference_trusted
+    assert controller.status is None
+    assert not controller.can_jog
+    assert not controller.work_zero_confirmed
+    assert controller.session.awaiting_work_zero_report
+
+    controller.apply_status(
+        GrblStatus(
+            "Idle",
+            machine_position=Position(10, 10, 10),
+            work_offset=Position(5, 5, 5),
+        )
+    )
+    assert controller.can_jog
+    assert controller.work_zero_confirmed
+
+
+def test_bound_notice_callback_does_not_leave_duplicate_queued_events(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    notices: list[str] = []
+    controller = ApplicationController(tmp_path, on_notice=notices.append)
+
+    controller._publish_notice("Ready")
+
+    assert notices == ["Ready"]
+    assert controller.application_events() == ()
 
 
 def test_controller_rejects_overlapping_motion_and_job_start_without_preflight(tmp_path) -> None:
