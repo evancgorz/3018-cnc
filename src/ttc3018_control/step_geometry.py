@@ -537,8 +537,15 @@ def _detect_axial_features(
     """Classify cylindrical walls adjoining selected-face inner loops."""
     if len(loops) < 2:
         return ()
-    outer_index = max(range(len(loops)), key=lambda index: loops[index].area)
-    inner_indices = [index for index in range(len(loops)) if index != outer_index]
+    resolved_parents = (
+        loop_parents
+        if len(loop_parents) == len(loops)
+        else loop_containment_parents(loops)
+    )
+    # A disconnected root is another retained-part boundary, not a feature
+    # inside the largest root.  Rely on the validated containment tree rather
+    # than selecting one loop by area; this matters for compound planar parts.
+    inner_indices = [index for index, parent in enumerate(resolved_parents) if parent is not None]
     sign = normal[{"YZ": 0, "XZ": 1, "XY": 2}[plane]]
     if abs(sign) < 0.999:
         return ()
@@ -574,7 +581,7 @@ def _detect_axial_features(
                                 "Raised boss",
                                 match,
                                 outward,
-                                loop_parents[match] if len(loop_parents) == len(loops) else None,
+                                resolved_parents[match],
                                 False,
                             )
                         )
@@ -589,7 +596,7 @@ def _detect_axial_features(
                                 "Recess",
                                 match,
                                 inward,
-                                loop_parents[match] if len(loop_parents) == len(loops) else None,
+                                resolved_parents[match],
                                 is_through,
                             )
                         )
@@ -624,7 +631,7 @@ def _detect_axial_features(
                         continue
                     outward = (high - face_coordinate) if sign > 0 else (face_coordinate - low)
                     inward = (face_coordinate - low) if sign > 0 else (high - face_coordinate)
-                    parent_index = loop_parents[match] if len(loop_parents) == len(loops) else None
+                    parent_index = resolved_parents[match]
                     if outward > 0.001 and inward <= 0.001:
                         unique[("Raised boss", match)] = StepFeature(
                             "Raised boss", match, outward, parent_index, False
@@ -640,7 +647,12 @@ def _detect_axial_features(
                         )
                     break
         wall_explorer.Next()
-    return tuple(unique.values())
+    return tuple(
+        sorted(
+            unique.values(),
+            key=lambda feature: (feature.loop_index, feature.kind, feature.depth),
+        )
+    )
 
 
 def _vertical_wall_matches_loop(
