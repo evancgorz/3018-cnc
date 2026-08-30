@@ -476,6 +476,42 @@ def test_nested_profile_cutout_simulates_islands_and_cutouts() -> None:
     assert [operation.feature_indices for operation in job.operations] == [(1, 3), (0, 2)]
 
 
+def test_nested_detected_recess_preserves_island_at_parent_floor() -> None:
+    def square(left: float, bottom: float, size: float) -> PlanarLoop:
+        return PlanarLoop(tuple(
+            Point2D(x, y)
+            for x, y in (
+                (left, bottom),
+                (left + size, bottom),
+                (left + size, bottom + size),
+                (left, bottom + size),
+            )
+        ))
+
+    model = StepPlanarModel(
+        Path("nested-recess.step"),
+        (square(0, 0, 40), square(5, 5, 30), square(10, 10, 20)),
+        5,
+        5,
+        (0, 0, 0, 40, 40, 5),
+        features=(StepFeature("Recess", 1, 3, parent_loop_index=0),),
+        loop_parents=(None, 0, 1),
+    )
+
+    job = generate_step_gcode(
+        model,
+        mode="Detected feature",
+        stock_width=42,
+        stock_height=42,
+        tool_diameter=2,
+        stock_thickness=5,
+    )
+
+    assert job.feature_simulations[0].passed
+    assert job.feature_simulations[0].gouged_area == pytest.approx(0)
+    assert job.feature_simulations[0].uncovered_area <= job.feature_simulations[0].allowed_uncovered_area
+
+
 @pytest.mark.parametrize("removed_tool_diameter", [3.0, 3.175])
 def test_step_fixtures_distinguish_removed_and_extruded_circle_features(
     removed_tool_diameter: float,

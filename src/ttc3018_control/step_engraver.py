@@ -791,23 +791,39 @@ def _detected_feature_groups(
 ) -> tuple[_DetectedFeatureGroup, ...]:
     """Generate removal groups that reproduce detected boss/recess topology."""
     radius = tool_diameter / 2
-    recess_groups: dict[float, list[object]] = {}
+    parents = model.resolved_loop_parents
+    recess_groups: dict[float, list[tuple[object, object]]] = {}
     for feature in model.features:
         if feature.kind != "Recess":
             continue
         feature_depth = _feature_target_depth(feature, stock_thickness, breakthrough)
+        feature_region = Polygon(
+            (point.x, point.y) for point in loops[feature.loop_index].points
+        )
+        # At a recess floor, a nested island is retained material.  Subtract
+        # each direct child loop from the parent removal region so a nested
+        # recess cannot clear through an island before its own operation runs.
+        child_regions = [
+            Polygon((point.x, point.y) for point in loops[index].points)
+            for index, parent in enumerate(parents)
+            if parent == feature.loop_index
+        ]
+        retained_region = unary_union(child_regions) if child_regions else GeometryCollection()
+        removal_region = feature_region.difference(retained_region).buffer(0)
         recess_groups.setdefault(round(feature_depth, 7), []).append(
-            Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
+            (removal_region, retained_region)
         )
     groups: list[_DetectedFeatureGroup] = []
-    for feature_depth, polygons in sorted(recess_groups.items(), reverse=True):
-        feature_region = unary_union(polygons)
+    for feature_depth, entries in sorted(recess_groups.items(), reverse=True):
+        feature_region = unary_union([region for region, _retained in entries]).buffer(0)
+        retained_parts = [retained for _region, retained in entries if not retained.is_empty]
+        retained_region = unary_union(retained_parts).buffer(0) if retained_parts else None
         groups.append(
             _DetectedFeatureGroup(
                 tuple(_pocket_strokes(feature_region, radius, tool_diameter)),
                 feature_depth,
                 feature_region,
-                region,
+                retained_region,
             )
         )
     if any(feature.kind == "Raised boss" for feature in model.features):
