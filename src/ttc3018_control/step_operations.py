@@ -123,6 +123,7 @@ def build_step_operation_plan(
         "Inside contour": "compensated inside contour",
         "Pocket": "connected scanline/offset clearing",
         "Hole": "circular compensated bore",
+        "Slot": "connected slot clearing",
     }
     return (
         StepOperation(

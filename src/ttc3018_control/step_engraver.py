@@ -25,7 +25,7 @@ from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole")
+STEP_MODES = ("Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -159,6 +159,7 @@ def generate_step_gcode(
     offset_y = 0.0 if zero_location == "Lower-left" else (resolved_stock_height - model_height) / 2
     loops = tuple(_translate_loop(loop, offset_x, offset_y) for loop in loops)
     region = _even_odd_region(loops)
+    machining_region = _slot_region(model, loops) if mode == "Slot" else region
     surface_paths: tuple[tuple[tuple[float, float, float], ...], ...] = ()
     if mode == "Planar surface":
         surface_paths, depth = _planar_surface_paths(
@@ -199,7 +200,7 @@ def generate_step_gcode(
     elif mode == "Planar surface":
         strokes = [tuple((x, y) for x, y, _z in path) for path in surface_paths]
     else:
-        strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
+        strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, machining_region, mode, tool_diameter)
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
     passes = _resolve_pass_count(depth, passes, max_stepdown)
@@ -209,6 +210,7 @@ def generate_step_gcode(
     if placement_offset_x or placement_offset_y:
         loops = tuple(_translate_loop(loop, placement_offset_x, placement_offset_y) for loop in loops)
         region = _even_odd_region(loops)
+        machining_region = _translate_geometry(machining_region, placement_offset_x, placement_offset_y)
         strokes = [_translate_stroke(stroke, placement_offset_x, placement_offset_y) for stroke in strokes]
         surface_paths = tuple(
             tuple((x + placement_offset_x, y + placement_offset_y, z) for x, y, z in path)
@@ -241,13 +243,13 @@ def generate_step_gcode(
         strokes = _schedule_strokes(strokes)
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
     verification = None
-    if mode in {"Pocket", "Planar surface"}:
-        verification = verify_flat_clearing_paths(strokes, region, tool_diameter / 2)
+    if mode in {"Pocket", "Slot", "Planar surface"}:
+        verification = verify_flat_clearing_paths(strokes, machining_region, tool_diameter / 2)
     simulation = None
-    if mode == "Pocket":
+    if mode in {"Pocket", "Slot"}:
         simulation = simulate_flat_stock_paths(
             strokes,
-            region,
+            machining_region,
             tool_diameter / 2,
             depth,
             stock_width=resolved_stock_width,
@@ -723,7 +725,7 @@ def _cutout_placement_offset(
     # cutter, not just its centerline, remains inside the nonnegative stock
     # envelope.  Outside/profile paths already include outward compensation.
     sweep_padding = tool_diameter / 2 if mode in {
-        "Detected feature", "Inside contour", "Pocket", "Hole", "Planar surface"
+        "Detected feature", "Inside contour", "Pocket", "Hole", "Slot", "Planar surface"
     } else 0.0
     return max(0.0, sweep_padding - min_x), max(0.0, sweep_padding - min_y)
 
@@ -747,6 +749,27 @@ def _even_odd_region(loops: Iterable[PlanarLoop]):
     return region.buffer(0)
 
 
+def _slot_region(model: StepPlanarModel, loops: tuple[PlanarLoop, ...]):
+    """Return inner regions for explicit non-circular slot clearing."""
+    parents = model.resolved_loop_parents
+    cutout_indices = [
+        index for index, role in enumerate(model.loop_roles) if role == "cutout"
+    ]
+    if not cutout_indices:
+        raise ValueError("Slot mode requires at least one inner cutout loop")
+    result = GeometryCollection()
+    for index in cutout_indices:
+        cutout = Polygon((point.x, point.y) for point in loops[index].points)
+        child_regions = [
+            Polygon((point.x, point.y) for point in loops[child_index].points)
+            for child_index, parent in enumerate(parents)
+            if parent == index
+        ]
+        retained = unary_union(child_regions) if child_regions else GeometryCollection()
+        result = result.union(cutout.difference(retained).buffer(0))
+    return result.buffer(0)
+
+
 def _toolpaths(model: StepPlanarModel, loops: tuple[PlanarLoop, ...], region, mode: str, tool_diameter: float) -> list[Stroke]:
     if mode == "Engraving":
         return [_loop_stroke(loop) for loop in loops]
@@ -759,6 +782,8 @@ def _toolpaths(model: StepPlanarModel, loops: tuple[PlanarLoop, ...], region, mo
         return _pocket_strokes(region, radius, tool_diameter)
     if mode == "Hole":
         return _hole_strokes(loops, tool_diameter)
+    if mode == "Slot":
+        return _pocket_strokes(region, radius, tool_diameter)
     return []
 
 

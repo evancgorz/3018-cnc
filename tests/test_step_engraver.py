@@ -32,7 +32,7 @@ def _translated_model() -> StepPlanarModel:
     return StepPlanarModel(Path("translated-plate.step"), (outer, hole), 5, 5, (-10, -8, 0, 30, 17, 5))
 
 
-@pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole"])
+@pytest.mark.parametrize("mode", ["Engraving", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot"])
 def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     job = generate_step_gcode(
         _model(), mode=mode, stock_width=50, stock_height=35, zero_location="Center", depth=-1, passes=2,
@@ -131,7 +131,7 @@ def test_lower_left_profile_applies_placement_to_emitted_profile_commands() -> N
     assert program.bounds.maximum.y == pytest.approx(28, abs=0.001)
 
 
-@pytest.mark.parametrize("mode", ["Engraving", "Outside contour", "Inside contour", "Pocket", "Hole", "Profile cutout"])
+@pytest.mark.parametrize("mode", ["Engraving", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot", "Profile cutout"])
 def test_translated_step_geometry_is_shifted_into_nonnegative_work_xy(mode: str) -> None:
     job = generate_step_gcode(
         _translated_model(),
@@ -612,6 +612,11 @@ def test_invalid_depth_pass_settings_are_rejected() -> None:
         generate_step_gcode(_model(), depth=math.nan)
     with pytest.raises(ValueError, match="Stock width"):
         generate_step_gcode(_model(), stock_width=math.nan)
+
+
+def test_slot_mode_requires_an_inner_loop() -> None:
+    with pytest.raises(ValueError, match="inner cutout"):
+        generate_step_gcode(_solid_model(), mode="Slot")
 
 
 def test_invalid_normalized_feature_and_surface_values_are_rejected() -> None:
