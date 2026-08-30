@@ -158,8 +158,9 @@ outside/profile jobs, work `X0 Y0` is the lower-left extreme of the compensated
 cutter envelope; the raw part boundary is inset/up-right by the tool radius and
 no generated XY motion is allowed below work zero. The preview draws the raw
 part boundary separately from the cutter path and reports cut distance, rapid
-distance, and retract count. Clearing jobs pass a deterministic reachable-area
-verification gate before loading. **Generate and load** sends the result through
+distance, and retract count. Flat pocket jobs also pass a deterministic swept-
+cutter stock-coverage simulation; tool-unreachable corner material is reported
+separately from uncovered reachable area. **Generate and load** sends the result through
 the same metric parser, bounds checks, preflight, save, and streaming pipeline as
 imported G-code; generation itself never moves the machine.
 
@@ -169,9 +170,9 @@ circle, but the first contains a 2 mm circular recess while the second contains
 a 2 mm raised circular boss.
 
 This release is intentionally planar. It does not yet perform arbitrary-face
-selection, 3D surface machining, adaptive clearing, collision simulation, or
-CAM-grade lead-in/lead-out compensation. Confirm the stock, tool, work zero, and
-machine envelope before starting a generated job.
+selection, general 3D surface machining, adaptive/rest clearing, full-resolution
+stock collision simulation, or CAM-grade lead-in/lead-out compensation. Confirm
+the stock, tool, work zero, and machine envelope before starting a generated job.
 
 ## Creating a plaque
 

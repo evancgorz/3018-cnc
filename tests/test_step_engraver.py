@@ -134,6 +134,10 @@ def test_pocket_uses_connected_scanlines_for_a_broad_solid_region() -> None:
     assert job.cutting_distance > 500
     assert job.rapid_xy_distance < 100
     assert job.retract_count == 1
+    assert job.simulation is not None
+    assert job.simulation.passed
+    assert job.simulation.uncovered_area <= job.simulation.allowed_uncovered_area
+    assert "; Simulation flat stock:" in job.gcode
     program = parse_gcode(job.gcode)
     assert program.bounds.minimum.z == pytest.approx(-1)
 

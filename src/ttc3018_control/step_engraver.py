@@ -9,8 +9,10 @@ from typing import Iterable
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
+from .gcode import parse_gcode
 from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
+from .step_simulation import StepStockSimulation, simulate_flat_stock_paths
 from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
@@ -48,6 +50,7 @@ class StepMachining:
     retract_count: int = 0
     verification: StepVerification | None = None
     operations: tuple[StepOperation, ...] = ()
+    simulation: StepStockSimulation | None = None
 
 
 def generate_step_gcode(
@@ -141,6 +144,18 @@ def generate_step_gcode(
     verification = None
     if mode in {"Pocket", "Planar surface"}:
         verification = verify_flat_clearing_paths(strokes, region, tool_diameter / 2)
+    simulation = None
+    if mode == "Pocket":
+        simulation = simulate_flat_stock_paths(
+            strokes,
+            region,
+            tool_diameter / 2,
+            depth,
+            stock_width=resolved_stock_width,
+            stock_height=resolved_stock_height,
+            stock_thickness=resolved_thickness,
+            passes=passes,
+        )
     cutting_distance, rapid_xy_distance, retract_count = _path_metrics(strokes, passes)
     operations = build_step_operation_plan(
         model,
@@ -159,6 +174,12 @@ def generate_step_gcode(
         f"; Metrics cut {cutting_distance:.3f} mm, rapid XY {rapid_xy_distance:.3f} mm, retracts {retract_count}",
         "G21", "G17", "G90", "G94",
     ]
+    if simulation is not None:
+        commands.append(
+            f"; Simulation flat stock: reachable {simulation.reachable_area:.3f} mm2, "
+            f"swept {simulation.swept_area:.3f} mm2, uncovered {simulation.uncovered_area:.3f} mm2, "
+            f"unreachable corners {simulation.unreachable_area:.3f} mm2"
+        )
     commands.extend(
         f"; Operation {operation.operation_id}: {operation.kind}, target Z{operation.target_depth:g}"
         + (f", depends on {','.join(operation.depends_on)}" if operation.depends_on else "")
@@ -197,8 +218,13 @@ def generate_step_gcode(
                 commands.extend(f"G1 X{_fmt(x)} Y{_fmt(y)} F{cut_feed:g}" for x, y in stroke[1:])
             commands.append(f"G0 Z{safe_z:g}")
     commands.extend((f"G0 Z{safe_z:g}", "G0 X0 Y0", "M5", "M2"))
+    gcode = "\n".join(commands) + "\n"
+    # Validate the exact emitted program before returning it to the shared
+    # loading pipeline.  This keeps generator and parser semantics in lockstep
+    # and fails closed if a future strategy emits an unsupported command.
+    parse_gcode(gcode)
     return StepMachining(
-        "\n".join(commands) + "\n",
+        gcode,
         mode,
         model_width,
         model_height,
@@ -228,6 +254,7 @@ def generate_step_gcode(
         retract_count,
         verification,
         operations,
+        simulation,
     )
 
 

@@ -48,6 +48,11 @@ streaming pipeline.
   and acyclic ordering before G-code emission.
 - [x] Anchor lower-left outside/profile compensated envelopes at nonnegative
   work X/Y zero and show the raw part boundary separately in the Qt preview.
+- [x] Run flat pocket paths through a deterministic swept-cutter stock
+  simulation, including reachable coverage, tool-unreachable corners, stock
+  bounds, retained-material gouge checks, and physical-depth checks.
+- [x] Parse the exact G-code emitted by the STEP generator before returning it
+  to the shared loading pipeline.
 - [x] Preview the generated centerline toolpath before running.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
 
@@ -147,7 +152,7 @@ streaming pipeline.
 - [ ] General-purpose 3D STEP surface machining.
 - [ ] Reliable arbitrary-angle face orientation and complex B-rep topology.
 - [ ] 3D adaptive clearing, waterline, raster, or rest machining.
-- [ ] Automatic stock collision simulation.
+- [ ] Full-resolution stock collision simulation for every operation and ramp.
 - [ ] Full CAM-grade cutter compensation and lead-in/lead-out strategies.
 - [ ] Boundary tracing and probing.
 
