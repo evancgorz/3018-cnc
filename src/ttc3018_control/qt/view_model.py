@@ -1005,6 +1005,16 @@ class ControllerViewModel(QObject):
         min_y = min(point[1] for point in points)
         max_x = max(point[0] for point in points)
         max_y = max(point[1] for point in points)
+        simulation_summary = ""
+        if job.simulation is not None:
+            simulation_summary = (
+                f" · simulation passed ({job.simulation.uncovered_area:.2f} mm² uncovered)"
+            )
+        elif job.surface_simulation is not None:
+            simulation_summary = (
+                f" · surface simulation passed (max Z error "
+                f"{job.surface_simulation.maximum_surface_error:.3f} mm)"
+            )
         return (
             f"STEP {job.mode}{f' ({job.feature_summary})' if job.feature_summary else ''} · "
             f"stock {job.stock_width:.1f} × {job.stock_height:.1f} mm · "
@@ -1012,10 +1022,7 @@ class ControllerViewModel(QObject):
             + (f"{job.tab_count} outer tabs · " if job.mode == "Profile cutout" else "")
             + f"{len(job.operations)} operation(s) · {job.stroke_count} paths · {job.cutting_distance:.0f} mm cut · {job.rapid_xy_distance:.0f} mm rapid · "
             + f"{job.retract_count} retracts · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
-            + (
-                f" · simulation passed ({job.simulation.uncovered_area:.2f} mm² uncovered)"
-                if job.simulation is not None else ""
-            )
+            + simulation_summary
         )
 
     def _disconnected(self, reason: str) -> None:

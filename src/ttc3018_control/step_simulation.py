@@ -51,6 +51,35 @@ class StepStockSimulation:
         )
 
 
+@dataclass(frozen=True)
+class StepSurfaceSimulation:
+    """Summary of a swept-cutter simulation over a planar height field."""
+
+    stock_width: float
+    stock_height: float
+    stock_thickness: float | None
+    target_area: float
+    reachable_area: float
+    unreachable_area: float
+    swept_area: float
+    uncovered_area: float
+    allowed_uncovered_area: float
+    minimum_z: float
+    maximum_z: float
+    maximum_surface_error: float
+    surface_tolerance: float
+    checked_paths: int
+    cutting_segments: int
+    passes: int
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.uncovered_area <= self.allowed_uncovered_area
+            and self.maximum_surface_error <= self.surface_tolerance
+        )
+
+
 def simulate_flat_stock_paths(
     strokes: Iterable[Stroke],
     target_region,
@@ -167,6 +196,127 @@ def simulate_flat_stock_paths(
             )
         raise StepSimulationError(
             f"Simulation gouges {result.gouged_area:.3f} mm² of retained material"
+        )
+    return result
+
+
+def simulate_surface_paths(
+    surface_paths: Iterable[tuple[tuple[float, float, float], ...]],
+    target_region,
+    tool_radius: float,
+    surface_depth_at,
+    *,
+    stock_width: float | None = None,
+    stock_height: float | None = None,
+    stock_thickness: float | None = None,
+    passes: int = 1,
+    tolerance: float = 0.02,
+    surface_tolerance: float = 0.05,
+    maximum_slope: float = 1.75,
+) -> StepSurfaceSimulation:
+    """Verify a varying-Z raster over an accessible planar height field.
+
+    ``surface_depth_at`` returns the expected work-Z depth for a projected XY
+    point, or ``None`` at a discontinuity.  A single segment may not cross such
+    a discontinuity and may not exceed the configured XY-to-Z slope.  Coverage
+    is checked over the tool-reachable portion of the projected target, using
+    the same cylindrical swept footprint as flat stock simulation.
+    """
+    _validate_number("Tool radius", tool_radius, minimum=0.0, strict=True)
+    _validate_number("Tolerance", tolerance, minimum=0.0, strict=False)
+    _validate_number("Surface tolerance", surface_tolerance, minimum=0.0, strict=False)
+    _validate_number("Maximum surface slope", maximum_slope, minimum=0.0, strict=True)
+    if not isinstance(passes, int) or passes < 1:
+        raise StepSimulationError("Simulation pass count must be a positive integer")
+    if stock_thickness is not None:
+        _validate_number("Stock thickness", stock_thickness, minimum=0.0, strict=True)
+    if target_region is None or target_region.is_empty:
+        raise StepSimulationError("Cannot simulate an empty surface region")
+    target_region = target_region.buffer(0)
+    if target_region.is_empty or target_region.area <= 1e-9:
+        raise StepSimulationError("The surface region has no measurable area")
+    resolved_width = float(stock_width) if stock_width is not None else float(target_region.bounds[2])
+    resolved_height = float(stock_height) if stock_height is not None else float(target_region.bounds[3])
+    if resolved_width <= 0 or resolved_height <= 0:
+        raise StepSimulationError("Simulation stock dimensions must be greater than zero")
+    stock_region = box(0.0, 0.0, resolved_width, resolved_height)
+    reachable_region = target_region.buffer(-tool_radius, join_style=2)
+    if reachable_region.is_empty:
+        raise StepSimulationError("The surface region is too small for the selected tool")
+
+    paths = tuple(surface_paths)
+    if not paths:
+        raise StepSimulationError("Cannot simulate an empty surface toolpath")
+    swept_parts = []
+    segment_count = 0
+    minimum_z = math.inf
+    maximum_z = -math.inf
+    maximum_error = 0.0
+    for path in paths:
+        if len(path) < 2:
+            raise StepSimulationError("Surface simulation path must contain at least two points")
+        xy_path = []
+        for point in path:
+            if len(point) != 3 or not all(math.isfinite(value) for value in point):
+                raise StepSimulationError("Surface simulation path contains an invalid point")
+            x, y, z = (float(value) for value in point)
+            expected = surface_depth_at(x, y)
+            if expected is None or not math.isfinite(expected):
+                raise StepSimulationError("Surface simulation path crosses an inaccessible surface discontinuity")
+            maximum_error = max(maximum_error, abs(z - expected))
+            minimum_z = min(minimum_z, z)
+            maximum_z = max(maximum_z, z)
+            xy_path.append((x, y))
+        line = LineString(xy_path)
+        if line.length <= _GEOMETRY_TOLERANCE:
+            raise StepSimulationError("Surface simulation path contains a zero-length stroke")
+        if not reachable_region.buffer(tolerance).covers(line):
+            raise StepSimulationError("Surface simulation centerline leaves the tool-reachable region")
+        for start, end in zip(path, path[1:]):
+            xy_distance = math.dist(start[:2], end[:2])
+            z_distance = abs(start[2] - end[2])
+            if xy_distance <= _GEOMETRY_TOLERANCE:
+                if z_distance > surface_tolerance:
+                    raise StepSimulationError("Surface simulation contains an unsafe slope or cliff-crossing segment")
+                continue
+            if z_distance > maximum_slope * xy_distance + surface_tolerance:
+                raise StepSimulationError("Surface simulation contains an unsafe slope or cliff-crossing segment")
+        segment_count += len(path) - 1
+        swept_parts.append(line.buffer(tool_radius, cap_style=1, join_style=1))
+
+    if stock_thickness is not None and minimum_z < -stock_thickness - _COORDINATE_TOLERANCE:
+        raise StepSimulationError("Surface simulation cuts deeper than the confirmed physical stock")
+    swept = unary_union(swept_parts).buffer(0)
+    if not stock_region.buffer(_COORDINATE_TOLERANCE).covers(swept):
+        raise StepSimulationError("Simulated surface cutter sweep extends outside the declared stock")
+    unreachable_area = target_region.difference(reachable_region).area
+    uncovered = reachable_region.difference(swept).area
+    allowed_uncovered = max(0.05, reachable_region.area * 0.005, tolerance)
+    result = StepSurfaceSimulation(
+        resolved_width,
+        resolved_height,
+        float(stock_thickness) if stock_thickness is not None else None,
+        float(target_region.area),
+        float(reachable_region.area),
+        float(unreachable_area),
+        float(swept.intersection(stock_region).area),
+        float(uncovered),
+        float(allowed_uncovered),
+        float(minimum_z),
+        float(maximum_z),
+        float(maximum_error),
+        float(surface_tolerance),
+        len(paths),
+        segment_count,
+        passes,
+    )
+    if not result.passed:
+        if result.uncovered_area > result.allowed_uncovered_area:
+            raise StepSimulationError(
+                f"Surface simulation leaves {result.uncovered_area:.3f} mm2 of reachable material uncut"
+            )
+        raise StepSimulationError(
+            f"Surface simulation exceeds the height-field tolerance by {result.maximum_surface_error:.3f} mm"
         )
     return result
 

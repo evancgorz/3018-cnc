@@ -12,7 +12,12 @@ from shapely.ops import unary_union
 from .gcode import parse_gcode
 from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
-from .step_simulation import StepStockSimulation, simulate_flat_stock_paths
+from .step_simulation import (
+    StepStockSimulation,
+    StepSurfaceSimulation,
+    simulate_flat_stock_paths,
+    simulate_surface_paths,
+)
 from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
@@ -52,6 +57,7 @@ class StepMachining:
     operations: tuple[StepOperation, ...] = ()
     simulation: StepStockSimulation | None = None
     feature_simulations: tuple[StepStockSimulation, ...] = ()
+    surface_simulation: StepSurfaceSimulation | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +191,25 @@ def generate_step_gcode(
             )
             for group in detected_groups
         )
+    surface_simulation: StepSurfaceSimulation | None = None
+    if mode == "Planar surface":
+        transformed_patches = _transformed_surface_patches(
+            model.surface_patches, orientation, offset_x, offset_y
+        )
+        patch_regions = [(_even_odd_region(patch.loops), patch) for patch in transformed_patches]
+        surface_target = unary_union(
+            [patch_region.intersection(region) for patch_region, _patch in patch_regions]
+        ).buffer(0)
+        surface_simulation = simulate_surface_paths(
+            surface_paths,
+            surface_target,
+            tool_diameter / 2,
+            lambda x, y: _surface_depth_at(x, y, patch_regions),
+            stock_width=resolved_stock_width,
+            stock_height=resolved_stock_height,
+            stock_thickness=resolved_thickness,
+            passes=passes,
+        )
     cutting_distance, rapid_xy_distance, retract_count = _path_metrics(strokes, passes)
     operations = build_step_operation_plan(
         model,
@@ -214,6 +239,13 @@ def generate_step_gcode(
             f"; Simulation feature {index + 1}: reachable {feature_simulation.reachable_area:.3f} mm2, "
             f"swept {feature_simulation.swept_area:.3f} mm2, "
             f"uncovered {feature_simulation.uncovered_area:.3f} mm2"
+        )
+    if surface_simulation is not None:
+        commands.append(
+            f"; Simulation planar surface: reachable {surface_simulation.reachable_area:.3f} mm2, "
+            f"swept {surface_simulation.swept_area:.3f} mm2, "
+            f"uncovered {surface_simulation.uncovered_area:.3f} mm2, "
+            f"max Z error {surface_simulation.maximum_surface_error:.4f} mm"
         )
     commands.extend(
         f"; Operation {operation.operation_id}: {operation.kind}, target Z{operation.target_depth:g}"
@@ -291,6 +323,7 @@ def generate_step_gcode(
         operations,
         simulation,
         feature_simulations,
+        surface_simulation,
     )
 
 
@@ -625,10 +658,7 @@ def _planar_surface_paths(
     offset_y: float,
 ) -> tuple[tuple[tuple[float, float, float], ...], float]:
     """Generate a bounded raster over accessible planar height-field patches."""
-    transformed = tuple(
-        _translate_surface_patch(_transform_surface_patch(patch, orientation), offset_x, offset_y)
-        for patch in patches
-    )
+    transformed = _transformed_surface_patches(patches, orientation, offset_x, offset_y)
     if not transformed:
         return (), 0.0
     patch_regions = [(_even_odd_region(patch.loops), patch) for patch in transformed]
@@ -665,6 +695,18 @@ def _planar_surface_paths(
         connected.append(active)
     minimum_depth = min(point[2] for path in connected for point in path)
     return tuple(connected), minimum_depth
+
+
+def _transformed_surface_patches(
+    patches: tuple[PlanarSurfacePatch, ...],
+    orientation: str,
+    offset_x: float,
+    offset_y: float,
+) -> tuple[PlanarSurfacePatch, ...]:
+    return tuple(
+        _translate_surface_patch(_transform_surface_patch(patch, orientation), offset_x, offset_y)
+        for patch in patches
+    )
 
 
 def _sample_surface_span(

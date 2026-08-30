@@ -178,6 +178,9 @@ def test_wedge_planar_surface_generates_varying_bounded_gcode_without_cliff_brid
     program = parse_gcode(job.gcode)
     assert job.surface_paths
     assert len({round(point[2], 3) for path in job.surface_paths for point in path}) > 5
+    assert job.surface_simulation is not None
+    assert job.surface_simulation.passed
+    assert "; Simulation planar surface:" in job.gcode
     assert program.bounds.minimum.z == pytest.approx(-5.983, abs=0.01)
     assert program.bounds.maximum.z == pytest.approx(3)
     assert program.bounds.minimum.x >= -0.001

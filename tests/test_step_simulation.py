@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 from shapely.geometry import Polygon
 
-from ttc3018_control.step_simulation import StepSimulationError, simulate_flat_stock_paths
+from ttc3018_control.step_simulation import (
+    StepSimulationError,
+    simulate_flat_stock_paths,
+    simulate_surface_paths,
+)
 
 
 def _rectangle() -> Polygon:
@@ -68,4 +72,46 @@ def test_flat_stock_simulation_rejects_swept_retained_material() -> None:
             1,
             -1,
             retained_region=retained,
+        )
+
+
+def test_surface_simulation_checks_coverage_and_height_field() -> None:
+    paths = (
+        ((1, 1, -0.1), (9, 1, -0.9), (9, 3, -0.9), (1, 3, -0.1),
+         (1, 5, -0.1), (9, 5, -0.9), (9, 7, -0.9), (1, 7, -0.1),
+         (1, 9, -0.1), (9, 9, -0.9)),
+    )
+
+    result = simulate_surface_paths(
+        paths,
+        Polygon(((0, 0), (10, 0), (10, 10), (0, 10))),
+        1,
+        lambda x, _y: -0.1 * x,
+        stock_width=10,
+        stock_height=10,
+        stock_thickness=2,
+    )
+
+    assert result.passed
+    assert result.minimum_z == pytest.approx(-0.9)
+    assert result.maximum_z == pytest.approx(-0.1)
+    assert result.maximum_surface_error == pytest.approx(0)
+
+
+def test_surface_simulation_rejects_discontinuity_and_unsafe_slope() -> None:
+    with pytest.raises(StepSimulationError, match="discontinuity"):
+        simulate_surface_paths(
+            (((1, 1, -0.1), (9, 1, -0.9)),),
+            _rectangle(),
+            1,
+            lambda x, _y: None if x > 5 else -0.1,
+        )
+
+    with pytest.raises(StepSimulationError, match="slope"):
+        simulate_surface_paths(
+            (((1, 1, 0), (2, 1, -5)),),
+            _rectangle(),
+            1,
+            lambda _x, _y: 0,
+            maximum_slope=1,
         )
