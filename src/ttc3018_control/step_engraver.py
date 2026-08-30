@@ -14,8 +14,10 @@ from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarMo
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
 from .step_simulation import (
     StepStockSimulation,
+    StepProfileSimulation,
     StepSurfaceSimulation,
     simulate_flat_stock_paths,
+    simulate_profile_paths,
     simulate_surface_paths,
 )
 from .step_verification import StepVerification, verify_flat_clearing_paths
@@ -58,6 +60,7 @@ class StepMachining:
     simulation: StepStockSimulation | None = None
     feature_simulations: tuple[StepStockSimulation, ...] = ()
     surface_simulation: StepSurfaceSimulation | None = None
+    profile_simulation: StepProfileSimulation | None = None
 
 
 @dataclass(frozen=True)
@@ -212,6 +215,23 @@ def generate_step_gcode(
             stock_thickness=resolved_thickness,
             passes=passes,
         )
+    profile_simulation: StepProfileSimulation | None = None
+    if mode == "Profile cutout":
+        simulation_region = _even_odd_region(
+            _translate_loop(loop, placement_offset_x, placement_offset_y)
+            for loop in loops
+        )
+        profile_simulation = simulate_profile_paths(
+            [stroke for stroke, _is_outer in profile_paths],
+            simulation_region,
+            tool_diameter / 2,
+            depth,
+            stock_width=resolved_stock_width,
+            stock_height=resolved_stock_height,
+            stock_thickness=resolved_thickness,
+            breakthrough=breakthrough,
+            passes=passes,
+        )
     cutting_distance, rapid_xy_distance, retract_count = _path_metrics(strokes, passes)
     operations = build_step_operation_plan(
         model,
@@ -248,6 +268,11 @@ def generate_step_gcode(
             f"swept {surface_simulation.swept_area:.3f} mm2, "
             f"uncovered {surface_simulation.uncovered_area:.3f} mm2, "
             f"max Z error {surface_simulation.maximum_surface_error:.4f} mm"
+        )
+    if profile_simulation is not None:
+        commands.append(
+            f"; Simulation profile: swept {profile_simulation.swept_area:.3f} mm2, "
+            f"retained gouge {profile_simulation.gouged_area:.3f} mm2"
         )
     commands.extend(
         f"; Operation {operation.operation_id}: {operation.kind}, target Z{operation.target_depth:g}"
@@ -326,6 +351,7 @@ def generate_step_gcode(
         simulation,
         feature_simulations,
         surface_simulation,
+        profile_simulation,
     )
 
 

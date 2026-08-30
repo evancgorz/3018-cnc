@@ -160,8 +160,10 @@ no generated XY motion is allowed below work zero. The preview draws the raw
 part boundary separately from the cutter path and reports cut distance, rapid
 distance, and retract count. Flat pocket and detected-feature jobs pass a
 deterministic swept-cutter stock-coverage simulation, while planar-surface jobs
-also check the varying-Z height field and slope. Tool-unreachable corner
-material is reported separately from uncovered reachable area. **Generate and load** sends the result through
+also check the varying-Z height field and slope. Profile cutouts check the
+compensated boundary, expected cutter overhang, through depth, and retained
+interior. Tool-unreachable corner material is reported separately from
+uncovered reachable area. **Generate and load** sends the result through
 the same metric parser, bounds checks, preflight, save, and streaming pipeline as
 imported G-code; generation itself never moves the machine.
 

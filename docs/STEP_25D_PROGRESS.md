@@ -56,6 +56,9 @@ streaming pipeline.
 - [x] Run accessible planar-surface paths through a height-field simulation
   that checks coverage, sampled Z error, slope/cliff transitions, stock bounds,
   and physical depth.
+- [x] Validate compensated profile cutouts with a boundary-band and retained
+  interior simulation, including the intentional cutter overhang at stock
+  edges and physical through-depth limits.
 - [x] Parse the exact G-code emitted by the STEP generator before returning it
   to the shared loading pipeline.
 - [x] Preview the generated centerline toolpath before running.

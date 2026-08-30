@@ -6,6 +6,7 @@ from shapely.geometry import Polygon
 from ttc3018_control.step_simulation import (
     StepSimulationError,
     simulate_flat_stock_paths,
+    simulate_profile_paths,
     simulate_surface_paths,
 )
 
@@ -114,4 +115,43 @@ def test_surface_simulation_rejects_discontinuity_and_unsafe_slope() -> None:
             1,
             lambda _x, _y: 0,
             maximum_slope=1,
+        )
+
+
+def test_profile_simulation_accepts_compensated_boundary_and_checks_depth() -> None:
+    retained = Polygon(((1, 1), (21, 1), (21, 11), (1, 11)))
+    profile = tuple((float(x), float(y)) for x, y in retained.buffer(1, join_style=2).exterior.coords)
+
+    result = simulate_profile_paths(
+        (profile,),
+        retained,
+        1,
+        -2.2,
+        stock_width=22,
+        stock_height=12,
+        stock_thickness=2,
+        breakthrough=0.2,
+    )
+
+    assert result.passed
+    assert result.gouged_area <= result.allowed_gouged_area
+
+    with pytest.raises(StepSimulationError, match="physical stock"):
+        simulate_profile_paths(
+            (profile,), retained, 1, -2.3,
+            stock_width=22, stock_height=12, stock_thickness=2,
+            breakthrough=0.2,
+        )
+
+
+def test_profile_simulation_rejects_a_path_that_is_not_on_the_boundary() -> None:
+    with pytest.raises(StepSimulationError, match="boundary band"):
+        simulate_profile_paths(
+            (((5, 5), (17, 7)),),
+            Polygon(((1, 1), (21, 1), (21, 11), (1, 11))),
+            1,
+            -1,
+            stock_width=22,
+            stock_height=12,
+            stock_thickness=2,
         )

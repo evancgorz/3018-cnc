@@ -38,6 +38,9 @@ def test_step_modes_generate_parser_accepted_metric_gcode(mode: str) -> None:
     assert job.stroke_count > 0
     if mode == "Profile cutout":
         assert job.gcode.count("G1 Z") >= job.stroke_count * 2
+        assert job.profile_simulation is not None
+        assert job.profile_simulation.passed
+        assert "; Simulation profile:" in job.gcode
     else:
         assert job.gcode.count("G1 Z") == job.stroke_count * 2
 

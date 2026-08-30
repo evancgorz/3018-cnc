@@ -80,6 +80,26 @@ class StepSurfaceSimulation:
         )
 
 
+@dataclass(frozen=True)
+class StepProfileSimulation:
+    """Summary of the swept cutter around an inner/outer profile cut."""
+
+    stock_width: float
+    stock_height: float
+    stock_thickness: float
+    target_depth: float
+    swept_area: float
+    gouged_area: float
+    allowed_gouged_area: float
+    checked_paths: int
+    cutting_segments: int
+    passes: int
+
+    @property
+    def passed(self) -> bool:
+        return self.gouged_area <= self.allowed_gouged_area
+
+
 def simulate_flat_stock_paths(
     strokes: Iterable[Stroke],
     target_region,
@@ -196,6 +216,101 @@ def simulate_flat_stock_paths(
             )
         raise StepSimulationError(
             f"Simulation gouges {result.gouged_area:.3f} mm² of retained material"
+        )
+    return result
+
+
+def simulate_profile_paths(
+    paths: Iterable[Stroke],
+    retained_region,
+    tool_radius: float,
+    target_depth: float,
+    *,
+    stock_width: float,
+    stock_height: float,
+    stock_thickness: float,
+    breakthrough: float = 0.0,
+    passes: int = 1,
+    tolerance: float = 0.02,
+) -> StepProfileSimulation:
+    """Verify inner/outer compensated profile paths without claiming clearing.
+
+    A profile operation removes a narrow boundary, rather than all material in
+    a planar region.  The simulator therefore checks boundary-band placement,
+    stock containment, physical through depth, and gouging in retained material
+    away from that intended boundary.  Holding tabs are represented by the
+    generator's shallower Z transitions and do not weaken these checks.
+    """
+    _validate_number("Tool radius", tool_radius, minimum=0.0, strict=True)
+    _validate_number("Target depth", target_depth, maximum=-1e-9, strict=False)
+    _validate_number("Stock width", stock_width, minimum=0.0, strict=True)
+    _validate_number("Stock height", stock_height, minimum=0.0, strict=True)
+    _validate_number("Stock thickness", stock_thickness, minimum=0.0, strict=True)
+    _validate_number("Tolerance", tolerance, minimum=0.0, strict=False)
+    if breakthrough < 0 or not math.isfinite(breakthrough):
+        raise StepSimulationError("Profile breakthrough must be finite and nonnegative")
+    if not isinstance(passes, int) or passes < 1:
+        raise StepSimulationError("Simulation pass count must be a positive integer")
+    if target_depth < -(stock_thickness + breakthrough) - _COORDINATE_TOLERANCE:
+        raise StepSimulationError("Profile simulation cuts deeper than the confirmed physical stock")
+    if retained_region is None or retained_region.is_empty:
+        raise StepSimulationError("Profile simulation requires retained part geometry")
+    retained_region = retained_region.buffer(0)
+    if retained_region.is_empty:
+        raise StepSimulationError("Profile simulation retained geometry is invalid")
+
+    paths = tuple(paths)
+    if not paths:
+        raise StepSimulationError("Cannot simulate an empty profile toolpath")
+    stock_region = box(0.0, 0.0, float(stock_width), float(stock_height))
+    # The profile centerline must be on a compensated boundary.  Include both
+    # the ordinary boundary band (inner loops) and the exact mitered outer
+    # compensation boundary; a miter corner is farther than one radius from
+    # the raw corner even though it is a valid cutter-center position.
+    boundary_band = retained_region.boundary.buffer(tool_radius + tolerance, join_style=2).union(
+        retained_region.buffer(tool_radius, join_style=2).boundary.buffer(tolerance)
+    )
+    retained_interior = retained_region.difference(retained_region.boundary.buffer(tolerance))
+    swept_parts = []
+    segment_count = 0
+    for stroke in paths:
+        if len(stroke) < 2 or any(
+            len(point) != 2 or not all(math.isfinite(value) for value in point)
+            for point in stroke
+        ):
+            raise StepSimulationError("Profile simulation path contains an invalid point")
+        line = LineString(stroke)
+        if line.length <= _GEOMETRY_TOLERANCE:
+            raise StepSimulationError("Profile simulation path contains a zero-length stroke")
+        if not stock_region.buffer(_COORDINATE_TOLERANCE).covers(line):
+            raise StepSimulationError("Profile simulation centerline leaves the declared stock")
+        if not boundary_band.covers(line):
+            raise StepSimulationError("Profile simulation centerline leaves the compensated boundary band")
+        segment_count += len(stroke) - 1
+        swept_parts.append(line.buffer(tool_radius, cap_style=1, join_style=1))
+    swept = unary_union(swept_parts).buffer(0)
+    # An outside profile intentionally lets the cutter overhang the stock by
+    # its radius.  Validate the cutter centerline against stock separately and
+    # allow that expected radial overhang in the swept footprint.
+    if not stock_region.buffer(tool_radius + _COORDINATE_TOLERANCE).covers(swept):
+        raise StepSimulationError("Profile simulation cutter sweep extends beyond the stock allowance")
+    gouged = swept.intersection(retained_interior).area
+    allowed_gouged = max(0.001, tolerance)
+    result = StepProfileSimulation(
+        float(stock_width),
+        float(stock_height),
+        float(stock_thickness),
+        float(target_depth),
+        float(swept.intersection(stock_region).area),
+        float(gouged),
+        float(allowed_gouged),
+        len(paths),
+        segment_count,
+        passes,
+    )
+    if not result.passed:
+        raise StepSimulationError(
+            f"Profile simulation gouges {result.gouged_area:.3f} mm2 of retained material"
         )
     return result
 
