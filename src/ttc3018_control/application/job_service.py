@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from typing import Callable, Sequence
+from pathlib import Path
 
+from ..gcode import GCodeProgram, load_gcode, parse_gcode
 from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME, make_jog
 from ..job import JobStreamer
 from .machine_session import ActionOutcome
@@ -26,6 +28,7 @@ class JobService:
         self._on_change = on_change or (lambda: None)
         self._on_ready_to_return = on_ready_to_return or (lambda: None)
         self.streamer = JobStreamer(self._send_line)
+        self.program: GCodeProgram | None = None
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
 
@@ -41,6 +44,18 @@ class JobService:
     def progress(self) -> float:
         return self.streamer.progress
 
+    def load_program(self, path: Path) -> GCodeProgram:
+        program = load_gcode(path)
+        self.program = program
+        self._changed()
+        return program
+
+    def load_generated(self, gcode: str, filename: str) -> GCodeProgram:
+        program = parse_gcode(gcode, Path(filename))
+        self.program = program
+        self._changed()
+        return program
+
     @property
     def spindle_stop_pending(self) -> bool:
         return self._spindle_stop_pending
@@ -49,7 +64,11 @@ class JobService:
     def return_waiting_for_idle(self) -> bool:
         return self._return_waiting_for_idle
 
-    def start(self, commands: Sequence[str]) -> ActionOutcome:
+    def start(self, commands: Sequence[str] | None = None) -> ActionOutcome:
+        if commands is None:
+            if self.program is None:
+                return ActionOutcome(False, "Job not started — no validated G-code is loaded")
+            commands = self.program.commands
         try:
             self.streamer.start(commands)
         except (RuntimeError, ValueError) as exc:
@@ -127,4 +146,3 @@ class JobService:
 
     def _changed(self) -> None:
         self._on_change()
-

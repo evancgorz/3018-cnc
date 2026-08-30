@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from ..application.controller import ApplicationController
 from ..connection_settings import ConnectionSettings
 from ..commissioning import CommissioningProfile, CommissioningStore, InputTestTracker
-from ..gcode import GCodeError, GCodeProgram, load_gcode, parse_gcode
+from ..gcode import GCodeError
 from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
     GrblStatus,
@@ -60,7 +60,6 @@ class ControllerViewModel(QObject):
         self._commissioning_settings: dict[int, float] = {}
         self.connection = None
         self.status: GrblStatus | None = None
-        self.program: GCodeProgram | None = None
         self._pending_manual_acks = 0
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
@@ -126,6 +125,10 @@ class ControllerViewModel(QObject):
     @property
     def job(self):
         return self.application.job.streamer
+
+    @property
+    def program(self):
+        return self.application.job.program
 
     @property
     def generation_service(self):
@@ -948,11 +951,10 @@ class ControllerViewModel(QObject):
         if not path_text:
             return
         try:
-            program = load_gcode(Path(path_text))
+            program = self.job_service.load_program(Path(path_text))
         except (OSError, GCodeError) as exc:
             QMessageBox.critical(None, "G-code rejected", str(exc))
             return
-        self.program = program
         bounds = program.bounds
         size = bounds.size
         self._preview_strokes = self._strokes_for_program(program)
@@ -974,11 +976,10 @@ class ControllerViewModel(QObject):
         summary: str,
     ) -> None:
         try:
-            program = parse_gcode(gcode, Path(filename))
+            program = self.job_service.load_generated(gcode, filename)
         except GCodeError as exc:
             QMessageBox.critical(None, "Generated G-code rejected", str(exc))
             return
-        self.program = program
         self._preview_strokes = self._strokes_for_qml(strokes)
         self._preview_summary = summary
         self._job_file_text = filename
@@ -998,7 +999,7 @@ class ControllerViewModel(QObject):
         answer = QMessageBox.question(None, "Start engraving job?", f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.")
         if answer != QMessageBox.StandardButton.Yes:
             return
-        outcome = self.job_service.start(self.program.commands)
+        outcome = self.job_service.start()
         if not outcome.accepted:
             self._set_notice(outcome.message)
             return
