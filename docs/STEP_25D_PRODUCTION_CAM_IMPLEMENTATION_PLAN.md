@@ -22,6 +22,12 @@ This plan extends, but does not invalidate, the completed foundation tracked in
 ### Coordinate and stock semantics
 
 - Work `Z0` is the physical top of stock.
+- Work `X0 Y0` is a hard lower-left machining boundary. This is an XY rule:
+  every commanded X and Y coordinate, including rapids, lead-ins, arcs,
+  ramps, tabs, stay-down links, and optimizer-generated transitions, must be
+  greater than or equal to zero. The tool may move to negative Z for a cut;
+  negative cutting depth must never be confused with permission to move
+  negative X or Y.
 - The preview origin marker is machine work `X0 Y0` exactly. The same transform
   used by the preview must be used by simulation and G-code generation; no
   renderer-only translation is permitted.
@@ -46,6 +52,14 @@ This plan extends, but does not invalidate, the completed foundation tracked in
   `(0, 0)`. Start-point optimization, lead-ins, and tabs may choose another
   point; the complete generated path must have `minX = 0`, `minY = 0`, and no
   negative XY segment.
+- The non-negative XY invariant is checked after every transformation stage:
+  source placement, orientation, cutter compensation, path generation,
+  linking, scheduling, formatting, and parsing. A failed check invalidates the
+  preview and blocks G-code loading; clamping an offending coordinate is not a
+  permitted recovery because it can change the cut geometry.
+- Work-zero persistence, reference motion, and return-to-work-zero logic must
+  use the same coordinate contract. A stale or unconfirmed work offset may
+  not be treated as `(0, 0)` to bypass the check.
 - The operator-confirmed stock width, height, and thickness are authoritative.
 - Stock width and height must contain the transformed model footprint plus any
   cutter-compensated outside path. Importing a model never proves that the
@@ -340,6 +354,27 @@ Add a lightweight 2.5D stock simulator independent of the visual preview:
 Generation fails closed if topology, compensation, scheduling, simulation, or
 parser results disagree.
 
+### Non-negative work-coordinate gate
+
+Implement one shared verifier for all generated motion, rather than separate
+checks in each strategy. It must inspect both segment endpoints and the
+interpolated XY envelope of each motion primitive:
+
+- Linear moves are checked against `X >= 0` and `Y >= 0`.
+- Arc bounding boxes and sweep extrema are checked, not only arc endpoints.
+- Ramps, lead-ins, tabs, and stay-down links are checked after their final
+  orientation and placement.
+- Any optimizer rewrite or formatter round-trip that produces a value below
+  `-coordinate_tolerance` fails closed and records the offending operation,
+  segment, and coordinate.
+- Values within formatter tolerance are normalized only through the existing
+  numeric formatter; material geometry is never silently clipped or shifted.
+
+The verifier must run before preview acceptance and again on the exact parsed
+G-code that will be loaded. The two reports must agree on the work-coordinate
+bounds. The preview must expose the resulting X/Y min/max so an operator can
+confirm that work zero is the actual lower-left limit.
+
 ## UI changes
 
 - Replace the single mode-oriented workflow with an operation list generated
@@ -385,6 +420,8 @@ two consecutive runs.
 - [ ] Make stock thickness authoritative for all inferred through-features.
 - [ ] Serialize the complete normalized model across the isolated import worker.
 - [ ] Preserve analytic curves and source topology IDs.
+- [ ] Implement the shared non-negative XY envelope verifier and record the
+  authoritative placement translation in normalized job metadata.
 
 Gate: all fixtures classify blind/through, parent/island relationships, and
 target depths correctly without generating G-code.
@@ -411,6 +448,8 @@ expected feature graph and unsupported geometry is rejected.
 
 Gate: operation order is deterministic, inner work precedes detachment, and no
 through target uses model thickness when physical stock thickness is supplied.
+Every operation emitted by the planner must also pass the shared non-negative
+XY gate before it can be scheduled.
 
 ### Phase 4 — Connected pocket and contour strategies
 
@@ -430,6 +469,8 @@ are met.
 - [ ] Add dependency-aware cross-operation scheduling.
 - [ ] Emit deterministic metrics and duration estimates.
 - [ ] Add a debug export containing the operation DAG and selected links.
+- [ ] Re-run the non-negative XY gate after scheduling and after every
+  optimizer orientation/rewrite; reject, never clamp, invalid candidates.
 
 Gate: optimized output is deterministic, never violates dependencies, and is
 never worse than the unoptimized candidate on weighted cost.
@@ -529,6 +570,14 @@ every shipped example has a reviewed expected operation plan.
 - Reject any lead-in, arc, ramp, tab transition, stay-down link, rapid, or
   optimizer rewrite that crosses negative X or Y even when its endpoints are
   nonnegative.
+- Verify the shared verifier checks the full swept XY envelope, not only parsed
+  endpoints. Include mixed XYZ moves so an accidental axis mixup cannot pass
+  the gate.
+- Verify negative Z values remain legal for cutting while negative X/Y values
+  always block generation. Failed checks invalidate both preview and the
+  loadable program; no coordinate-clamping fallback is allowed.
+- Verify stale or unconfirmed work offsets cannot be substituted with zero to
+  satisfy the non-negative check.
 - Missing/unconfirmed stock thickness blocks through paths.
 - Blind depth below physical stock bottom is rejected.
 - Stepdown division has no shallow duplicate pass and lands exactly on target.
@@ -597,6 +646,9 @@ every shipped example has a reviewed expected operation plan.
 - Retained solids, floors, walls, bosses, islands, and tabs are not gouged.
 - Rapids stay at/above safe Z; plunges and links obey motion classifications.
 - Every emitted endpoint fits stock and trusted virtual machine envelope.
+- Every emitted motion primitive, including arc sweep extrema, fits the
+  non-negative work-XY envelope; negative Z cutting remains separately
+  validated against stock depth and tool limits.
 - NaN, infinity, overflow, zero-length, impossible feed/RPM, and malformed
   segment inputs fail closed.
 - G-code parser bounds equal toolpath/simulator bounds.
@@ -620,6 +672,10 @@ every shipped example has a reviewed expected operation plan.
   extremes at zero and the raw part's lower-left inset/up-right by the computed
   compensation. The first scheduled cut reports its true, potentially nonzero
   coordinate.
+- A preview and parsed-program inspection report identical non-negative work
+  XY bounds. Deliberately translated, rotated, compensated, linked, lead-in,
+  arc, ramp, and tab fixtures that would cross work zero are rejected before
+  loading; a negative-Z-only fixture remains valid.
 - Rapid/retract, roughing, finish, tab, and operation filtering work without
   changing generated output.
 - Qt shell starts and closes in tests without interacting with a user-owned app.
