@@ -310,6 +310,23 @@ def test_profile_cutout_uses_confirmed_physical_stock_for_through_depth() -> Non
     assert "; Through cut: stock 2 mm + breakthrough 0.2 mm" in job.gcode
 
 
+def test_profile_operation_plan_keeps_inner_cutouts_before_outer_profile() -> None:
+    job = generate_step_gcode(
+        _model(),
+        mode="Profile cutout",
+        tool_diameter=3,
+        stock_width=43,
+        stock_height=28,
+        stock_thickness=2,
+        tab_count=0,
+    )
+
+    assert [operation.operation_id for operation in job.operations] == ["internal-through", "outer-profile"]
+    assert job.operations[1].depends_on == ("internal-through",)
+    assert "; Operation internal-through:" in job.gcode
+    assert "; Operation outer-profile:" in job.gcode
+
+
 def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> None:
     examples = Path(__file__).parents[1] / "examples"
     removed = load_step_isolated(examples / "removed-cylinder.step")
