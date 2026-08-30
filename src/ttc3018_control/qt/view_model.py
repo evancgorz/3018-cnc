@@ -607,7 +607,7 @@ class ControllerViewModel(QObject):
             self._preview_summary = "Enter valid STEP machining settings to preview the toolpath."
         else:
             self._preview_strokes = self._strokes_for_qml(job.strokes)
-            self._preview_summary = f"{job.mode} · {job.width:.1f} × {job.height:.1f} mm · {job.stroke_count} paths · {job.passes} passes"
+            self._preview_summary = self._step_job_summary(job)
         self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
@@ -660,7 +660,7 @@ class ControllerViewModel(QObject):
             job.gcode,
             "generated-step.gcode",
             job.strokes,
-            f"STEP {job.mode} · {job.width:.1f} × {job.height:.1f} mm · {job.stroke_count} paths · {job.passes} passes",
+            self._step_job_summary(job),
         )
 
     @Slot()
@@ -1405,6 +1405,19 @@ class ControllerViewModel(QObject):
                 tuple((point.x, point.y) for point in loop.points + (loop.points[0],))
                 for loop in model.loops
             )
+        )
+
+    @staticmethod
+    def _step_job_summary(job) -> str:
+        points = [point for stroke in job.strokes for point in stroke]
+        min_x = min(point[0] for point in points)
+        min_y = min(point[1] for point in points)
+        max_x = max(point[0] for point in points)
+        max_y = max(point[1] for point in points)
+        return (
+            f"STEP {job.mode} · stock {job.stock_width:.1f} × {job.stock_height:.1f} mm · "
+            f"tool {job.tool_diameter:.2f} mm · depth {job.depth:.2f} mm · {job.passes} passes · "
+            f"{job.stroke_count} paths · bounds X {min_x:.1f}…{max_x:.1f}, Y {min_y:.1f}…{max_y:.1f} mm"
         )
 
     def _disconnected(self, reason: str) -> None:

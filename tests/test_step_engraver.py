@@ -42,3 +42,15 @@ def test_invalid_depth_pass_settings_are_rejected() -> None:
         generate_step_gcode(_model(), passes=0)
     with pytest.raises(ValueError, match="Tool diameter"):
         generate_step_gcode(_model(), tool_diameter=0)
+
+
+def test_malformed_normalized_loop_is_rejected() -> None:
+    malformed = StepPlanarModel(
+        Path("bad.step"),
+        (PlanarLoop((Point2D(0, 0), Point2D(1, 1))),),
+        0,
+        0,
+        (0, 0, 0, 1, 1, 0),
+    )
+    with pytest.raises(ValueError, match="at least three points"):
+        generate_step_gcode(malformed)

@@ -116,6 +116,13 @@ def _validate_settings(
 ) -> None:
     if not model.loops:
         raise ValueError("The imported model contains no planar loops")
+    for loop in model.loops:
+        if len(loop.points) < 3:
+            raise ValueError("Each imported planar loop must contain at least three points")
+        if not all(math.isfinite(point.x) and math.isfinite(point.y) for point in loop.points):
+            raise ValueError("Imported planar geometry contains a non-finite coordinate")
+        if loop.area <= 1e-7:
+            raise ValueError("Imported planar geometry contains a zero-area loop")
     if mode not in STEP_MODES:
         raise ValueError("Unknown STEP machining mode")
     if orientation not in STEP_ORIENTATIONS:
