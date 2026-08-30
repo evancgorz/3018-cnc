@@ -11,6 +11,7 @@ from ttc3018_control.machine_state import (
     plan_safe_position_jogs,
     work_zero_virtual_target,
 )
+from ttc3018_control.work_zero_settings import SavedWorkZero, WorkZeroStore
 
 
 @pytest.fixture
@@ -29,6 +30,16 @@ def test_invalid_profile_is_not_saved(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="X travel"):
         store.save(MachineProfile())
     assert not store.path.exists()
+
+
+def test_work_zero_round_trip_and_clear(tmp_path: Path) -> None:
+    store = WorkZeroStore(tmp_path / "work-zero.json")
+    saved = SavedWorkZero(12.5, -3.25, 8)
+
+    store.save(saved)
+    assert store.load() == saved
+    store.clear()
+    assert store.load() is None
 
 
 def test_reference_maps_current_position_to_zero(profile: MachineProfile) -> None:

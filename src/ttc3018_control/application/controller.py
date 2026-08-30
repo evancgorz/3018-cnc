@@ -10,6 +10,7 @@ from typing import Callable, Iterable
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
+from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
 from ..tcp_connection import TcpGrblConnection
 from ..wifi_discovery import discover_grbl_hosts
@@ -19,7 +20,7 @@ from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
-from .ports import ConnectionSettingsStorePort, ProfileStorePort
+from .ports import ConnectionSettingsStorePort, ProfileStorePort, WorkZeroStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 from .wifi_service import WifiProvisioningService
 
@@ -37,6 +38,7 @@ class ApplicationController:
         on_ready_to_return: Callable[[], None] | None = None,
         profile_store: ProfileStorePort | None = None,
         connection_store: ConnectionSettingsStorePort | None = None,
+        work_zero_store: WorkZeroStorePort | None = None,
         usb_factory: Callable[[], object] | None = None,
         wifi_factory: Callable[[], object] | None = None,
         discover_hosts: Callable[[int], Iterable[str]] | None = None,
@@ -44,6 +46,7 @@ class ApplicationController:
     ) -> None:
         self.profile_store = profile_store or ProfileStore(root / "config" / "machine-profile.json")
         self.connection_store = connection_store or ConnectionSettingsStore(root / "config" / "connection.json")
+        self.work_zero_store = work_zero_store or WorkZeroStore(root / "config" / "work-zero.json")
         try:
             profile = self.profile_store.load()
         except (OSError, ValueError, TypeError):
@@ -52,9 +55,14 @@ class ApplicationController:
             settings = self.connection_store.load()
         except (OSError, ValueError, TypeError):
             settings = ConnectionSettings()
+        try:
+            saved_work_zero = self.work_zero_store.load()
+        except (OSError, ValueError, TypeError):
+            saved_work_zero = None
 
         self.session = MachineSession(profile=profile)
         self.settings = settings
+        self._saved_work_zero = saved_work_zero
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
         self._events: queue.Queue[ApplicationEvent] = queue.Queue()
@@ -429,6 +437,7 @@ class ApplicationController:
         except (RuntimeError, ValueError) as exc:
             self.session.invalidate_work_zero()
             return ActionOutcome(False, f"Work zero not sent — {exc}")
+        self._clear_saved_work_zero()
         return outcome
 
     def start_spindle(self, rpm: int) -> ActionOutcome:
@@ -491,9 +500,39 @@ class ApplicationController:
 
     def apply_status(self, status: GrblStatus) -> None:
         self.status = status
+        awaiting_confirmation = self.session.awaiting_work_zero_report
         self.session.update_status(status)
+        if status.work_offset is not None:
+            if awaiting_confirmation and self.session.work_zero_confirmed:
+                self._save_work_zero(status.work_offset)
+            elif not self.session.work_zero_confirmed and self._saved_work_zero is not None:
+                saved = self._saved_work_zero.position
+                if all(
+                    abs(actual - expected) <= 0.001
+                    for actual, expected in zip(
+                        (status.work_offset.x, status.work_offset.y, status.work_offset.z),
+                        (saved.x, saved.y, saved.z),
+                    )
+                ):
+                    self.session.work_zero_confirmed = True
         self.job.observe_status(status)
         self.motion.observe_status(status)
+
+    def _save_work_zero(self, offset: Position) -> None:
+        saved = SavedWorkZero.from_position(offset)
+        try:
+            self.work_zero_store.save(saved)
+        except OSError:
+            self._publish_notice("Work zero confirmed, but it could not be saved for the next session")
+            return
+        self._saved_work_zero = saved
+
+    def _clear_saved_work_zero(self) -> None:
+        self._saved_work_zero = None
+        try:
+            self.work_zero_store.clear()
+        except OSError:
+            self._publish_notice("Previous saved work zero could not be removed")
 
     def handle_response(self, response: str, feed: float = 500.0) -> bool:
         """Dispatch one controller response to the owning application service."""

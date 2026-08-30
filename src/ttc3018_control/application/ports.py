@@ -11,6 +11,7 @@ from typing import Callable, Protocol
 
 from ..connection_settings import ConnectionSettings
 from ..machine_state import MachineProfile
+from ..work_zero_settings import SavedWorkZero
 
 
 class Transport(Protocol):
@@ -39,6 +40,14 @@ class ConnectionSettingsStorePort(Protocol):
     def save(self, settings: ConnectionSettings) -> None: ...
 
 
+class WorkZeroStorePort(Protocol):
+    def load(self) -> SavedWorkZero | None: ...
+
+    def save(self, saved: SavedWorkZero) -> None: ...
+
+    def clear(self) -> None: ...
+
+
 class Clock(Protocol):
     def monotonic(self) -> float: ...
 
@@ -49,4 +58,3 @@ class EventSink(Protocol):
 
 PathLike = Path | str
 Callback = Callable[[], None]
-

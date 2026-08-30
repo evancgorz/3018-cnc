@@ -29,6 +29,7 @@ source tree only as a reference during the migration.
 - Loads and validates pre-sliced metric G-code files.
 - Rejects probing, reference-changing commands, tool changes, inch-mode jobs, and unsupported commands.
 - Calculates XYZ job bounds and checks them against the session's virtual machine envelope and current GRBL work offset.
+- Persists a confirmed XYZ work zero and restores it only after a fresh GRBL report matches the saved work offset.
 - Displays a lightweight XY toolpath preview with rapid and cutting moves distinguished.
 - Streams one G-code command at a time and waits for GRBL acknowledgement before continuing.
 - Provides guarded spindle start/stop plus job start, pause, resume, abort, and progress controls.

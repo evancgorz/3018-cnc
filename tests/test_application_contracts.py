@@ -140,6 +140,36 @@ def test_bound_notice_callback_does_not_leave_duplicate_queued_events(tmp_path) 
     assert controller.application_events() == ()
 
 
+def test_confirmed_work_zero_restores_only_after_matching_fresh_wco(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    transport = _Transport()
+    transport.connected = True
+    first = ApplicationController(tmp_path)
+    first.set_transport_for_testing(transport)
+    first.apply_status(GrblStatus("Idle", machine_position=Position(20, 20, 5)))
+    assert first.set_work_zero("XYZ").accepted
+    first.apply_status(
+        GrblStatus("Idle", machine_position=Position(20, 20, 5), work_offset=Position(20, 20, 5))
+    )
+    assert first.work_zero_confirmed
+
+    restored = ApplicationController(tmp_path)
+    restored.set_transport_for_testing(transport)
+    assert not restored.work_zero_confirmed
+    restored.apply_status(
+        GrblStatus("Idle", machine_position=Position(21, 20, 5), work_offset=Position(20, 20, 5))
+    )
+    assert restored.work_zero_confirmed
+
+    mismatch = ApplicationController(tmp_path)
+    mismatch.set_transport_for_testing(transport)
+    mismatch.apply_status(
+        GrblStatus("Idle", machine_position=Position(21, 20, 5), work_offset=Position(19, 20, 5))
+    )
+    assert not mismatch.work_zero_confirmed
+
+
 def test_controller_rejects_overlapping_motion_and_job_start_without_preflight(tmp_path) -> None:
     from ttc3018_control.application.controller import ApplicationController
 
