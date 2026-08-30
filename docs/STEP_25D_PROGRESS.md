@@ -13,6 +13,8 @@ streaming pipeline.
   and fixed tool diameter.
 - [x] Generate validated outside and inside contours.
 - [x] Generate planar pockets, engravings, and holes.
+- [x] Generate explicit slot/opening clearing with tool compensation,
+  island-aware regions, and the shared simulation/parser safety gates.
 - [x] Support multiple depth passes.
 - [x] Support safe Z, cutting/plunge feeds, and optional spindle start.
 - [x] Generate combined through-profile cutouts with inner-first ordering,
@@ -281,3 +283,4 @@ streaming pipeline.
 | 2026-08-30 | `ff6c30e` | Added deterministic STEP duration estimates to job metadata and Qt review. |
 | 2026-08-30 | `ebbe89a` | Added nested profile simulation coverage for islands and alternating cutout boundaries. |
 | 2026-08-30 | `72299f5` | Preserved nested islands during detected parent-recess clearing and added simulation coverage. |
+| 2026-08-30 | `ca1858e` | Added validated explicit Slot machining mode for non-circular inner openings. |
