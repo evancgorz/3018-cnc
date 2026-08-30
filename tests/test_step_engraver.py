@@ -479,6 +479,29 @@ def test_invalid_depth_pass_settings_are_rejected() -> None:
         generate_step_gcode(_model(), tool_diameter=0)
 
 
+def test_max_stepdown_increases_passes_without_changing_final_depth() -> None:
+    job = generate_step_gcode(
+        _solid_model(),
+        mode="Pocket",
+        stock_width=45,
+        stock_height=30,
+        depth=-2.1,
+        passes=1,
+        max_stepdown=0.5,
+    )
+
+    assert job.passes == 5
+    assert parse_gcode(job.gcode).bounds.minimum.z == pytest.approx(-2.1)
+    assert "; Depth schedule 5 pass(es), maximum stepdown 0.5 mm" in job.gcode
+
+
+def test_max_stepdown_rejects_impossible_schedules() -> None:
+    with pytest.raises(ValueError, match="Maximum stepdown"):
+        generate_step_gcode(_solid_model(), max_stepdown=0)
+    with pytest.raises(ValueError, match="more than 100"):
+        generate_step_gcode(_solid_model(), depth=-20, max_stepdown=0.1)
+
+
 def test_malformed_normalized_loop_is_rejected() -> None:
     malformed = StepPlanarModel(
         Path("bad.step"),

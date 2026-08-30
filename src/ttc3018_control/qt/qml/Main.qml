@@ -434,7 +434,7 @@ ApplicationWindow {
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
-            if (appViewModel) appViewModel.preview_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text))
+             if (appViewModel) appViewModel.preview_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text), Number(stepMaxStepdownField.text))
         }
         onOpened: refreshPreview()
         ColumnLayout {
@@ -491,10 +491,11 @@ ApplicationWindow {
                                     }
                                 }
                             }
-                            ColumnLayout { Layout.fillWidth: true; spacing: 7; visible: modeCombo.currentText === "Profile cutout"
+                             ColumnLayout { Layout.fillWidth: true; spacing: 7; visible: modeCombo.currentText === "Profile cutout" || modeCombo.currentText === "Detected feature"
                                 Divider {}
-                                SectionTitle { text: "Through cut and holding tabs" }
-                                MutedLabel { text: "Inner cutouts run first. The compensated outer profile runs last and leaves tabs so the finished part stays attached to the stock." }
+                                 SectionTitle { text: modeCombo.currentText === "Profile cutout" ? "Through cut and holding tabs" : "Feature stock reference" }
+                                 MutedLabel { text: modeCombo.currentText === "Profile cutout" ? "Inner cutouts run first. The compensated outer profile runs last and leaves tabs so the finished part stays attached to the stock." : "Confirm the physical stock thickness before generating detected through-features."
+                                 }
                                 GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 10; rowSpacing: 7
                                     Label { text: "Stock thickness (mm)"; color: window.palette.muted }
                                     Field { id: stockThicknessField; Layout.fillWidth: true; text: "2.0"; validator: DoubleValidator { bottom: 0.1; top: 20 }
@@ -519,9 +520,12 @@ ApplicationWindow {
                                 Label { text: modeCombo.currentText === "Profile cutout" ? "Depth (from stock)" : modeCombo.currentText === "Detected feature" ? "Depth (from STEP feature)" : modeCombo.currentText === "Planar surface" ? "Depth (from STEP surface)" : "Depth (mm)"; color: window.palette.muted }
                                 Field { id: stepDepthField; Layout.fillWidth: true; text: "-0.5"; enabled: modeCombo.currentText !== "Profile cutout" && modeCombo.currentText !== "Detected feature" && modeCombo.currentText !== "Planar surface"; validator: DoubleValidator { bottom: -20; top: -0.001 }
                                     onTextChanged: stepDialog.refreshPreview() }
-                                Label { text: "Depth passes"; color: window.palette.muted }
-                                Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
-                                    onTextChanged: stepDialog.refreshPreview() }
+                                 Label { text: "Depth passes"; color: window.palette.muted }
+                                 Field { id: stepPassesField; Layout.fillWidth: true; text: "2"; validator: IntValidator { bottom: 1; top: 100 }
+                                     onTextChanged: stepDialog.refreshPreview() }
+                                 Label { text: "Max stepdown (mm, 0 = auto)"; color: window.palette.muted }
+                                 Field { id: stepMaxStepdownField; Layout.fillWidth: true; text: "0"; validator: DoubleValidator { bottom: 0; top: 20 }
+                                     onTextChanged: stepDialog.refreshPreview() }
                                 Label { text: "Safe Z (mm)"; color: window.palette.muted }
                                 Field { id: stepSafeField; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
                                     onTextChanged: stepDialog.refreshPreview() }
@@ -540,11 +544,11 @@ ApplicationWindow {
                     }
                 }
             }
-            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
+             Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Cancel"; onClicked: stepDialog.close() }
-                PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded && !appViewModel.step_importing && appViewModel.step_preview_valid; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text)); stepDialog.close(); window.workspace = 1 } }
+                 PrimaryButton { text: "Generate and load"; enabled: appViewModel && appViewModel.step_loaded && !appViewModel.step_importing && appViewModel.step_preview_valid; onClicked: { appViewModel.create_step(modeCombo.currentText, orientationCombo.currentText, Number(stockWidthField.text), Number(stockHeightField.text), zeroLocationCombo.currentText, Number(toolDiameterField.text), Number(stepDepthField.text), Number(stepPassesField.text), Number(stockThicknessField.text), Number(breakthroughField.text), Number(tabCountField.text), Number(tabWidthField.text), Number(tabHeightField.text), Number(stepSafeField.text), Number(stepCutField.text), Number(stepPlungeField.text), Number(stepRpmField.text), Number(stepMaxStepdownField.text)); stepDialog.close(); window.workspace = 1 } }
             }
         }
     }

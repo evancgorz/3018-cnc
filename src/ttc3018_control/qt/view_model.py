@@ -558,8 +558,8 @@ class ControllerViewModel(QObject):
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
 
-    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int)
-    def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int, float)
+    def preview_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int, max_stepdown: float = 0.0) -> None:
         if self._step_model is None:
             self._preview_strokes = []
             self._preview_stock_width = 0.0
@@ -578,6 +578,7 @@ class ControllerViewModel(QObject):
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
                 stock_thickness=stock_thickness, breakthrough=breakthrough,
+                max_stepdown=max_stepdown if max_stepdown > 0 else None,
                 tab_count=tab_count, tab_width=tab_width, tab_height=tab_height,
             )
         except (ValueError, TypeError) as exc:
@@ -630,8 +631,8 @@ class ControllerViewModel(QObject):
         result = plaque.result
         self._load_generated_program(plaque.gcode, plaque.filename, result.strokes, f"Plaque · {result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes")
 
-    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int)
-    def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int) -> None:
+    @Slot(str, str, float, float, str, float, float, int, float, float, int, float, float, float, float, float, int, float)
+    def create_step(self, mode: str, orientation: str, stock_width: float, stock_height: float, zero_location: str, tool_diameter: float, depth: float, passes: int, stock_thickness: float, breakthrough: float, tab_count: int, tab_width: float, tab_height: float, safe_z: float, cut_feed: float, plunge_feed: float, spindle_rpm: int, max_stepdown: float = 0.0) -> None:
         if self._step_model is None:
             self._set_notice("STEP job unavailable — import a planar STEP model first")
             return
@@ -647,6 +648,7 @@ class ControllerViewModel(QObject):
                 cut_feed=cut_feed, plunge_feed=plunge_feed,
                 spindle_rpm=spindle_rpm if spindle_rpm > 0 else None,
                 stock_thickness=stock_thickness, breakthrough=breakthrough,
+                max_stepdown=max_stepdown if max_stepdown > 0 else None,
                 tab_count=tab_count, tab_width=tab_width, tab_height=tab_height,
             )
         except (ValueError, TypeError) as exc:

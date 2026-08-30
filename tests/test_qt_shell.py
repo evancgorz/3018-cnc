@@ -179,6 +179,8 @@ def test_step_preview_draws_physical_stock_and_work_zero_in_canvas() -> None:
     assert "preview_stock_height" in qml
     assert "ctx.strokeRect(offsetX, offsetY - stockHeight * scale" in qml
     assert "ctx.arc(workZeroX, workZeroY" in qml
+    assert "Max stepdown (mm, 0 = auto)" in qml
+    assert "modeCombo.currentText === \"Detected feature\"" in qml
 
 
 def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:

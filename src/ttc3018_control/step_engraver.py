@@ -62,6 +62,7 @@ class StepMachining:
     feature_simulations: tuple[StepStockSimulation, ...] = ()
     surface_simulation: StepSurfaceSimulation | None = None
     profile_simulation: StepProfileSimulation | None = None
+    max_stepdown: float | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,19 @@ class _DetectedFeatureGroup:
     depth: float
     region: object
     retained_region: object | None = None
+
+
+def _resolve_pass_count(depth: float, passes: int, max_stepdown: float | None) -> int:
+    """Return a deterministic pass count that never exceeds max stepdown."""
+    if max_stepdown is None:
+        return passes
+    if not math.isfinite(max_stepdown) or not 0.01 <= max_stepdown <= 20:
+        raise ValueError("Maximum stepdown must be between 0.01 and 20 mm")
+    required = max(1, math.ceil(abs(depth) / max_stepdown - 1e-9))
+    resolved = max(passes, required)
+    if resolved > 100:
+        raise ValueError("Maximum stepdown would require more than 100 depth passes")
+    return resolved
 
 
 def generate_step_gcode(
@@ -83,6 +97,7 @@ def generate_step_gcode(
     tool_diameter: float = 3.175,
     depth: float = -0.5,
     passes: int = 1,
+    max_stepdown: float | None = None,
     safe_z: float = 3.0,
     cut_feed: float = 300.0,
     plunge_feed: float = 100.0,
@@ -181,6 +196,7 @@ def generate_step_gcode(
         strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, region, mode, tool_diameter)
     if not strokes:
         raise ValueError(f"No usable {mode.lower()} toolpath could be generated from the imported geometry")
+    passes = _resolve_pass_count(depth, passes, max_stepdown)
     placement_offset_x, placement_offset_y = _cutout_placement_offset(
         strokes, mode, zero_location, tool_diameter
     )
@@ -289,6 +305,8 @@ def generate_step_gcode(
         f"; Mode {mode}, tool {tool_diameter:g} mm, depth {depth:g} mm, passes {passes}",
         f"; Stock {resolved_stock_width:g} x {resolved_stock_height:g} mm, zero {zero_location}",
         f"; Placement offset X{placement_offset_x:g} Y{placement_offset_y:g}; path envelope is nonnegative",
+        f"; Depth schedule {passes} pass(es)"
+        + (f", maximum stepdown {max_stepdown:g} mm" if max_stepdown is not None else ""),
         f"; Metrics cut {cutting_distance:.3f} mm, rapid XY {rapid_xy_distance:.3f} mm, retracts {retract_count}",
         "G21", "G17", "G90", "G94",
     ]
@@ -395,6 +413,7 @@ def generate_step_gcode(
         feature_simulations,
         surface_simulation,
         profile_simulation,
+        max_stepdown,
     )
 
 
