@@ -45,7 +45,12 @@ def build_step_operation_plan(
     if mode == "Detected feature":
         grouped: dict[float, list[int]] = {}
         for index, feature in enumerate(model.features):
-            grouped.setdefault(round(feature.depth, 7), []).append(index)
+            target_depth = (
+                stock_thickness + breakthrough
+                if feature.is_through
+                else feature.depth
+            )
+            grouped.setdefault(round(target_depth, 7), []).append(index)
         sorted_groups = sorted(grouped.items(), reverse=True)
         operation_ids_by_feature: dict[int, str] = {}
         for index, (_feature_depth, feature_indices) in enumerate(sorted_groups):

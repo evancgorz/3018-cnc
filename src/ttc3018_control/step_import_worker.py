@@ -34,6 +34,7 @@ def main() -> int:
                         "loop_index": feature.loop_index,
                         "depth": feature.depth,
                         "parent_loop_index": feature.parent_loop_index,
+                        "is_through": feature.is_through,
                     }
                     for feature in model.features
                 ],

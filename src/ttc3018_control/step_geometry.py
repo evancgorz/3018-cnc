@@ -65,6 +65,7 @@ class StepFeature:
     loop_index: int
     depth: float
     parent_loop_index: int | None = None
+    is_through: bool = False
 
 
 @dataclass(frozen=True)
@@ -269,6 +270,7 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
                     None
                     if feature.get("parent_loop_index") is None
                     else int(feature["parent_loop_index"]),
+                    bool(feature.get("is_through", False)),
                 )
                 for feature in payload.get("features", [])
             ),
@@ -365,6 +367,7 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
     bounds = box.Get()
     thickness = _plane_thickness(bounds, selected_axis)
     loop_parents = loop_containment_parents(normalized)
+    machine_bottom = _machine_axis_min(bounds, selected_axis)
     features = _detect_axial_features(
         shape,
         modules,
@@ -375,6 +378,7 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         min_x,
         min_y,
         loop_parents,
+        machine_bottom,
     )
     machine_top = _machine_axis_max(bounds, selected_axis)
     surface_patches = _surface_patches(
@@ -400,6 +404,14 @@ def _machine_axis_max(bounds: tuple[float, float, float, float, float, float], p
     if plane == "XZ":
         return float(bounds[4])
     return float(bounds[3])
+
+
+def _machine_axis_min(bounds: tuple[float, float, float, float, float, float], plane: str) -> float:
+    if plane == "XY":
+        return float(bounds[2])
+    if plane == "XZ":
+        return float(bounds[1])
+    return float(bounds[0])
 
 
 def _surface_patches(
@@ -458,6 +470,7 @@ def _detect_axial_features(
     origin_u: float,
     origin_v: float,
     loop_parents: tuple[int | None, ...] = (),
+    machine_bottom: float | None = None,
 ) -> tuple[StepFeature, ...]:
     """Classify cylindrical walls adjoining selected-face inner loops."""
     if len(loops) < 2:
@@ -500,15 +513,22 @@ def _detect_axial_features(
                                 match,
                                 outward,
                                 loop_parents[match] if len(loop_parents) == len(loops) else None,
+                                False,
                             )
                         )
                     elif inward > 0.001 and outward <= 0.001:
+                        feature_bottom = low if sign > 0 else high
+                        is_through = (
+                            machine_bottom is not None
+                            and abs(feature_bottom - machine_bottom) <= 0.1
+                        )
                         features.append(
                             StepFeature(
                                 "Recess",
                                 match,
                                 inward,
                                 loop_parents[match] if len(loop_parents) == len(loops) else None,
+                                is_through,
                             )
                         )
         explorer.Next()

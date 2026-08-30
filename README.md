@@ -141,7 +141,8 @@ Choose one of these operations:
 - Detected feature: uses face topology to distinguish a recessed/removed region
   from a raised boss. It clears inside a recess or clears the surrounding base
   face to leave a boss, using each feature's own measured depth from the STEP
-  solid.
+  solid. A recess that reaches the model bottom is marked through and uses the
+  confirmed physical stock thickness plus breakthrough.
 - Planar surface: follows accessible flat and tilted planar faces as a bounded
   varying-Z raster, including ramp-like parts such as `examples/wedge.step`.
   Abrupt vertical cliffs are split into separate safe paths rather than crossed

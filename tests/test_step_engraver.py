@@ -374,6 +374,8 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     assert [(feature.kind, feature.loop_index) for feature in extruded.features] == [("Raised boss", 1)]
     assert removed.features[0].depth == pytest.approx(2)
     assert extruded.features[0].depth == pytest.approx(2)
+    assert removed.features[0].is_through
+    assert not extruded.features[0].is_through
 
     removed_job = generate_step_gcode(removed, mode="Detected feature", tool_diameter=3.175, passes=2)
     extruded_job = generate_step_gcode(extruded, mode="Detected feature", tool_diameter=3.175, passes=2)
@@ -386,7 +388,7 @@ def test_step_fixtures_distinguish_removed_and_extruded_circle_features() -> Non
     extruded_width = max(point[0] for point in extruded_points) - min(point[0] for point in extruded_points)
     assert removed_width < 10  # Clear inside the circular recess.
     assert extruded_width > 25  # Clear the surrounding rectangle, leaving the boss.
-    assert removed_program.bounds.minimum.z == pytest.approx(-2)
+    assert removed_program.bounds.minimum.z == pytest.approx(-2.2)
     assert extruded_program.bounds.minimum.z == pytest.approx(-2)
     assert removed_job.feature_summary == "Recess 2.00 mm"
     assert extruded_job.feature_summary == "Raised boss 2.00 mm"

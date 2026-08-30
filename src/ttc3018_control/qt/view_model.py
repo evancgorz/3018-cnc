@@ -203,7 +203,11 @@ class ControllerViewModel(QObject):
         model = self._step_model
         feature_text = ""
         if model.features:
-            descriptions = ", ".join(f"{feature.kind} {feature.depth:.2f} mm" for feature in model.features)
+            descriptions = ", ".join(
+                f"{feature.kind} {feature.depth:.2f} mm"
+                + (" through" if feature.is_through else " blind")
+                for feature in model.features
+            )
             feature_text = f" · detected {descriptions}"
         surface_text = f" · {len(model.surface_patches)} accessible planar surface patch(es)"
         if any(patch.tilted for patch in model.surface_patches):

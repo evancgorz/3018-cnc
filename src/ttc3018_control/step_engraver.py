@@ -98,7 +98,10 @@ def generate_step_gcode(
     elif mode == "Detected feature":
         if not model.features:
             raise ValueError("No raised boss or recessed feature was detected on the selected machining face")
-        depth = -max(feature.depth for feature in model.features)
+        depth = -max(
+            _feature_target_depth(feature, resolved_thickness, breakthrough)
+            for feature in model.features
+        )
     _validate_settings(
         model, mode, orientation, zero_location, tool_diameter, depth, passes,
         safe_z, cut_feed, plunge_feed, spindle_rpm,
@@ -131,7 +134,14 @@ def generate_step_gcode(
     depth_paths: list[float] = []
     detected_groups: tuple[_DetectedFeatureGroup, ...] = ()
     if mode == "Detected feature":
-        detected_groups = _detected_feature_groups(model, loops, region, tool_diameter)
+        detected_groups = _detected_feature_groups(
+            model,
+            loops,
+            region,
+            tool_diameter,
+            stock_thickness=resolved_thickness,
+            breakthrough=breakthrough,
+        )
         detected_paths = [
             (stroke, group.depth)
             for group in detected_groups
@@ -191,6 +201,7 @@ def generate_step_gcode(
                 stock_width=resolved_stock_width,
                 stock_height=resolved_stock_height,
                 stock_thickness=resolved_thickness,
+                breakthrough=breakthrough,
                 passes=passes,
                 retained_region=group.retained_region,
             )
@@ -644,6 +655,9 @@ def _detected_feature_groups(
     loops: tuple[PlanarLoop, ...],
     region,
     tool_diameter: float,
+    *,
+    stock_thickness: float | None = None,
+    breakthrough: float = 0.0,
 ) -> tuple[_DetectedFeatureGroup, ...]:
     """Generate removal groups that reproduce detected boss/recess topology."""
     radius = tool_diameter / 2
@@ -651,7 +665,8 @@ def _detected_feature_groups(
     for feature in model.features:
         if feature.kind != "Recess":
             continue
-        recess_groups.setdefault(round(feature.depth, 7), []).append(
+        feature_depth = _feature_target_depth(feature, stock_thickness, breakthrough)
+        recess_groups.setdefault(round(feature_depth, 7), []).append(
             Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
         )
     groups: list[_DetectedFeatureGroup] = []
@@ -666,7 +681,11 @@ def _detected_feature_groups(
             )
         )
     if any(feature.kind == "Raised boss" for feature in model.features):
-        boss_depth = max(feature.depth for feature in model.features if feature.kind == "Raised boss")
+        boss_depth = max(
+            _feature_target_depth(feature, stock_thickness, breakthrough)
+            for feature in model.features
+            if feature.kind == "Raised boss"
+        )
         boss_region = unary_union([
             Polygon((point.x, point.y) for point in loops[feature.loop_index].points)
             for feature in model.features
@@ -695,6 +714,18 @@ def _detected_feature_paths(
         for group in _detected_feature_groups(model, loops, region, tool_diameter)
         for stroke in group.strokes
     ]
+
+
+def _feature_target_depth(
+    feature,
+    stock_thickness: float | None,
+    breakthrough: float,
+) -> float:
+    if feature.is_through:
+        if stock_thickness is None:
+            raise ValueError("A through STEP feature requires confirmed stock thickness")
+        return float(stock_thickness) + float(breakthrough)
+    return float(feature.depth)
 
 
 def _planar_surface_paths(
