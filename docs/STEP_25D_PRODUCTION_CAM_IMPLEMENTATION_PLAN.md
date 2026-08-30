@@ -22,6 +22,20 @@ This plan extends, but does not invalidate, the completed foundation tracked in
 ### Coordinate and stock semantics
 
 - Work `Z0` is the physical top of stock.
+- The preview origin marker is machine work `X0 Y0` exactly. The same transform
+  used by the preview must be used by simulation and G-code generation; no
+  renderer-only translation is permitted.
+- **Part lower-left** is the default XY origin convention. After orientation,
+  the imported part silhouette's minimum X and minimum Y map exactly to work
+  `(0, 0)`. Do not add a hidden centering, margin, stock, or tool-radius offset.
+- **Stock lower-left** and **Part center** may be offered as explicit alternate
+  origin conventions, but the selected convention and resulting coordinates
+  must be visible before generation.
+- Cutter compensation does not redefine work zero. An inside pocket's first
+  cutter-center point can legitimately be up/right by the cutter radius, and an
+  outside profile can require negative work coordinates. The preview must show
+  part geometry, physical stock, work zero, and cutter centerline separately so
+  this cannot look like an unexplained origin shift.
 - The operator-confirmed stock width, height, and thickness are authoritative.
 - Stock width and height must contain the transformed model footprint plus any
   cutter-compensated outside path. Importing a model never proves that the
@@ -70,7 +84,9 @@ quietly generate plausible-looking G-code.
 
 1. Import STEP in the existing isolated OCP worker.
 2. Select or confirm machining direction and model orientation.
-3. Enter physical stock width, height, and thickness; select work-zero origin.
+3. Enter physical stock width, height, and thickness and stock placement;
+   select the work-zero convention. Default the part's lower-left to work
+   `X0 Y0` and show the resulting stock/part bounds numerically.
 4. Select a tool from an explicit tool definition.
 5. Analyze machinability and show supported operations, warnings, and rejected
    geometry before generating paths.
@@ -106,7 +122,11 @@ so it can be fixture-tested without opening Qt or connecting a machine.
 
 Introduce immutable domain records, with stable IDs and source-face references:
 
-- `StockDefinition`: width, height, thickness, origin, safe Z, breakthrough.
+- `StockDefinition`: width, height, thickness, explicit XY bounds relative to
+  work zero, safe Z, and breakthrough.
+- `PlacementTransform`: selected orientation, source model bounds, origin
+  convention, and one authoritative model-to-work transform shared by preview,
+  simulation, and G-code.
 - `ToolDefinition`: diameter, cutting length, flute count, maximum stepdown,
   maximum stepover, plunge/ramp capability, feeds, spindle RPM.
 - `MachiningRegion`: compensated/uncompensated polygon, top Z, target floor Z,
@@ -318,6 +338,13 @@ parser results disagree.
 - Display blind/through status, target depth, selected strategy, tool,
   estimated time, and warnings per operation.
 - Require physical stock thickness confirmation before any through operation.
+- Draw the work-zero marker at preview `(0, 0)` and label it `WORK X0 Y0`.
+- Draw and independently label the part boundary, stock boundary, uncompensated
+  feature geometry, and compensated cutter centerline. Do not imply that the
+  first toolpath point is the origin.
+- Default to **Part lower-left at work X0 Y0**. Show transformed part and stock
+  min/max coordinates; warn rather than silently translating when an outside
+  compensated path extends into negative work coordinates.
 - Highlight model depth and physical through depth separately.
 - Color preview paths by operation/depth and allow isolation of rapids,
   stay-down links, roughing, finishing, tabs, and through cuts.
@@ -470,6 +497,20 @@ every shipped example has a reviewed expected operation plan.
   simulator, metrics, and emitted comments.
 - Stock XY equal to model footprint, larger stock, centered origin, lower-left
   origin, swapped XY orientation, and compensated outer path beyond stock.
+- For every orientation and translated source model, **Part lower-left** maps
+  the transformed silhouette bounds to `minX = 0` and `minY = 0` exactly within
+  formatter tolerance.
+- Preview, normalized operation geometry, simulator, parsed G-code, and emitted
+  comments all report the same work-coordinate bounds and origin transform.
+- No default tool-radius, stock-margin, or auto-centering translation changes
+  `(0, 0)` under **Part lower-left**.
+- Inside compensation may place the first cutting point up/right while keeping
+  the part boundary anchored at `(0, 0)`; verify this is visibly distinct in
+  preview and numerically correct.
+- Outside compensation around a part anchored at `(0, 0)` produces negative
+  cutter-center coordinates. Accept it only when the declared stock bounds and
+  trusted machine envelope contain that path; otherwise provide an actionable
+  placement error instead of shifting it automatically.
 - Missing/unconfirmed stock thickness blocks through paths.
 - Blind depth below physical stock bottom is rejected.
 - Stepdown division has no shallow duplicate pass and lands exactly on target.
@@ -554,6 +595,12 @@ every shipped example has a reviewed expected operation plan.
   or any blocking diagnostic exists.
 - Feature tree and preview expose the same operation IDs and depths as G-code.
 - Through-depth confirmation and spoilboard warning are visible and testable.
+- Preview origin remains fixed at work `(0, 0)` through resize, zoom, pan,
+  orientation changes, tool changes, and regeneration; screen-space panning
+  never mutates machining coordinates.
+- A preview click/inspection at the part's lower-left reports work `(0, 0)` for
+  **Part lower-left**, while the first compensated path point reports its true,
+  potentially nonzero coordinate.
 - Rapid/retract, roughing, finish, tab, and operation filtering work without
   changing generated output.
 - Qt shell starts and closes in tests without interacting with a user-owned app.
@@ -597,5 +644,6 @@ compound fixtures; cut through-features using confirmed physical stock
 thickness; preserve blind floors and retained geometry; reject inaccessible or
 ambiguous shapes; meet the travel/retract optimization thresholds; and pass the
 entire comprehensive test suite without weakening existing machine-safety
-checks.
-
+checks. With **Part lower-left** selected, the slicer origin marker, part
+lower-left, preview coordinate, and generated work `X0 Y0` must be the same
+physical point with no implicit offset.
