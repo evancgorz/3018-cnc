@@ -90,6 +90,8 @@ streaming pipeline.
   regions and verify the parent floor simulation reports no island gouge.
 - [x] Merge all coplanar, same-facing machining faces during STEP import so
   disconnected solids in a compound are not silently dropped.
+- [x] Union touching coplanar compound faces while preserving separate
+  disconnected roots and their holes for downstream topology planning.
 - [x] Expose a deterministic STEP duration estimate in the review summary and
   generated G-code, including its explicit 3000 mm/min rapid-rate assumption.
 - [x] Build and serialize deterministic projected-loop containment metadata,
@@ -287,3 +289,4 @@ streaming pipeline.
 | 2026-08-30 | `72299f5` | Preserved nested islands during detected parent-recess clearing and added simulation coverage. |
 | 2026-08-30 | `ca1858e` | Added validated explicit Slot machining mode for non-circular inner openings. |
 | 2026-08-30 | `eb52002` | Preserved disconnected solids sharing a coplanar machining face during STEP import. |
+| 2026-08-30 | `7094b4f` | United touching coplanar compound faces while retaining disconnected roots. |
