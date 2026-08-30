@@ -79,6 +79,9 @@ streaming pipeline.
 - [x] Verify real removed-cylinder, extruded-boss, and Wedge jobs are
   reproducible across repeated generation and retain nonnegative parsed XY
   bounds.
+- [x] Use the validated loop-containment roots when recognizing axial STEP
+  features, excluding disconnected roots and sorting feature metadata
+  deterministically.
 - [x] Build and serialize deterministic projected-loop containment metadata,
   attach parent indices to detected features, and reject partial overlaps or
   self-intersecting loops before machining.
@@ -268,3 +271,4 @@ streaming pipeline.
 | 2026-08-30 | `bcb4026` | Fixed small-pocket scan coverage with centered lanes and added removed-cylinder tool-size regressions. |
 | 2026-08-30 | `d7b783b` | Added fail-closed validation for non-finite STEP settings and normalized metadata. |
 | 2026-08-30 | `c3338cb` | Added deterministic real-fixture job and work-zero bound regressions. |
+| 2026-08-30 | `94b1b9c` | Restricted axial feature recognition to contained loops and stabilized feature ordering. |
