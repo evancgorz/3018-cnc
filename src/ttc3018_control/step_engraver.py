@@ -10,6 +10,7 @@ from shapely.geometry import GeometryCollection, LineString, MultiLineString, Mu
 from shapely.ops import unary_union
 
 from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
+from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
 
@@ -44,6 +45,7 @@ class StepMachining:
     cutting_distance: float = 0.0
     rapid_xy_distance: float = 0.0
     retract_count: int = 0
+    verification: StepVerification | None = None
 
 
 def generate_step_gcode(
@@ -125,6 +127,9 @@ def generate_step_gcode(
             for stroke, is_outer in profile_paths
         ]
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
+    verification = None
+    if mode in {"Pocket", "Planar surface"}:
+        verification = verify_flat_clearing_paths(strokes, region, tool_diameter / 2)
     cutting_distance, rapid_xy_distance, retract_count = _path_metrics(strokes, passes)
 
     commands = [
@@ -195,6 +200,7 @@ def generate_step_gcode(
         cutting_distance,
         rapid_xy_distance,
         retract_count,
+        verification,
     )
 
 
