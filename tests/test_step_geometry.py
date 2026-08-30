@@ -14,6 +14,8 @@ from ttc3018_control.step_geometry import (
     load_step_isolated,
     loop_containment_parents,
 )
+from ttc3018_control.step_engraver import generate_step_gcode
+from ttc3018_control.gcode import parse_gcode
 
 
 def _write_box(path: Path, width: float = 40, height: float = 25, depth: float = 5) -> None:
@@ -22,6 +24,21 @@ def _write_box(path: Path, width: float = 40, height: float = 25, depth: float =
 
     writer = STEPControl_Writer()
     writer.Transfer(BRepPrimAPI_MakeBox(width, height, depth).Shape(), STEPControl_AsIs)
+    writer.Write(str(path))
+
+
+def _write_rectangular_pocket(path: Path, *, through: bool = False) -> None:
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+    from OCP.gp import gp_Pnt
+
+    stock = BRepPrimAPI_MakeBox(40, 25, 5).Shape()
+    bottom = -1 if through else 2
+    cutter = BRepPrimAPI_MakeBox(gp_Pnt(10, 7, bottom), 12, 8, 7).Shape()
+    result = BRepAlgoAPI_Cut(stock, cutter).Shape()
+    writer = STEPControl_Writer()
+    writer.Transfer(result, STEPControl_AsIs)
     writer.Write(str(path))
 
 
@@ -65,6 +82,33 @@ def test_load_step_isolated_round_trips_model(tmp_path: Path) -> None:
     assert (model.width, model.height, model.thickness) == pytest.approx((40, 5, 25), abs=0.001)
     assert model.surface_patches
     assert all(patch.loops for patch in model.surface_patches)
+
+
+@pytest.mark.parametrize("through", [False, True])
+def test_load_step_detects_planar_walled_rectangular_recess(tmp_path: Path, through: bool) -> None:
+    path = tmp_path / ("through-pocket.step" if through else "blind-pocket.step")
+    _write_rectangular_pocket(path, through=through)
+
+    model = load_step_isolated(path)
+
+    recesses = [feature for feature in model.features if feature.kind == "Recess"]
+    assert recesses
+    assert recesses[0].depth == pytest.approx(5 if through else 3, abs=0.01)
+    assert recesses[0].is_through is through
+
+    job = generate_step_gcode(
+        model,
+        mode="Detected feature",
+        stock_width=40,
+        stock_height=25,
+        tool_diameter=3,
+        stock_thickness=5,
+        breakthrough=0.2,
+        passes=2,
+    )
+    program = parse_gcode(job.gcode)
+    assert job.feature_simulations and job.feature_simulations[0].passed
+    assert program.bounds.minimum.z == pytest.approx(-5.2 if through else -3, abs=0.01)
 
 
 def test_wedge_import_preserves_tilted_planar_surface_patch() -> None:

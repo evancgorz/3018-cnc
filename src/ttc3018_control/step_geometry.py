@@ -582,7 +582,74 @@ def _detect_axial_features(
                         )
         explorer.Next()
     unique = {(feature.kind, feature.loop_index): feature for feature in features}
+
+    # Rectangular and slot-like recesses have planar vertical walls rather
+    # than cylindrical ones.  Their wall projections are line-like in the
+    # selected machining plane, so match each wall against a boundary edge of
+    # an inner loop and use its axial bounding interval for the floor depth.
+    wall_explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
+    while wall_explorer.More():
+        face = modules["TopoDS"].Face_s(wall_explorer.Current())
+        surface = modules["BRepAdaptor_Surface"](face, True)
+        if surface.GetType() == modules["GeomAbs_Plane"]:
+            wall_normal = surface.Plane().Axis().Direction()
+            wall_axis = {"YZ": 0, "XZ": 1, "XY": 2}[plane]
+            wall_components = (
+                float(wall_normal.X()),
+                float(wall_normal.Y()),
+                float(wall_normal.Z()),
+            )
+            if abs(wall_components[wall_axis]) <= 0.05:
+                box = modules["Bnd_Box"]()
+                modules["BRepBndLib"].Add_s(face, box)
+                bounds = box.Get()
+                low, high, projected = _face_axis_projection(bounds, plane)
+                for match in inner_indices:
+                    if match in {feature.loop_index for feature in unique.values()}:
+                        continue
+                    if not _vertical_wall_matches_loop(projected, loops[match].bounds):
+                        continue
+                    inward = (face_coordinate - low) if sign > 0 else (high - face_coordinate)
+                    feature_bottom = low if sign > 0 else high
+                    if inward <= 0.001:
+                        continue
+                    unique[("Recess", match)] = StepFeature(
+                        "Recess",
+                        match,
+                        inward,
+                        loop_parents[match] if len(loop_parents) == len(loops) else None,
+                        machine_bottom is not None and abs(feature_bottom - machine_bottom) <= 0.1,
+                    )
+                    break
+        wall_explorer.Next()
     return tuple(unique.values())
+
+
+def _vertical_wall_matches_loop(
+    projected: tuple[float, float, float, float],
+    loop_bounds: tuple[float, float, float, float],
+    tolerance: float = 0.1,
+) -> bool:
+    """Return whether a projected wall lies on an inner-loop boundary edge."""
+    wall_min_x, wall_min_y, wall_max_x, wall_max_y = projected
+    loop_min_x, loop_min_y, loop_max_x, loop_max_y = loop_bounds
+    within_x = wall_min_x >= loop_min_x - tolerance and wall_max_x <= loop_max_x + tolerance
+    within_y = wall_min_y >= loop_min_y - tolerance and wall_max_y <= loop_max_y + tolerance
+    x_edge = (
+        abs(wall_min_x - loop_min_x) <= tolerance
+        and abs(wall_max_x - loop_min_x) <= tolerance
+    ) or (
+        abs(wall_min_x - loop_max_x) <= tolerance
+        and abs(wall_max_x - loop_max_x) <= tolerance
+    )
+    y_edge = (
+        abs(wall_min_y - loop_min_y) <= tolerance
+        and abs(wall_max_y - loop_min_y) <= tolerance
+    ) or (
+        abs(wall_min_y - loop_max_y) <= tolerance
+        and abs(wall_max_y - loop_max_y) <= tolerance
+    )
+    return (within_x and y_edge) or (within_y and x_edge)
 
 
 def _face_axis_projection(bounds: tuple[float, ...], plane: str) -> tuple[float, float, tuple[float, float, float, float]]:
