@@ -195,6 +195,23 @@ exercise the topology distinction. They have the same top-view rectangle and
 circle, but the first contains a 2 mm circular recess while the second contains
 a 2 mm raised circular boss.
 
+### Guided STEP review examples
+
+These captures show the isometric stock/model preview and the validated toolpath
+proposal for each representative fixture:
+
+**Removed cylinder — recess clearing followed by outer profile:**
+
+![Removed-cylinder guided STEP review](docs/images/step-removed-cylinder-review.jpg)
+
+**Extruded circle — raised-boss clearing followed by outer profile:**
+
+![Extruded-circle guided STEP review](docs/images/step-extruded-circle-review.jpg)
+
+**Wedge — varying-Z planar surface raster followed by outer profile:**
+
+![Wedge guided STEP review](docs/images/step-wedge-review.jpg)
+
 This release is intentionally planar. It does not yet perform arbitrary-face
 selection, general 3D surface machining, adaptive/rest clearing, full-resolution
 stock collision simulation, or CAM-grade lead-in/lead-out compensation. Confirm
