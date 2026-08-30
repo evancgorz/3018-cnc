@@ -173,6 +173,9 @@ streaming pipeline.
 - [x] Expose deterministic loop roots, containment depths, and outer/cutout/
   island roles; reject coincident boundaries and keep disconnected roots out of
   internal-cutout planning.
+- [x] Detect planar vertical walls for rectangular and slot-like recesses in
+  the isolated OCC analyzer, infer blind/through depth from their axial bounds,
+  and exercise both through and blind generated jobs.
 - [x] Test varying-Z Wedge paths for parser bounds and cliff-safe segment
   splitting.
 - [x] Preserve all existing text, plaque, parser, motion-safety, and streaming
@@ -222,3 +225,4 @@ streaming pipeline.
 | 2026-08-30 | `e6e6bef` | Clarified the hard nonnegative work-XY contract in the production plan. |
 | 2026-08-30 | `100803e` | Enforced nonnegative STEP work XY across translated paths and parsed G-code. |
 | 2026-08-30 | `23c77b7` | Generalized normalized loop topology for disconnected parts and nested islands. |
+| 2026-08-30 | `8d77881` | Detected planar-walled rectangular/slot recesses with blind/through semantics. |
