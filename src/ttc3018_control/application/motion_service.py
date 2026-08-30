@@ -35,7 +35,6 @@ class MotionService:
         self._live_jog_direction = 0.0
         self._live_jog_first_distance: float | None = None
         self._live_jog_position: Position | None = None
-        self._live_jog_stop_target: float | None = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
 
@@ -111,7 +110,6 @@ class MotionService:
         self._live_jog_direction = direction
         self._live_jog_first_distance = distance
         self._live_jog_position = position
-        self._live_jog_stop_target = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
         self._send_next_live_jog(feed)
@@ -121,13 +119,6 @@ class MotionService:
     def stop_live_jog(self) -> ActionOutcome:
         if self._live_jog_axis is None:
             return ActionOutcome(True, "Live jog is not active")
-        position = self.session.virtual_position if self.session.envelope.trusted else self.session.machine_position
-        if position is None:
-            self._clear_live_jog()
-            return ActionOutcome(False, "Live jog stopped; release position was unavailable")
-        axis = self._live_jog_axis
-        current = getattr(position, axis.lower())
-        self._live_jog_stop_target = math.floor(current + 0.5)
         self._live_jog_axis_last = self._live_jog_axis
         self._live_jog_axis = None
         self._live_jog_first_distance = None
@@ -248,15 +239,18 @@ class MotionService:
             return
         axis = self._live_jog_axis_last or "X"
         current = getattr(position, axis.lower())
-        target = self._live_jog_stop_target
-        if target is None:
-            self._clear_live_jog()
-            self._on_notice("Live jog stopped; release target was unavailable")
-            return
+        # Snap from the settled position without ever reversing the operator's
+        # requested direction. Status reports can lag continuous motion, so a
+        # nearest-coordinate correction could otherwise move backward after
+        # release. The directional snap is deterministic and below one mm.
+        if self._live_jog_direction > 0:
+            target = math.ceil(current - 0.001)
+        else:
+            target = math.floor(current + 0.001)
         distance = target - current
         if abs(distance) <= 0.001:
             self._clear_live_jog()
-            self._on_notice("Live jog stopped at a whole millimeter")
+            self._on_notice("Live jog stopped at a whole millimeter without reversing")
             return
         if self.session.envelope.trusted:
             maximum = self.session.profile.travel_for(axis)
@@ -299,7 +293,6 @@ class MotionService:
         self._live_jog_direction = 0.0
         self._live_jog_first_distance = None
         self._live_jog_position = None
-        self._live_jog_stop_target = None
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
 
