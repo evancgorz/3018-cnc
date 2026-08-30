@@ -7,7 +7,7 @@ import pytest
 from shapely.geometry import Polygon
 
 from ttc3018_control.gcode import parse_gcode
-from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _pocket_path_cost, _pocket_strokes, _scheduled_path_cost, generate_step_gcode
+from ttc3018_control.step_engraver import _best_stroke_orientation, _improve_tagged_order, _pocket_path_cost, _pocket_strokes, _schedule_depth_groups, _scheduled_path_cost, generate_step_gcode
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepFeature, StepPlanarModel, load_step_isolated
 
 
@@ -306,6 +306,18 @@ def test_scheduler_local_improvement_never_increases_rapid_cost() -> None:
         actual_cost += math.dist(current, stroke[0])
         current = stroke[-1]
     assert actual_cost == pytest.approx(_scheduled_path_cost(improved))
+
+
+def test_detected_scheduler_preserves_operation_group_order_over_depth_sorting() -> None:
+    groups = (
+        ((((20, 0), (21, 0)),), -1.0),
+        ((((1, 0), (2, 0)),), -3.0),
+    )
+
+    scheduled = _schedule_depth_groups(groups)
+
+    assert [depth for _stroke, depth in scheduled] == [-1.0, -3.0]
+    assert scheduled[0][0] == ((20, 0), (21, 0))
 
 
 def test_path_metrics_match_cross_pass_machine_position() -> None:
