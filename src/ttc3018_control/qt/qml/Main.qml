@@ -263,7 +263,7 @@ ApplicationWindow {
         modal: true
         property bool plaqueMode: false
         title: plaqueMode ? "Plaque builder" : "Text engraving"
-        width: 760
+        width: Math.min(1120, window.width - 48)
         height: Math.min(720, window.usableContentHeight - 24)
         x: Math.round((window.width - width) / 2)
         y: Math.round((window.usableContentHeight - height) / 2)
@@ -279,12 +279,14 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
             Label { text: "Create a centerline engraving or a bordered plaque from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            RowLayout { Layout.fillWidth: true
-                Label { text: "Design"; color: window.palette.muted }
-                ComboBox { id: engravingModeCombo; Layout.fillWidth: true; model: ["Plain text", "Plaque"]; currentIndex: engravingDialog.plaqueMode ? 1 : 0; onActivated: { engravingDialog.plaqueMode = currentIndex === 1; engravingDialog.refreshPreview() } }
-            }
-            ScrollView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; contentWidth: availableWidth
-                ColumnLayout { width: parent.width; spacing: 9
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 16
+                ColumnLayout { Layout.preferredWidth: 430; Layout.minimumWidth: 390; Layout.fillHeight: true; spacing: 10
+                    RowLayout { Layout.fillWidth: true
+                        Label { text: "Design"; color: window.palette.muted }
+                        ComboBox { id: engravingModeCombo; Layout.fillWidth: true; model: ["Plain text", "Plaque"]; currentIndex: engravingDialog.plaqueMode ? 1 : 0; onActivated: { engravingDialog.plaqueMode = currentIndex === 1; engravingDialog.refreshPreview() } }
+                    }
+                    ScrollView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; contentWidth: availableWidth
+                        ColumnLayout { width: parent.width; spacing: 9
                     ColumnLayout { visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; spacing: 8
                         Label { text: "Text"; color: window.palette.subtle; font.pixelSize: 11 }
                         Field { id: textField; Layout.fillWidth: true; text: "TTC 3018"; onTextChanged: engravingDialog.refreshPreview() }
@@ -364,6 +366,15 @@ ApplicationWindow {
                         Field { id: plaqueRpmField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
                             onTextChanged: engravingDialog.refreshPreview() }
                     }
+                        }
+                    }
+                }
+                ColumnLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 8
+                    RowLayout { Layout.fillWidth: true
+                        SectionTitle { text: "Live preview"; Layout.fillWidth: true }
+                        Label { text: engravingDialog.plaqueMode ? "Plaque" : "Text"; color: window.palette.subtle; font.pixelSize: 11 }
+                    }
+                    ToolpathCanvas { Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 360; modeLabel: engravingDialog.plaqueMode ? "PLAQUE" : "ENGRAVING" }
                     Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 }
             }

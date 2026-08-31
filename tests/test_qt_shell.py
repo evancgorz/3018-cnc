@@ -131,6 +131,9 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     assert "window.usableContentHeight - height" in qml
     assert 'set_physical_preflight_confirmed(checked)' in qml
     assert 'index === 3 ?' not in qml
+    engraving_dialog = qml.split("id: engravingDialog", 1)[1].split("id: wifiSetupDialog", 1)[0]
+    assert 'SectionTitle { text: "Live preview"' in engraving_dialog
+    assert 'ToolpathCanvas { Layout.fillWidth: true; Layout.fillHeight: true' in engraving_dialog
 
 
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
