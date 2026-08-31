@@ -1123,11 +1123,6 @@ ApplicationWindow {
                         }
                         PrimaryButton { Layout.fillWidth: true; text: "Guided STEP setup"; onClicked: stepWizardDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Advanced STEP / 2.5D"; onClicked: stepDialog.open() }
-                        Divider {}
-                        SectionTitle { text: "Recent jobs" }
-                        Repeater { model: ["Welcome plaque", "Air-cut test", "Text engraving"]
-                            delegate: Button { Layout.fillWidth: true; text: modelData; flat: true; contentItem: Text { text: parent.text; color: parent.hovered ? window.palette.text : window.palette.muted; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter } }
-                        }
                         Item { Layout.fillHeight: true }
                         Label { text: "Generated jobs are validated before they can run."; color: window.palette.subtle; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true }
                     }
