@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Callable, Sequence
 from pathlib import Path
 
@@ -40,6 +41,7 @@ class JobService:
         self._on_ready_to_return = on_ready_to_return or (lambda: None)
         self.streamer = JobStreamer(self._send_line)
         self.program: GCodeProgram | None = None
+        self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
@@ -51,7 +53,12 @@ class JobService:
 
     @property
     def active(self) -> bool:
-        return self.state in {"running", "paused"}
+        return bool(
+            self.state in {"running", "paused"}
+            or self._completion_waiting_for_idle
+            or self._spindle_stop_pending
+            or self._return_waiting_for_idle
+        )
 
     @property
     def progress(self) -> float:
@@ -106,6 +113,10 @@ class JobService:
                 return ActionOutcome(False, "Job not started — no validated G-code is loaded")
             commands = self.program.commands
         try:
+            commands = self._motion_commands_without_terminal_stop(commands)
+        except ValueError as exc:
+            return ActionOutcome(False, f"Job not started — {exc}")
+        try:
             self.streamer.buffer_capacity = self._reported_rx_capacity
             self.streamer.start(commands)
         except (RuntimeError, ValueError) as exc:
@@ -133,6 +144,7 @@ class JobService:
 
     def abort(self, reason: str = "Aborted by operator") -> None:
         self.streamer.abort(reason)
+        self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         self._changed()
@@ -148,7 +160,9 @@ class JobService:
             elif lowered.startswith("error:") or lowered.startswith("alarm:"):
                 self._spindle_stop_pending = False
                 self._return_waiting_for_idle = False
-                self._on_notice(f"Spindle stop acknowledgement failed — {text}")
+                reason = f"spindle stop acknowledgement failed — {text}"
+                self.streamer.fail(reason)
+                self._fail_closed(reason)
             else:
                 return False
             self._changed()
@@ -159,12 +173,11 @@ class JobService:
         if not handled:
             return False
         if was_active and self.streamer.state == "complete":
-            try:
-                self._send_line(b"M5\n")
-            except RuntimeError as exc:
-                self._on_notice(f"Job complete but spindle stop was not sent — {exc}")
-            else:
-                self._spindle_stop_pending = True
+            # Command acknowledgement means accepted, not physically executed.
+            # Wait for authoritative Idle before M5 so DLC32 firmware never has
+            # to synchronize spindle stop against a populated motion planner.
+            self._completion_waiting_for_idle = True
+            self._on_notice("Job motion accepted; waiting for GRBL Idle before spindle stop")
         elif was_active and self.streamer.state == "failed":
             self._fail_closed(self.streamer.error)
         self._changed()
@@ -180,6 +193,18 @@ class JobService:
             self._fail_closed(reason)
             self._changed()
             return
+        if self._completion_waiting_for_idle and status.can_jog:
+            self._completion_waiting_for_idle = False
+            try:
+                self._send_line(b"M5\n")
+            except RuntimeError as exc:
+                self._restart_requires_reload = True
+                self._on_notice(f"Job motion finished but spindle stop was not sent — {exc}; remove machine power")
+            else:
+                self._spindle_stop_pending = True
+                self._on_notice("Job motion finished; spindle stop sent")
+            self._changed()
+            return
         if self._return_waiting_for_idle and status.can_jog:
             self._return_waiting_for_idle = False
             self._on_ready_to_return()
@@ -190,6 +215,7 @@ class JobService:
         if was_active:
             self.streamer.abort("Controller reset")
             self._restart_requires_reload = True
+        self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
@@ -225,6 +251,7 @@ class JobService:
 
     def _fail_closed(self, reason: str) -> None:
         self._restart_requires_reload = True
+        self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
         try:
@@ -243,6 +270,26 @@ class JobService:
                 f"Job failed — {reason}; motion queue reset and spindle stop requested. "
                 "Re-establish references and reload the job before restarting."
             )
+
+    @staticmethod
+    def _motion_commands_without_terminal_stop(commands: Sequence[str]) -> tuple[str, ...]:
+        """Remove terminal program/spindle stops so they can run after Idle.
+
+        The DLC32 firmware can freeze while processing M5 against buffered
+        motion. Mid-program M5/M2 therefore fails closed; generated jobs place
+        both on standalone terminal lines, which this lifecycle owns safely.
+        """
+        prepared = list(commands)
+        if prepared and prepared[-1].strip().upper() == "M2":
+            prepared.pop()
+        if prepared and prepared[-1].strip().upper() == "M5":
+            prepared.pop()
+        terminal_code = re.compile(r"(?:^|\s)M(?:0*2|0*5)(?:\.0+)?(?:\s|$)", re.IGNORECASE)
+        if any(terminal_code.search(command) for command in prepared):
+            raise ValueError("M5 and M2 are supported only as standalone terminal commands")
+        if not prepared:
+            raise ValueError("job contains no motion or setup commands before its terminal stop")
+        return tuple(prepared)
 
     def bind_callbacks(
         self,

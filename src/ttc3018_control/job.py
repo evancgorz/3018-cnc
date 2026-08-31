@@ -99,7 +99,7 @@ class JobStreamer:
 
     def fail(self, reason: str) -> None:
         """Fail an active stream because of an external controller state."""
-        if self.state not in {"running", "paused"}:
+        if self.state not in {"running", "paused", "complete"}:
             return
         self.state = "failed"
         self.outstanding_lengths.clear()

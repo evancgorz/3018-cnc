@@ -432,9 +432,14 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     ready: list[bool] = []
     service = JobService(MachineSession(), lines.append, realtime.append, notices.append, on_ready_to_return=lambda: ready.append(True))
 
-    assert service.start(("G1 X1",)).accepted
+    assert service.start(("G1 X1", "M5", "M2")).accepted
     assert lines == [b"G1 X1\n"]
     assert service.handle_response("ok")
+    assert lines == [b"G1 X1\n"]
+    assert service.active
+    service.observe_status(GrblStatus("Run"))
+    assert lines == [b"G1 X1\n"]
+    service.observe_status(GrblStatus("Idle"))
     assert lines[-1] == b"M5\n"
     assert service.spindle_stop_pending
     assert service.handle_response("ok")
@@ -442,6 +447,15 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
 
     assert ready == [True]
     assert any("spindle stopped" in notice for notice in notices)
+
+
+def test_job_service_rejects_mid_program_spindle_or_program_stop() -> None:
+    service = JobService(MachineSession(), lambda _command: None, lambda _command: None)
+
+    for commands in (("G1 X1", "M5", "G1 X2"), ("G1 X1", "M2", "G1 X2")):
+        outcome = service.start(commands)
+        assert not outcome.accepted
+        assert "standalone terminal" in outcome.message
 
 
 @pytest.mark.parametrize("failure", ["error:2", "ALARM:1"])
