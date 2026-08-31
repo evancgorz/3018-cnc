@@ -156,7 +156,7 @@ class JobService:
             if lowered == "ok":
                 self._spindle_stop_pending = False
                 self._return_waiting_for_idle = True
-                self._on_notice("Job complete; spindle stopped, waiting for GRBL Idle")
+                self._on_notice("Job complete; spindle stop accepted, waiting for GRBL Idle at 0 RPM")
             elif lowered.startswith("error:") or lowered.startswith("alarm:"):
                 self._spindle_stop_pending = False
                 self._return_waiting_for_idle = False
@@ -205,8 +205,14 @@ class JobService:
                 self._on_notice("Job motion finished; spindle stop sent")
             self._changed()
             return
-        if self._return_waiting_for_idle and status.can_jog:
+        # An M5 acknowledgement only confirms that GRBL accepted the command.
+        # In particular, DLC32 status traffic can still report Idle while the
+        # spindle output remains active. Never begin the automatic return until
+        # an authoritative status report confirms both Idle and zero spindle
+        # speed.
+        if self._return_waiting_for_idle and status.can_jog and status.spindle == 0:
             self._return_waiting_for_idle = False
+            self._on_notice("Job complete; spindle stopped and GRBL Idle, returning to work zero")
             self._on_ready_to_return()
             self._changed()
 

@@ -462,11 +462,15 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     assert service.active
     service.observe_status(GrblStatus("Run"))
     assert lines == [b"G1 X1\n"]
-    service.observe_status(GrblStatus("Idle"))
+    service.observe_status(GrblStatus("Idle", spindle=0))
     assert lines[-1] == b"M5\n"
     assert service.spindle_stop_pending
     assert service.handle_response("ok")
-    service.observe_status(GrblStatus("Idle"))
+    service.observe_status(GrblStatus("Idle", spindle=12000))
+    assert ready == []
+    assert service.return_waiting_for_idle
+
+    service.observe_status(GrblStatus("Idle", spindle=0))
 
     assert ready == [True]
     assert any("spindle stopped" in notice for notice in notices)
