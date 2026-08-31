@@ -45,6 +45,16 @@ def test_application_controller_exposes_a_qt_independent_state_snapshot(tmp_path
     assert snapshot.program is None
 
 
+def test_application_snapshot_carries_loaded_program_estimate(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    controller.load_generated("G21 G90\nG1 X60 F60\n", "timed.nc")
+
+    assert controller.state.program is not None
+    assert controller.state.program.estimated_seconds == pytest.approx(60.0)
+
+
 def test_application_controller_publishes_typed_transient_events(tmp_path) -> None:
     from ttc3018_control.application.controller import ApplicationController
 
@@ -474,6 +484,34 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
 
     assert ready == [True]
     assert any("spindle stopped" in notice for notice in notices)
+
+
+def test_job_service_remaining_time_is_pause_aware_and_stops_at_motion_idle() -> None:
+    now = [0.0]
+    service = JobService(
+        MachineSession(),
+        lambda _line: None,
+        lambda _realtime: None,
+        clock=lambda: now[0],
+    )
+    service.load_generated("G21 G90\nG1 X60 F60\nM5\nM2\n", "timed.nc")
+
+    assert service.estimated_seconds == pytest.approx(60.0)
+    assert service.start().accepted
+    now[0] = 10.0
+    assert service.elapsed_seconds == pytest.approx(10.0)
+    assert service.remaining_seconds == pytest.approx(50.0)
+
+    assert service.pause().accepted
+    now[0] = 30.0
+    assert service.elapsed_seconds == pytest.approx(10.0)
+    assert service.resume().accepted
+    now[0] = 35.0
+    assert service.elapsed_seconds == pytest.approx(15.0)
+
+    assert service.handle_response("ok")
+    service.observe_status(GrblStatus("Idle", spindle=0))
+    assert service.elapsed_seconds == pytest.approx(15.0)
 
 
 def test_job_service_rejects_mid_program_spindle_or_program_stop() -> None:

@@ -32,6 +32,7 @@ class ProgramSnapshot:
     command_count: int = 0
     minimum: Position | None = None
     maximum: Position | None = None
+    estimated_seconds: float = 0.0
 
 
 @dataclass(frozen=True)

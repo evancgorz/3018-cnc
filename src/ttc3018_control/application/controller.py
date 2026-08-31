@@ -168,6 +168,7 @@ class ApplicationController:
                 command_count=len(program.commands),
                 minimum=program.bounds.minimum,
                 maximum=program.bounds.maximum,
+                estimated_seconds=program.estimated_seconds,
             )
         streamer = self.job.streamer
         return ApplicationState(
@@ -227,6 +228,18 @@ class ApplicationController:
     @property
     def job_progress(self) -> float:
         return self.job.progress
+
+    @property
+    def job_estimated_seconds(self) -> float:
+        return self.job.estimated_seconds
+
+    @property
+    def job_elapsed_seconds(self) -> float:
+        return self.job.elapsed_seconds
+
+    @property
+    def job_remaining_seconds(self) -> float | None:
+        return self.job.remaining_seconds
 
     @property
     def can_jog(self) -> bool:

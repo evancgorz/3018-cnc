@@ -25,6 +25,7 @@ class Segment:
     start: Point
     end: Point
     rapid: bool
+    feed: float | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class GCodeProgram:
     commands: tuple[str, ...]
     segments: tuple[Segment, ...]
     bounds: Bounds
+    estimated_seconds: float = 0.0
 
 
 class GCodeError(ValueError):
@@ -78,6 +80,8 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
     position = Point(0.0, 0.0, 0.0)
     absolute = True
     motion = 0
+    feed: float | None = None
+    dwell_seconds = 0.0
     points = [position]
 
     for line_number, raw in enumerate(text.splitlines(), start=1):
@@ -125,6 +129,17 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
             if code not in _ALLOWED_M:
                 raise GCodeError(f"line {line_number}: unsupported M-code M{code}")
 
+        if "F" in words:
+            feed = words["F"][-1]
+            if not math.isfinite(feed) or feed <= 0:
+                raise GCodeError(f"line {line_number}: feed must be finite and greater than zero")
+
+        if 4 in [_number_code(value) for value in words.get("G", [])]:
+            dwell = words.get("P", [0.0])[-1]
+            if not math.isfinite(dwell) or dwell < 0:
+                raise GCodeError(f"line {line_number}: dwell must be finite and nonnegative")
+            dwell_seconds += dwell
+
         target = Point(
             _target(position.x, words.get("X"), absolute),
             _target(position.y, words.get("Y"), absolute),
@@ -139,10 +154,11 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
                     )
                 arc_points = _arc_points(position, target, words, clockwise=motion == 2, line_number=line_number)
                 for start, end in zip(arc_points, arc_points[1:]):
-                    segments.append(Segment(start, end, False))
+                    segments.append(Segment(start, end, False, feed))
                 points.extend(arc_points[1:])
             else:
-                segments.append(Segment(position, target, motion == 0))
+                rapid = motion == 0
+                segments.append(Segment(position, target, rapid, None if rapid else feed))
                 points.append(target)
             position = target
 
@@ -155,7 +171,21 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
 
     minimum = Point(*(min(getattr(point, axis) for point in points) for axis in "xyz"))
     maximum = Point(*(max(getattr(point, axis) for point in points) for axis in "xyz"))
-    return GCodeProgram(path or Path("<memory>"), tuple(commands), tuple(segments), Bounds(minimum, maximum))
+    estimated_seconds = dwell_seconds
+    for segment in segments:
+        distance = math.dist(
+            (segment.start.x, segment.start.y, segment.start.z),
+            (segment.end.x, segment.end.y, segment.end.z),
+        )
+        effective_feed = 3000.0 if segment.rapid else (segment.feed or 300.0)
+        estimated_seconds += distance / effective_feed * 60.0
+    return GCodeProgram(
+        path or Path("<memory>"),
+        tuple(commands),
+        tuple(segments),
+        Bounds(minimum, maximum),
+        estimated_seconds,
+    )
 
 
 def validate_nonnegative_work_xy(program: GCodeProgram, tolerance: float = 0.001) -> None:

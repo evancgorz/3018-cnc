@@ -395,6 +395,30 @@ class ControllerViewModel(QObject):
     def job_progress(self) -> int:
         return round(self.application.job_progress * 100)
 
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        total = max(0, round(seconds))
+        minutes, remainder = divmod(total, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"~{hours}:{minutes:02d}:{remainder:02d}" if hours else f"~{minutes}:{remainder:02d}"
+
+    @Property(str, notify=state_changed)
+    def job_estimate(self) -> str:
+        seconds = self.application.job_estimated_seconds
+        return self._format_duration(seconds) if seconds > 0 else "—"
+
+    @Property(str, notify=state_changed)
+    def job_time_remaining(self) -> str:
+        if not self.application.program:
+            return ""
+        if not self.application.job_active:
+            return "Complete" if self.application.job_state == "complete" else self.job_estimate
+        remaining = self.application.job_remaining_seconds
+        if remaining is None:
+            return ""
+        text = "Finishing…" if self.application.job_elapsed_seconds >= self.application.job_estimated_seconds else self._format_duration(remaining)
+        return text + (" (paused)" if self.application.job_state == "paused" else "")
+
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
         return self.application.connected
@@ -1238,6 +1262,8 @@ class ControllerViewModel(QObject):
             if self.connected and now - self._last_status_poll >= 0.5:
                 self.application.request_status()
                 self._last_status_poll = now
+            if self.application.job_active:
+                self._emit_state()
         except RuntimeError as exc:
             self._disconnected(str(exc))
 

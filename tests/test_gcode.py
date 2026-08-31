@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 
 import pytest
 
@@ -17,6 +18,28 @@ def test_relative_motion_updates_bounds() -> None:
     program = parse_gcode("G21 G91\nG1 X5 Y-2\nG1 X3 Y4")
     assert program.bounds.minimum == Point(0, -2, 0)
     assert program.bounds.maximum == Point(8, 2, 0)
+
+
+def test_estimate_uses_modal_cutting_feed_and_rapid_assumption() -> None:
+    program = parse_gcode("G21 G90\nG0 X30\nG1 X60 F60\nG1 Y60")
+
+    assert program.segments[0].feed is None
+    assert program.segments[1].feed == 60
+    assert program.segments[2].feed == 60
+    assert program.estimated_seconds == pytest.approx(30 / 3000 * 60 + 30 / 60 * 60 + 60 / 60 * 60)
+
+
+def test_estimate_includes_dwell_and_cutting_fallback() -> None:
+    program = parse_gcode("G21 G90\nG1 X60\nG4 P2\nG1 Y60")
+
+    assert program.estimated_seconds == pytest.approx(60 / 300 * 60 + 2 + 60 / 300 * 60)
+
+
+def test_arc_estimate_is_finite_and_positive() -> None:
+    program = parse_gcode("G21 G90\nG1 X1 F60\nG3 X-1 Y0 I-1 J0")
+
+    assert program.estimated_seconds > 0
+    assert math.isfinite(program.estimated_seconds)
 
 
 def test_ij_arc_includes_extrema() -> None:

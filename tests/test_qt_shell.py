@@ -110,6 +110,26 @@ def test_reference_controls_follow_operator_workflow_order() -> None:
     assert establish < go_to < safe_z < zero_x < work_zero
 
 
+def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'model: ["Prepare", "Preview & Run", "Machine"]' in qml
+    assert 'text: "Engraving designer"' in qml
+    assert 'id: engravingDialog' in qml
+    assert 'model: ["Plain text", "Plaque"]' in qml
+    assert 'text: "Load existing job…"' in qml
+    assert 'id: guidedSetupDialog' in qml
+    assert '"Move to coordinates"' in qml
+    assert 'property bool coordinatesExpanded: false' in qml
+    assert 'appViewModel.job_estimate' in qml
+    assert 'appViewModel.job_time_remaining' in qml
+    assert 'id: textDialog' not in qml
+    assert 'id: plaqueDialog' not in qml
+    assert '"Guided Setup"]' not in qml
+
+
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
     _engine, view_model = build_engine()
     path = tmp_path / "part.step"

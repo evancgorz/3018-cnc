@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Callable, Sequence
 from pathlib import Path
 
@@ -32,6 +33,7 @@ class JobService:
         on_notice: Callable[[str], None] | None = None,
         on_change: Callable[[], None] | None = None,
         on_ready_to_return: Callable[[], None] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self.session = session
         self._send_line = send_line
@@ -46,6 +48,9 @@ class JobService:
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
         self._restart_requires_reload = False
+        self._clock = clock or time.monotonic
+        self._timing_started_at: float | None = None
+        self._elapsed_seconds = 0.0
 
     @property
     def state(self) -> str:
@@ -63,6 +68,22 @@ class JobService:
     @property
     def progress(self) -> float:
         return self.streamer.progress
+
+    @property
+    def estimated_seconds(self) -> float:
+        return self.program.estimated_seconds if self.program is not None else 0.0
+
+    @property
+    def elapsed_seconds(self) -> float:
+        if self._timing_started_at is None:
+            return self._elapsed_seconds
+        return max(self._elapsed_seconds, self._elapsed_seconds + self._clock() - self._timing_started_at)
+
+    @property
+    def remaining_seconds(self) -> float | None:
+        if self.program is None or self.program.estimated_seconds <= 0:
+            return None
+        return max(0.0, self.program.estimated_seconds - self.elapsed_seconds)
 
     def load_program(self, path: Path) -> GCodeProgram:
         program = load_gcode(path)
@@ -121,6 +142,8 @@ class JobService:
             self.streamer.start(commands)
         except (RuntimeError, ValueError) as exc:
             return ActionOutcome(False, f"Job not started — {exc}")
+        self._elapsed_seconds = 0.0
+        self._timing_started_at = self._clock()
         self._changed()
         return ActionOutcome(True, "Engraving job started")
 
@@ -130,6 +153,7 @@ class JobService:
             self.streamer.pause()
         except RuntimeError as exc:
             return ActionOutcome(False, f"Pause failed — {exc}")
+        self._freeze_timing()
         self._changed()
         return ActionOutcome(True, "Job paused")
 
@@ -139,11 +163,13 @@ class JobService:
             self.streamer.resume()
         except RuntimeError as exc:
             return ActionOutcome(False, f"Resume failed — {exc}")
+        self._timing_started_at = self._clock()
         self._changed()
         return ActionOutcome(True, "Job resumed")
 
     def abort(self, reason: str = "Aborted by operator") -> None:
         self.streamer.abort(reason)
+        self._freeze_timing()
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
@@ -194,6 +220,7 @@ class JobService:
             self._changed()
             return
         if self._completion_waiting_for_idle and status.can_jog:
+            self._freeze_timing()
             self._completion_waiting_for_idle = False
             try:
                 self._send_line(b"M5\n")
@@ -221,6 +248,7 @@ class JobService:
         if was_active:
             self.streamer.abort("Controller reset")
             self._restart_requires_reload = True
+        self._freeze_timing()
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
         self._return_waiting_for_idle = False
@@ -255,7 +283,16 @@ class JobService:
     def _changed(self) -> None:
         self._on_change()
 
+    def _freeze_timing(self) -> None:
+        if self._timing_started_at is not None:
+            self._elapsed_seconds = max(
+                self._elapsed_seconds,
+                self._elapsed_seconds + self._clock() - self._timing_started_at,
+            )
+            self._timing_started_at = None
+
     def _fail_closed(self, reason: str) -> None:
+        self._freeze_timing()
         self._restart_requires_reload = True
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False

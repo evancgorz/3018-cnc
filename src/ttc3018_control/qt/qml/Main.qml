@@ -223,62 +223,122 @@ ApplicationWindow {
     }
 
     Dialog {
-        id: textDialog
+        id: engravingDialog
         modal: true
-        title: "Text engraving"
-        width: 650
-        height: 700
+        property bool plaqueMode: false
+        title: plaqueMode ? "Plaque builder" : "Text engraving"
+        width: 760
+        height: 760
         x: Math.round((window.width - width) / 2)
         y: Math.round((window.height - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
-            if (appViewModel) appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
+            if (!appViewModel) return
+            if (plaqueMode) appViewModel.preview_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
+            else appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
         }
         onOpened: refreshPreview()
-        onClosed: { if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0) }
+        onClosed: if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0)
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 20; spacing: 11
-            Label { text: "Create a centerline engraving from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            Label { text: "Text"; color: window.palette.subtle; font.pixelSize: 11 }
-            Field { id: textField; Layout.fillWidth: true; text: "TTC 3018"; onTextChanged: textDialog.refreshPreview() }
-            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
-                Label { text: "Font"; color: window.palette.muted }
-                ComboBox { id: fontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: textDialog.refreshPreview() }
-                Label { text: "Height (mm)"; color: window.palette.muted }
-                Field { id: heightField; Layout.fillWidth: true; text: "8"; validator: DoubleValidator { bottom: 0.5; top: 100 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Depth (mm)"; color: window.palette.muted }
-                Field { id: depthField; Layout.fillWidth: true; text: "-0.3"; validator: DoubleValidator { bottom: -20; top: -0.001 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Safe Z (mm)"; color: window.palette.muted }
-                Field { id: safeField; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Cut feed (mm/min)"; color: window.palette.muted }
-                Field { id: cutField; Layout.fillWidth: true; text: "300"; validator: DoubleValidator { bottom: 1; top: 3000 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
-                Field { id: plungeField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Letter spacing"; color: window.palette.muted }
-                Field { id: letterSpacingField; Layout.fillWidth: true; text: "0.18"; validator: DoubleValidator { bottom: 0; top: 2 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Line spacing"; color: window.palette.muted }
-                Field { id: lineSpacingField; Layout.fillWidth: true; text: "1.4"; validator: DoubleValidator { bottom: 1; top: 3 }
-                    onTextChanged: textDialog.refreshPreview() }
-                Label { text: "Alignment"; color: window.palette.muted }
-                ComboBox { id: alignmentCombo; Layout.fillWidth: true; model: ["Left", "Center", "Right"]; onActivated: textDialog.refreshPreview() }
-                Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
-                Field { id: rpmField; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
-                    onTextChanged: textDialog.refreshPreview() }
+            anchors.fill: parent; anchors.margins: 20; spacing: 10
+            Label { text: "Create a centerline engraving or a bordered plaque from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            RowLayout { Layout.fillWidth: true
+                Label { text: "Design"; color: window.palette.muted }
+                ComboBox { id: engravingModeCombo; Layout.fillWidth: true; model: ["Plain text", "Plaque"]; currentIndex: engravingDialog.plaqueMode ? 1 : 0; onActivated: { engravingDialog.plaqueMode = currentIndex === 1; engravingDialog.refreshPreview() } }
             }
-            Divider {}
-            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
-            Item { Layout.fillHeight: true }
+            ScrollView { Layout.fillWidth: true; Layout.fillHeight: true; clip: true; contentWidth: availableWidth
+                ColumnLayout { width: parent.width; spacing: 9
+                    ColumnLayout { visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; spacing: 8
+                        Label { text: "Text"; color: window.palette.subtle; font.pixelSize: 11 }
+                        Field { id: textField; Layout.fillWidth: true; text: "TTC 3018"; onTextChanged: engravingDialog.refreshPreview() }
+                        GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                            Label { text: "Font"; color: window.palette.muted }
+                            ComboBox { id: fontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: engravingDialog.refreshPreview() }
+                            Label { text: "Height (mm)"; color: window.palette.muted }
+                            Field { id: heightField; Layout.fillWidth: true; text: "8"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Letter spacing"; color: window.palette.muted }
+                            Field { id: letterSpacingField; Layout.fillWidth: true; text: "0.18"; validator: DoubleValidator { bottom: 0; top: 2 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Line spacing"; color: window.palette.muted }
+                            Field { id: lineSpacingField; Layout.fillWidth: true; text: "1.4"; validator: DoubleValidator { bottom: 1; top: 3 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Alignment"; color: window.palette.muted }
+                            ComboBox { id: alignmentCombo; Layout.fillWidth: true; model: ["Left", "Center", "Right"]; onActivated: engravingDialog.refreshPreview() }
+                        }
+                    }
+                    ColumnLayout { visible: engravingDialog.plaqueMode; Layout.fillWidth: true; spacing: 8
+                        GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 7
+                            Label { text: "Title"; color: window.palette.muted }
+                            Field { id: titleField; Layout.fillWidth: true; text: "Welcome"; onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Title font"; color: window.palette.muted }
+                            ComboBox { id: titleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: engravingDialog.refreshPreview() }
+                            Label { text: "Title height (mm)"; color: window.palette.muted }
+                            Field { id: titleHeightField; Layout.fillWidth: true; text: "10"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Subtitle"; color: window.palette.muted }
+                            Field { id: subtitleField; Layout.fillWidth: true; text: ""; onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Enable subtitle"; color: window.palette.muted }
+                            CheckBox { id: subtitleCheck; checked: true; onCheckedChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Subtitle font"; color: window.palette.muted }
+                            ComboBox { id: subtitleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: engravingDialog.refreshPreview() }
+                            Label { text: "Subtitle height (mm)"; color: window.palette.muted }
+                            Field { id: subtitleHeightField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 0.5; top: 100 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Plaque width × height (mm)"; color: window.palette.muted }
+                            RowLayout { Layout.fillWidth: true
+                                Field { id: widthField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 10; top: 300 }
+                                    onTextChanged: engravingDialog.refreshPreview() }
+                                Field { id: plaqueHeightField; Layout.fillWidth: true; text: "50"; validator: DoubleValidator { bottom: 10; top: 180 }
+                                    onTextChanged: engravingDialog.refreshPreview() }
+                            }
+                            Label { text: "Inner margin (mm)"; color: window.palette.muted }
+                            Field { id: marginField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 1; top: 80 }
+                                onTextChanged: engravingDialog.refreshPreview() }
+                            Label { text: "Border"; color: window.palette.muted }
+                            ComboBox { id: borderCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.borders : ["Rectangle"]; onActivated: engravingDialog.refreshPreview() }
+                        }
+                    }
+                    Divider {}
+                    GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
+                        Label { text: "Depth (mm)"; color: window.palette.muted }
+                        Field { id: depthField; visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; text: "-0.3"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: plaqueDepthField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "-0.3"; validator: DoubleValidator { bottom: -20; top: -0.001 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Label { text: "Safe Z (mm)"; color: window.palette.muted }
+                        Field { id: safeField; visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: plaqueSafeField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "3"; validator: DoubleValidator { bottom: 0.1; top: 100 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Label { text: "Cut feed (mm/min)"; color: window.palette.muted }
+                        Field { id: cutField; visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; text: "300"; validator: DoubleValidator { bottom: 1; top: 3000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: plaqueCutField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "300"; validator: DoubleValidator { bottom: 1; top: 3000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Label { text: "Plunge feed (mm/min)"; color: window.palette.muted }
+                        Field { id: plungeField; visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: plaquePlungeField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 1; top: 1000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
+                        Field { id: rpmField; visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: plaqueRpmField; visible: engravingDialog.plaqueMode; Layout.fillWidth: true; text: "0"; validator: IntValidator { bottom: 0; top: 24000 }
+                            onTextChanged: engravingDialog.refreshPreview() }
+                    }
+                    Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                }
+            }
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
-                SecondaryButton { text: "Cancel"; onClicked: textDialog.close() }
-                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text)); textDialog.close(); window.workspace = 1 } }
+                SecondaryButton { text: "Cancel"; onClicked: engravingDialog.close() }
+                PrimaryButton { text: "Generate and load"; onClicked: {
+                    if (engravingDialog.plaqueMode) appViewModel.create_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
+                    else appViewModel.create_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
+                    engravingDialog.close(); window.workspace = 1
+                } }
             }
         }
     }
@@ -366,78 +426,6 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Close"; onClicked: consoleDialog.close() }
-            }
-        }
-    }
-
-    Dialog {
-        id: plaqueDialog
-        modal: true
-        title: "Plaque builder"
-        width: 720
-        height: 720
-        x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
-        standardButtons: Dialog.NoButton
-        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
-        function refreshPreview() {
-            if (appViewModel) appViewModel.preview_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
-        }
-        onOpened: refreshPreview()
-        ColumnLayout {
-            anchors.fill: parent; anchors.margins: 20; spacing: 9
-            Label { text: "Build a plaque with protected text margins and a decorative border."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 7
-                Label { text: "Title"; color: window.palette.muted }
-                Field { id: titleField; Layout.fillWidth: true; text: "Welcome"; onTextChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Title font"; color: window.palette.muted }
-                ComboBox { id: titleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: plaqueDialog.refreshPreview() }
-                Label { text: "Title height (mm)"; color: window.palette.muted }
-                Field { id: titleHeightField; Layout.fillWidth: true; text: "10"; validator: DoubleValidator { bottom: 0.5; top: 100 }
-                    onTextChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Subtitle"; color: window.palette.muted }
-                Field { id: subtitleField; Layout.fillWidth: true; text: ""; onTextChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Enable subtitle"; color: window.palette.muted }
-                CheckBox { id: subtitleCheck; checked: true; onCheckedChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Subtitle font"; color: window.palette.muted }
-                ComboBox { id: subtitleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: plaqueDialog.refreshPreview() }
-                Label { text: "Subtitle height (mm)"; color: window.palette.muted }
-                Field { id: subtitleHeightField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 0.5; top: 100 }
-                    onTextChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Plaque width × height (mm)"; color: window.palette.muted }
-                RowLayout { Layout.fillWidth: true
-                    Field { id: widthField; Layout.fillWidth: true; text: "100"; validator: DoubleValidator { bottom: 10; top: 300 }
-                        onTextChanged: plaqueDialog.refreshPreview() }
-                    Field { id: plaqueHeightField; Layout.fillWidth: true; text: "50"; validator: DoubleValidator { bottom: 10; top: 180 }
-                        onTextChanged: plaqueDialog.refreshPreview() }
-                }
-                Label { text: "Inner margin (mm)"; color: window.palette.muted }
-                Field { id: marginField; Layout.fillWidth: true; text: "5"; validator: DoubleValidator { bottom: 1; top: 80 }
-                    onTextChanged: plaqueDialog.refreshPreview() }
-                Label { text: "Border"; color: window.palette.muted }
-                ComboBox { id: borderCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.borders : ["Rectangle"]; onActivated: plaqueDialog.refreshPreview() }
-            }
-            Divider {}
-            GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 7
-                Label { text: "Depth / safe Z (mm)"; color: window.palette.muted }
-                RowLayout { Layout.fillWidth: true
-                    Field { id: plaqueDepthField; Layout.fillWidth: true; text: "-0.3"; onTextChanged: plaqueDialog.refreshPreview() }
-                    Field { id: plaqueSafeField; Layout.fillWidth: true; text: "3"; onTextChanged: plaqueDialog.refreshPreview() }
-                }
-                Label { text: "Cut / plunge feed"; color: window.palette.muted }
-                RowLayout { Layout.fillWidth: true
-                    Field { id: plaqueCutField; Layout.fillWidth: true; text: "300"; onTextChanged: plaqueDialog.refreshPreview() }
-                    Field { id: plaquePlungeField; Layout.fillWidth: true; text: "100"; onTextChanged: plaqueDialog.refreshPreview() }
-                }
-                Label { text: "Spindle RPM (0 = off)"; color: window.palette.muted }
-                Field { id: plaqueRpmField; Layout.fillWidth: true; text: "0"; onTextChanged: plaqueDialog.refreshPreview() }
-            }
-            Label { text: appViewModel ? appViewModel.preview_summary : ""; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.Wrap }
-            Item { Layout.fillHeight: true }
-            RowLayout { Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
-                SecondaryButton { text: "Cancel"; onClicked: plaqueDialog.close() }
-                PrimaryButton { text: "Generate and load"; onClicked: { appViewModel.create_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text)); plaqueDialog.close(); window.workspace = 1 } }
             }
         }
     }
@@ -858,7 +846,7 @@ ApplicationWindow {
 
     PlatformDialogs.FileDialog {
         id: gcodeFileDialog
-        title: "Load pre-sliced G-code"
+        title: "Load existing job"
         nameFilters: ["G-code files (*.nc *.gcode *.tap *.cnc *.txt)", "All files (*.*)"]
         onAccepted: appViewModel.load_gcode_file(selectedFile)
     }
@@ -1060,7 +1048,7 @@ ApplicationWindow {
                 spacing: 6
 
                 Repeater {
-                    model: ["Prepare", "Preview & Run", "Machine", "Guided Setup"]
+                    model: ["Prepare", "Preview & Run", "Machine"]
                     delegate: Button {
                         required property int index
                         required property string modelData
@@ -1114,13 +1102,7 @@ ApplicationWindow {
                         SectionTitle { text: "Create or load" }
                         MutedLabel { text: "Start with an existing G-code file or create a centerline engraving." }
                         Divider {}
-                        Repeater { model: ["Load G-code", "Text engraving", "Plaque builder"]
-                            delegate: SecondaryButton {
-                                Layout.fillWidth: true
-                                text: modelData
-                                onClicked: index === 0 ? gcodeFileDialog.open() : index === 1 ? textDialog.open() : plaqueDialog.open()
-                            }
-                        }
+                        PrimaryButton { Layout.fillWidth: true; text: "Engraving designer"; onClicked: engravingDialog.open() }
                         PrimaryButton { Layout.fillWidth: true; text: "Guided STEP setup"; onClicked: stepWizardDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Advanced STEP / 2.5D"; onClicked: stepDialog.open() }
                         Item { Layout.fillHeight: true }
@@ -1136,7 +1118,7 @@ ApplicationWindow {
                         MutedLabel { text: "Select a job source to edit its settings and see the exact centerline toolpath." }
                         Divider {}
                         Label { text: appViewModel ? appViewModel.job_file : "No job selected"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                        MutedLabel { text: appViewModel ? appViewModel.job_summary : "Load G-code, create text, or build a plaque. The canvas remains the single source of visual context."; Layout.fillWidth: true }
+                    MutedLabel { text: appViewModel ? appViewModel.job_summary : "Load G-code or create an engraving. The canvas remains the single source of visual context."; Layout.fillWidth: true }
                         Item { Layout.fillHeight: true }
                         SecondaryButton { Layout.fillWidth: true; text: "Save validated G-code"; enabled: appViewModel && appViewModel.job_file !== "No G-code loaded"; onClicked: saveGcodeDialog.open() }
                         PrimaryButton { Layout.fillWidth: true; text: "Review & run"; onClicked: window.workspace = 1 }
@@ -1157,6 +1139,12 @@ ApplicationWindow {
                         Pill { label: appViewModel && appViewModel.job_file !== "No G-code loaded" ? "Validated G-code loaded" : "No validated job loaded"; tone: appViewModel && appViewModel.job_file !== "No G-code loaded" ? window.palette.success : window.palette.warning }
                         Divider {}
                         Label { text: appViewModel && appViewModel.job_active ? appViewModel.job_state + " · " + appViewModel.job_progress + "%" : "Ready when verified"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+                        RowLayout { Layout.fillWidth: true
+                            Label { text: "Estimated"; color: window.palette.muted; font.pixelSize: 12 }
+                            Label { text: appViewModel ? appViewModel.job_estimate : "—"; color: window.palette.text; font.pixelSize: 12 }
+                            Item { Layout.fillWidth: true }
+                            Label { visible: appViewModel && appViewModel.job_active; text: appViewModel ? appViewModel.job_time_remaining : ""; color: window.palette.accent; font.pixelSize: 12; font.weight: Font.DemiBold }
+                        }
                         ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: appViewModel ? appViewModel.job_progress : 0; visible: appViewModel && appViewModel.job_file !== "No G-code loaded" }
                         Repeater { model: ["Machine is connected and Idle", "Virtual reference is trusted", "XYZ work zero is confirmed", "Job fits the virtual envelope", "Material and tool are secure"]
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 8
@@ -1184,6 +1172,8 @@ ApplicationWindow {
 
         // Machine
         Item {
+            id: machinePage
+            property bool coordinatesExpanded: false
             RowLayout { anchors.fill: parent; spacing: 14
                 Panel { Layout.preferredWidth: 210; Layout.minimumWidth: 210; Layout.maximumWidth: 210; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 8
@@ -1194,6 +1184,7 @@ ApplicationWindow {
                         SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
                         SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
                         Item { Layout.fillHeight: true }
                         MutedLabel { text: "Reference and work zero are intentionally separate safety states." }
                     }
@@ -1245,8 +1236,8 @@ ApplicationWindow {
                         Label { Layout.alignment: Qt.AlignHCenter; text: "Inner click: 0.1 mm  ·  Outer hold: live jog, nearest whole-mm stop"; color: window.palette.subtle; font.pixelSize: 10 }
                         SecondaryButton { Layout.alignment: Qt.AlignHCenter; width: 108; text: "Cancel jog"; enabled: appViewModel && appViewModel.connected; onClicked: appViewModel.cancel_jog() }
                         Divider {}
-                        SectionTitle { text: "Move to virtual coordinates" }
-                        GridLayout { Layout.fillWidth: true; columns: 2
+                        SecondaryButton { Layout.fillWidth: true; text: (machinePage.coordinatesExpanded ? "⌃  " : "⌄  ") + "Move to coordinates"; onClicked: machinePage.coordinatesExpanded = !machinePage.coordinatesExpanded }
+                        GridLayout { visible: machinePage.coordinatesExpanded; Layout.fillWidth: true; columns: 2
                             Label { text: "X"; color: window.palette.muted }
                             Field { id: targetX; text: "0.00"; Layout.fillWidth: true; validator: DoubleValidator {} }
                             Label { text: "Y"; color: window.palette.muted }
@@ -1254,7 +1245,7 @@ ApplicationWindow {
                             Label { text: "Z"; color: window.palette.muted }
                             Field { id: targetZ; text: "0.00"; Layout.fillWidth: true; validator: DoubleValidator {} }
                         }
-                        SecondaryButton { Layout.fillWidth: true; text: "Move safely"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.move_to(Number(targetX.text), Number(targetY.text), Number(targetZ.text), Number(jogFeedField.text)) }
+                        SecondaryButton { visible: machinePage.coordinatesExpanded; Layout.fillWidth: true; text: "Move safely"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.move_to(Number(targetX.text), Number(targetY.text), Number(targetZ.text), Number(jogFeedField.text)) }
                         Divider {}
                         PrimaryButton { Layout.fillWidth: true; text: "Establish reference"; enabled: appViewModel && appViewModel.connected && !appViewModel.job_active; onClicked: appViewModel.establish_reference() }
                         SecondaryButton { Layout.fillWidth: true; text: "Go to reference"; enabled: appViewModel && appViewModel.can_return_to_reference; onClicked: appViewModel.return_to_reference() }
@@ -1272,8 +1263,17 @@ ApplicationWindow {
             }
         }
 
-        // Guided setup
-        Item {
+        // Guided setup is retained as a modal workflow, opened from Machine.
+        Dialog {
+            id: guidedSetupDialog
+            modal: true
+            title: "Guided setup"
+            width: 1080
+            height: 780
+            x: Math.round((window.width - width) / 2)
+            y: Math.round((window.height - height) / 2)
+            standardButtons: Dialog.NoButton
+            background: Rectangle { color: window.palette.surface; radius: 14; border.color: window.palette.divider; border.width: 1 }
             RowLayout { anchors.fill: parent; spacing: 14
                 Panel { Layout.preferredWidth: 265; Layout.minimumWidth: 265; Layout.maximumWidth: 265; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 6
@@ -1308,6 +1308,7 @@ ApplicationWindow {
                                     Label { text: modelData; color: window.palette.text; font.pixelSize: 14; Layout.fillWidth: true; wrapMode: Text.Wrap }
                                 }
                             }
+                            SecondaryButton { Layout.fillWidth: true; text: "Load existing job…"; onClicked: gcodeFileDialog.open() }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 1; Layout.fillWidth: true; spacing: 12
                             PrimaryButton { text: "Open connection"; onClicked: connectionDialog.open() }
@@ -1318,22 +1319,22 @@ ApplicationWindow {
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 3; Layout.fillWidth: true; spacing: 12
                             Label { text: "Current machine: " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
-                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
+                                SecondaryButton { text: "Open machine controls"; onClicked: { guidedSetupDialog.close(); window.workspace = 2 } }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 4; Layout.fillWidth: true; spacing: 12
                             Label { text: "Current work position: " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
-                            SecondaryButton { text: "Open machine controls"; onClicked: window.workspace = 2 }
+                                SecondaryButton { text: "Open machine controls"; onClicked: { guidedSetupDialog.close(); window.workspace = 2 } }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 5; Layout.fillWidth: true; spacing: 12
                             Label { text: appViewModel ? appViewModel.job_file : "No job loaded"; color: window.palette.text; font.pixelSize: 15 }
                             RowLayout { Layout.fillWidth: true; spacing: 10
-                                SecondaryButton { text: "Open Prepare"; onClicked: window.workspace = 0 }
-                                SecondaryButton { text: "Open Preview & Run"; onClicked: window.workspace = 1 }
+                                SecondaryButton { text: "Open Prepare"; onClicked: { guidedSetupDialog.close(); window.workspace = 0 } }
+                                SecondaryButton { text: "Open Preview & Run"; onClicked: { guidedSetupDialog.close(); window.workspace = 1 } }
                             }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 6; Layout.fillWidth: true; spacing: 12
                             Label { text: appViewModel ? appViewModel.job_summary : ""; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                            SecondaryButton { text: "Review job"; onClicked: window.workspace = 1 }
+                            SecondaryButton { text: "Review job"; onClicked: { guidedSetupDialog.close(); window.workspace = 1 } }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 7; Layout.fillWidth: true; spacing: 12
                             Label { text: "Confirm that the material is secured, the tool is tightened, the spindle behavior is understood, safe Z is clear, and emergency power removal is available."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -1348,7 +1349,7 @@ ApplicationWindow {
                         RowLayout { Layout.fillWidth: true
                             SecondaryButton { text: "Back"; enabled: appViewModel && appViewModel.guided_step > 0; onClicked: appViewModel.guided_previous() }
                             Item { Layout.fillWidth: true }
-                            PrimaryButton { text: appViewModel && appViewModel.guided_step === appViewModel.guided_step_count - 1 ? "Done" : "Next"; enabled: appViewModel && appViewModel.guided_step_ready; onClicked: appViewModel.guided_next() }
+                            PrimaryButton { text: appViewModel && appViewModel.guided_step === appViewModel.guided_step_count - 1 ? "Done" : "Next"; enabled: appViewModel && appViewModel.guided_step_ready; onClicked: appViewModel && appViewModel.guided_step === appViewModel.guided_step_count - 1 ? guidedSetupDialog.close() : appViewModel.guided_next() }
                         }
                     }
                 }

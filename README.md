@@ -56,7 +56,7 @@ or API adapter if headless or remote control becomes a real requirement. See
 With no home switches or probe installed, machine reference and work zero are
 separate manual operations:
 
-For normal operation, select **Guided Setup** after launching the app.
+For normal operation, open **Guided setup** from the **Machine** workspace.
 Guided Wizard Mode presents the complete workflow as nine explained, state-gated
 steps: manual-operation safety, controller connection, measured machine profile,
 manual machine reference, XYZ work zero, G-code loading, preview/envelope review,
@@ -74,9 +74,9 @@ explicit operator actions.
 4. Jog to the engraving's intended work origin. For a typical engraving this is
    an X/Y corner or center and the material surface for Z. Select **Zero XYZ** (or
    zero the axes individually). This changes work coordinates without moving.
-5. Wait for a fresh work-offset/status report, then select **Load G-code…**. Only
-   pre-sliced metric G-code is accepted. Review the file name, bounds, and XY
-   preview.
+5. Wait for a fresh work-offset/status report, then open **Guided setup** and
+   select **Load existing job…** on its first page. Only pre-sliced metric
+   G-code is accepted. Review the file name, bounds, and XY preview.
 6. If the file does not control the spindle itself, set the RPM and select
    **Start spindle…**. Secure the tool and material and keep physical emergency
    power within reach.
@@ -91,10 +91,10 @@ arcs. Radius-form (`R`) arcs, inch mode, probing, automatic homing, tool changes
 and commands that alter coordinate references are rejected. Re-export such files
 from the CAM program with millimeters and I/J arc centers, or linearize the arcs.
 
-## Creating a text engraving
+## Creating an engraving
 
-Select **Text engraving** in the **Prepare** workspace. Enter one or more lines
-of text and choose:
+Select **Engraving designer** in the **Prepare** workspace. Choose Plain text or
+Plaque, then enter the text and choose:
 
 - Simple, Rounded, Technical, Italic, Script, Playful, or Cursive bundled centerline font
 - Live centerline toolpath preview while editing text, font, size, spacing, or alignment
@@ -217,9 +217,8 @@ selection, general 3D surface machining, adaptive/rest clearing, full-resolution
 stock collision simulation, or CAM-grade lead-in/lead-out compensation. Confirm
 the stock, tool, work zero, and machine envelope before starting a generated job.
 
-## Creating a plaque
+The Plaque mode additionally supports:
 
-Select **Plaque builder** in the **Prepare** workspace. The plaque builder places the
 lower-left plaque corner at work `X0 Y0`, supports title and optional subtitle text,
 and offers Rectangle, Rounded Rectangle, Double-line, Inset-corner, Scallop, and
 Simple Flourish borders. Its live preview is generated from the same centerline
