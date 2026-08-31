@@ -45,6 +45,7 @@ class MotionService:
         self._live_jog_motion_seen = False
         self._live_jog_stop_pending = False
         self._live_jog_alignment_pending = False
+        self._phase = "idle"
 
     @property
     def pending_acks(self) -> int:
@@ -75,6 +76,10 @@ class MotionService:
             or self._live_jog_stop_pending
             or self._live_jog_alignment_pending
         )
+
+    @property
+    def phase(self) -> str:
+        return self._phase
 
     def jog(self, axis: str, distance: float, feed: float) -> ActionOutcome:
         if not self.session.can_move:
@@ -149,6 +154,7 @@ class MotionService:
             return outcome
         self._position_queue = [(axis, distance, feed) for axis, distance in moves]
         self._position_move_active = bool(self._position_queue)
+        self._phase = "queued"
         self._send_next_position_move()
         self._changed()
         return ActionOutcome(True, outcome.message)
@@ -163,6 +169,7 @@ class MotionService:
             return outcome
         self._position_queue = [(axis, distance, feed) for axis, distance in moves]
         self._position_move_active = bool(self._position_queue)
+        self._phase = "queued"
         self._send_next_position_move()
         self._changed()
         return ActionOutcome(True, f"{outcome.message.rstrip('.')} via safe Z")
@@ -198,6 +205,7 @@ class MotionService:
         elif self._position_move_active:
             self._position_queue = []
             self._position_move_active = False
+            self._phase = "failed"
             self._on_notice(f"Position move stopped — GRBL replied: {text}")
         elif self._live_jog_axis is not None:
             self._clear_live_jog()
@@ -213,6 +221,7 @@ class MotionService:
         self._position_queue = []
         self._position_move_active = False
         self._pending_acks = 0
+        self._phase = "idle"
         self._changed()
 
     def reset(self) -> None:
@@ -301,15 +310,23 @@ class MotionService:
             return
         if not self._position_queue:
             self._position_move_active = False
+            self._phase = "complete"
             self._on_notice("Position move complete")
             self._on_position_complete()
             return
         axis, distance, feed = self._position_queue.pop(0)
+        if axis == "Z":
+            self._phase = "raising_safe_z" if distance > 0 else "lowering_z"
+        elif axis == "X":
+            self._phase = "moving_x"
+        else:
+            self._phase = "moving_y"
         try:
             self._send_line(make_jog(axis, distance, feed))
         except (RuntimeError, ValueError) as exc:
             self._position_queue = []
             self._position_move_active = False
+            self._phase = "failed"
             self._on_notice(f"Position move stopped — {exc}")
             return
         self._pending_acks += 1

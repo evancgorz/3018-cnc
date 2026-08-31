@@ -2,165 +2,256 @@
 
 ## Objective
 
-Evolve TTC 3018 Control from a fixed 3018 profile into a safe, extensible hobby-CNC platform. Implement rollout steps 1–9: versioned machine definitions, multiple machines, hardware setup, controller adapters, commissioning evidence, single-switch homing/limits, movable Z probing, fixed tool setting and movable XYZ probing, and fixed fixtures with reusable work-coordinate restoration. Preserve the current switchless 3018 as a supported all-options-off configuration. Rollout step 10—dual-motor squaring and auxiliary equipment—is documentation backlog only.
+Deliver a complete UX and responsiveness pass for TTC 3018 Control. Make the application task-oriented, continuously responsive, explicit about what it is doing, calm and modern in motion, actionable when prerequisites or failures occur, and progressively disclosed for first-time versus advanced users. Consolidate all improvements discussed: readiness workflow, setup/commissioning UX, machine profile management, probing/tool/fixture task flows, Preview & Run confidence, recovery guidance, first-run/expert modes, non-blocking operations, busy/progress feedback, motion phases, targeted updates, debounced/cached previews, notification hierarchy, duplicate-action protection, focus/keyboard polish, and measurable performance.
 
 ## Current State
 
-- `machine_state.py` has flat `MachineProfile(name, travel_x/y/z, safe_z)`, `ProfileStore`, and a `VirtualEnvelope` whose manual reference is the minimum corner.
-- `ApplicationController` loads one `config/machine-profile.json`; no machine catalog or stable machine ID exists.
-- `work_zero_settings.py` persists one global XYZ work zero.
-- `commissioning.py` has dormant boolean `CommissioningProfile`, `CommissioningStore`, and `InputTestTracker`, not wired into the application or UI.
-- `grbl.py` parses status, `Pn`, positions, offsets, probe/setting feedback, and guards commissioning settings. Ordinary job G-code intentionally rejects G38.
-- The modular-monolith boundary is QML → ViewModel → application controller/services → domain/adapters. Keep it in-process.
-- Current profile UI only edits name/travel/safe Z. Manual reference and work-zero flows support the switchless 3018.
-- Job streaming, jogging, connection recovery, spindle-stop interlocks, return-to-work-zero, generators, STEP 2.5D, and validation are protected.
-- GRBL 1.1 supports `$H`, G38 probing and `[PRB]`, persistent G54–G59 via G10, and non-persistent G43.1 tool-length offsets. Stock GRBL 1.1 does not expose generic independent dual-motor squaring.
+- The Qt Quick app has Prepare, Preview & Run, and Machine workspaces plus modal guided setup, machine setup, commissioning, engraving, and STEP dialogs.
+- The compact status row shows machine/work coordinates, reference, work zero, spindle, and GRBL state, but it is descriptive rather than a clickable readiness workflow.
+- Most ViewModel properties notify through one broad `state_changed` signal. The 50 ms timer and frequent status reports can trigger unnecessary reevaluation and canvas repaint.
+- STEP import uses a daemon `threading.Thread` around the existing isolated OpenCASCADE worker and exposes only `step_importing` plus one status string. STEP path generation, G-code parsing/loading, text/plaque generation, and some preview work still execute synchronously from UI slots.
+- Buttons inconsistently indicate work. STEP import changes text to “Importing…”, while connect, generate, load, motion, homing, probing, return, save, and profile operations often look unchanged until completion.
+- `ApplicationState.active_operation` exists but is an unused string. Motion, jobs, homing, probing, tool setting, fixtures, Wi-Fi, and connection services each own state independently.
+- Job progress and estimated remaining time exist. Motion services own safe-Z queues but do not expose user-facing phase names such as raising Z, moving XY, lowering Z, or waiting for Idle.
+- Toasts are used for both routine acknowledgement and important failures. There is no persistent recovery panel or shared issue model.
+- Confirmation tokens prevent stale confirmation dialogs, but background tasks lack a general operation generation/token model.
+- Engraving live preview recalculates immediately on every field change. STEP preview generation is synchronous and can be repeatedly invoked while editing.
+- The recent machine-platform work provides versioned profiles, capability declarations, commissioning evidence types, adapters, homing/probing/tool/fixture services, and setup/commissioning entry points, but their UX remains technical and incomplete.
+- The repository rule forbids disturbing a running TTC 3018 instance. Offline Qt checks and deterministic tests are available.
 
 ## Final State
 
-### Machine catalog and schema
+### Task-oriented readiness and navigation
 
-- A nested JSON schema has `schema_version=1`, immutable `machine_id`, name, controller kind, geometry, axes, per-axis limits/homing, probes, spindle, stepper declaration, and metadata.
-- All optional hardware defaults off. The migrated TTC 3018 has no switches/homing/probes and retains manual reference/work-zero operation.
-- `config/machines.json` stores profiles and `selected_machine_id`. First run atomically migrates the legacy profile using a deterministic ID; do not delete the legacy file.
-- Create, edit, duplicate, select, and delete are supported. Keep at least one profile. Mutations are blocked while connected or motion is owned.
-- Work zero, commissioning, fixtures, and tool records are keyed by `machine_id`. Legacy flat work-zero JSON migrates on explicit save, not merely read.
+- A persistent, compact readiness strip appears below the app header on all workspaces:
+  `Connection → Machine reference/Home → Work zero → Job → Ready to run`.
+- Each item has text plus icon, one of `complete|required|working|warning|unavailable`, and an explanation. Color is supplemental, not the only state indicator.
+- Clicking an incomplete item performs the safest next navigation/action: open Connection, Machine controls, relevant homing/reference choice, work-zero guidance, Prepare/load, or Preview & Run. It never starts physical motion without the existing confirmation.
+- The strip derives from a Qt-independent `ReadinessSnapshot`; QML contains no safety logic.
+- Each workspace has exactly one visually dominant primary action based on current state: **Prepare machine**, **Create/load job**, **Review & run**, **Pause**, or **Recover safely**. Secondary/advanced actions are visually quieter.
 
-### Controller adapters
+### Shared operation model and immediate feedback
 
-- Advanced application logic depends on a controller-adapter protocol and immutable capability set.
-- `Grbl11Adapter` supports existing motion/status plus `$H`, G38.2, G10 L20 WCS setting, G43.1/G49 TLO, protected settings, and structured confirmations.
-- `GenericGrblAdapter` preserves connect/status/jog/job/manual-reference behavior but marks automated homing/probing/tool/fixture operations unsupported.
-- Availability always requires declared hardware + current commissioned evidence + adapter support. Unsupported declarations can be saved for future adapters but cannot emit commands.
-- G38 remains forbidden in ordinary jobs; a dedicated service owns probing.
+- Add typed `OperationSnapshot` and `OperationCoordinator` in the application layer. Fields: unique generation token, category, name, phase, state, optional 0–1 progress, started monotonic time, cancellable flag, blocking scopes, success/failure summary, and optional recovery action.
+- Categories are `background`, `connection`, `machine_motion`, `job`, and `safety`. States are `idle|queued|running|waiting_controller|succeeded|failed|cancelled`.
+- The coordinator arbitrates UI/application conflicts and stale results; it does not replace GRBL response ownership in MotionService, JobService, HomingService, or ProbingService.
+- Every user action displays feedback in the same event-loop turn: button label/spinner, operation strip, inline status, or confirmation dialog.
+- Late results are ignored unless their generation token is still current. Double-clicking/repeating an active operation cannot enqueue duplicates.
+- Controls are disabled by blocking scope, not by a global app-wide busy flag. Console viewing, navigation, status inspection, feed hold, spindle stop, and safe abort remain available where appropriate.
 
-### Setup wizard
+### Non-blocking execution
 
-- Machine > **Machine setup** opens pages for: (1) identity/controller; (2) XYZ travel, safe Z, direction; (3) per-axis switches/homing with none or one ordinary input per axis, min/max end, polarity, hard-limit use; (4) movable Z plate, fixed tool setter, movable XYZ probe, fixed XYZ fixture—all independently optional; (5) spindle and stepper/control declarations; (6) safety/support summary; (7) save/select and optional **Commission now**.
-- Validation rejects unsafe/non-finite geometry, contradictory declarations, and invalid feeds/search distances.
-- Saving computes dependency fingerprints. Name-only edits retain evidence/reference/work zero. Geometry/controller/direction changes clear session trust and stale motion evidence. Homing changes stale homing/fixed-location dependencies. Probe geometry changes stale that probe and dependants.
+- Add `qt/task_runner.py` using `QThreadPool/QRunnable` and Qt signals. It executes Python callables, returns typed success/failure with generation token, and never mutates QML/ViewModel state from a worker thread.
+- Replace raw STEP import threading with this task runner while retaining the existing short-lived subprocess/native crash isolation.
+- Run STEP import/analysis, STEP toolpath generation/simulation, large G-code parsing/loading, text/plaque generation, preview geometry conversion, file saving, host discovery, and connection attempts off the UI thread when they can exceed one frame.
+- Transport polling and all GRBL response/state-machine mutation stay serialized on the controller/UI thread. Background connection work may prepare/open a transport, but ownership is transferred exactly once before polling.
+- Cancellation is cooperative for pure Python work and terminates only the app-owned STEP import subprocess when needed. It never kills the running GUI or controller process.
 
-### Commissioning and homing
+### Motion and machine-operation feedback
 
-- Machine > **Commissioning** opens a separate resumable workflow.
-- Feature state is `off|declared|needs_commissioning|in_progress|commissioned|failed|stale|unsupported`; evidence includes fingerprint, timestamp, measurements, and note.
-- Input tests require both asserted and released `Pn`; direction tests use bounded, confirmed motion.
-- Allowed GRBL settings `$5,$20–$27,$130–$132` are reviewed, explicitly confirmed, written, read back, and verified.
-- **Home machine** is never automatic. It requires commissioned inputs/directions/settings, adapter support, spindle off, explicit confirmation, and valid Idle/Alarm preflight.
-- Successful `$H` requires acknowledgement plus fresh Idle/MPos. For a min-homed axis virtual minimum is post-home MPos; for max-homed it is `post-home MPos - travel`. Mixed ends work per axis.
-- Failure/alarm/timeout/disconnect clears session position trust and sends no follow-on motion. Persistent fixture geometry survives, but cannot be used until re-homing.
+- MotionService exposes phase data for safe moves: `raising_safe_z|moving_x|moving_y|lowering_z|waiting_idle|complete|failed`.
+- Return-to-reference/work-zero, coordinate moves, homing, probing, tool measurement, fixture restore, and job completion visibly display their physical phase and target.
+- “Complete” is shown only after required acknowledgement plus a fresh GRBL `Idle`/confirmation. While reports are delayed, show **Waiting for controller…** with elapsed time.
+- Motion UI retains prominent **Feed hold**, **Spindle off**, and context-appropriate **Cancel/Abort**. Safety actions never disappear behind a spinner.
+- Live coordinates continue updating during operations and the destination/active axis is highlighted without interpolating or concealing the exact reported value.
 
-### Transactional probing
+### Efficient state projection and smooth rendering
 
-- A Qt-independent `ProbingService` has explicit preflight, fast probe, retract/release, slow probe, offset application, safe retract, complete/fail/cancel states and exclusive command ownership.
-- Preconditions: connected, fresh status, Idle, spindle confirmed off, current homed trust, declared+commissioned+supported probe, initially open input, known WCS, and every approach/search/retract target inside the envelope.
-- Use bounded G38.2 fast touch → retract until released → slow touch → safe retract. Accept only fresh successful `[PRB:x,y,z:1]` belonging to the outstanding transaction.
-- Route probe/homing responses before generic manual acknowledgements and job streaming. Timeout, disconnect, alarm, error, unexpected input, failed/stale probe, or impossible target fails closed.
-- Movable Z plate applies plate thickness/search direction and sets work Z0 using adapter-generated G10 L20, then confirms fresh WCS/WCO.
-- Movable XYZ probing asks for corner/orientation, sequentially probes selected faces, compensates tool/probe geometry, and sets selected X/Y/Z work coordinates. Intermediate XY moves occur at validated safe Z.
+- Keep `state_changed` temporarily for compatibility, but add targeted ViewModel signals: `connection_changed`, `position_changed`, `readiness_changed`, `operation_changed`, `preview_changed`, `job_changed`, `issues_changed`, and `profiles_changed`.
+- Status reports update authoritative state immediately. Visual coordinate notifications are coalesced to at most 30 FPS, while alarm, spindle, reference, work-zero, job, and safety changes emit immediately.
+- Toolpath canvases repaint only on preview/viewport changes; machine-position updates do not rebuild static preview geometry.
+- No QML property binding performs expensive Python work.
 
-### Fixed tool setter
+### Debounced, cached, atomic previews
 
-- Commissioning records machine-scoped safe approach XY/Z, direction, search/retract parameters, reference trigger machine Z, and at least three samples. Spread must meet configured tolerance.
-- **Measure tool** requires current homed trust, performs the same two-stage probe, computes delta from commissioned trigger, applies G43.1 through adapter math, confirms `[TLO]`, and remains/returns at safe Z.
-- TLO is session-only: clear with G49 on disconnect/reset/machine selection; never silently restore after power loss. UI shows active TLO.
-- Sign math is pure adapter logic with table tests for positive/negative coordinates and both probe directions; QML performs no coordinate math.
+- Add a reusable 150 ms debouncer for engraving and STEP setting edits using a fake-clock-testable generation counter.
+- Keep the previous valid preview visible with an **Updating preview…** overlay. Never clear it merely because a newer computation is running.
+- Apply preview results atomically only when the token and complete input fingerprint match the latest request.
+- Cache immutable imported STEP geometry and reuse unchanged normalization/model strokes. Cache generated preview results by input fingerprint with a bounded in-memory LRU.
+- Invalid current settings show an inline validation message while preserving the last valid preview, clearly labeled as stale.
+- Preview cancellation/replacement cannot overwrite a newer result.
 
-### Fixed fixtures and reusable work restoration
+### Notification and recovery hierarchy
 
-- Named, machine-scoped fixture records contain G54–G59 slot, safe approach, probe/fixture geometry, expected bounds, fingerprints, and last confirmed origin.
-- Commissioning probes and stores fixed fixture geometry. **Restore fixture** requires current homing and current evidence, then re-probes—it never blindly trusts old machine coordinates.
-- Apply G10 L20, request/confirm fresh WCS/WCO within tolerance, persist only after confirmation, and leave at safe Z. Automated restore updates active work-origin state only after confirmation.
+- Routine in-progress feedback is inline. Success uses a brief non-modal toast. Failures requiring user action create a persistent `IssueSnapshot` banner/card.
+- Issue data includes severity, concise title, explanation, whether spindle may be running, whether reference/work-zero trust was lost, whether job reload is required, and explicit actions.
+- The failure/recovery panel remains until resolved/dismissed where safe. Typical actions: **Spindle off**, **Reconnect**, **Home/re-establish reference**, **Reload job**, **Open console**, **Retry**.
+- Connection errors stay in the connection dialog with retry/edit controls. Validation errors stay next to their fields. Avoid decision-free popups.
+- Alarms, spindle-uncertain states, and lost position trust are never transient toast-only messages.
 
-### Step 10 backlog only
+### Machine profiles, setup, commissioning, and task wizards
 
-- Create `docs/CNC_PLATFORM_BACKLOG.md` for independent dual-motor homing/squaring and auxiliary features: explicit stepper enable/disable, coolant/mist, air assist, dust/vacuum, RPM feedback, door/interlock/E-stop feedback, rotary axes, tool changers, driver diagnostics, sensorless homing, encoders.
-- For each, record controller/IO prerequisites, hazards, extension point, and minimum future tests. Mark every item unimplemented. Add no runtime controls or commands.
+- Machine profile selector displays name, controller, travel, connection preference, capability badges, and commissioning status; internal IDs are hidden.
+- Add working **Create**, **Duplicate**, **Edit**, **Delete**, and **Select** flows using existing catalog rules and disconnected/idle gates.
+- Machine Setup becomes a progressive wizard: identity/controller; geometry; per-axis limits/homing; probes; spindle/control; review/save. All optional hardware defaults off and irrelevant pages/fields collapse.
+- Commissioning displays one card per declared capability with `not installed|needs setup|ready to test|commissioned|stale|unsupported|failed`, exact reason, dependency change, and **Commission/Recommission** action.
+- Probing is presented as user tasks rather than GRBL terminology: **Set material surface**, **Find stock corner**, **Measure current tool**, **Restore fixture**. Each wizard shows placement, expected motion, current phase, result, and safety confirmation.
+- Advanced details—input pins, WCS slot, raw measurements, controller settings, and console—are behind an Advanced disclosure and never required for normal operation.
+
+### Preview & Run confidence
+
+- Preview & Run begins with a stable summary card: file/model, estimated time, stock/material size, required tool, maximum depth, operation count/order, spindle command/RPM, work-zero convention, envelope result, and final destination.
+- Prerequisites are actionable cards. Clicking a failed item navigates to its remedy.
+- The run button transitions through **Checking preflight…**, **Starting spindle…**, **Waiting for controller…**, and **Running**. It cannot be double-started.
+- Job progress displays operation phase, elapsed/remaining time, acknowledged command progress, and a clear distinction between streaming complete and physical motion complete.
+
+### First-run, normal, and advanced experience
+
+- Add versioned `config/ui-preferences.json` for first-run completion, expert-mode preference, last workspace, and non-safety disclosure states. Do not persist physical safety acknowledgements.
+- First run guides machine selection/creation, connection, all-options-off versus declared hardware, and manual reference basics. It never performs automatic motion.
+- Normal launches go directly to the Machine workspace/readiness strip. Expert mode reveals diagnostics, console, raw WCS/TLO/pin values, and advanced STEP controls.
+- Focus returns to the invoking control after dialogs close. Keyboard navigation and focus order work throughout. Add shortcuts only for non-ambiguous actions; require confirmation for machine movement/job start. Space/Enter must not accidentally retrigger held jog controls.
+- Respect Qt reduced-motion/system animation preference when available. Use 100–150 ms hover/pressed/opacity transitions and short page crossfades; alarms and safety transitions are immediate.
 
 ## Allowed Scope
 
-- `src/ttc3018_control/machine_state.py`, `commissioning.py`, `grbl.py`, `work_zero_settings.py`
-- New domain/persistence modules for machine config/catalog, controller adapters, fixtures, and tool settings
-- New application commissioning, homing, probing, and fixture services
-- Required integration in `application/controller.py`, `machine_session.py`, `ports.py`, `state.py`, `events.py`, and connection routing
-- `qt/view_model.py`, `qt/qml/Main.qml`, and new QML components beside it
-- Relevant tests, `README.md`, `docs/ARCHITECTURE_DECISION_RECORD.md`, new backlog doc, and workflow result
-- Change legacy profile config only if compatibility cannot be achieved in code.
+- New application modules for operation/readiness/issue coordination and UI preferences
+- `src/ttc3018_control/application/state.py`, `events.py`, `controller.py`, all existing application services where phase exposure is required
+- `src/ttc3018_control/qt/view_model.py`, new `qt/task_runner.py`, and all QML under `qt/qml/`
+- Machine catalog/config/commissioning persistence only where required for full profile/setup UX
+- G-code/generation/STEP modules only for cancellation hooks, immutable inputs, progress callbacks, or safe caching; generated geometry and validation semantics are protected
+- Relevant tests, README, ADR, and workflow result
 
 ## Protected Scope
 
-- Do not change job streaming/buffering, pause/resume, delayed terminal M5 and spindle-stop safety, return-to-work-zero, jog semantics, connections/Wi-Fi, generators, STEP, preview, or ordinary G-code validation.
-- Do not allow G38 in loaded/generated job files.
-- Do not add HTTP/OpenAPI, daemon, cloud service, executable packaging, firmware changes, or Tkinter. Keep the modular monolith.
-- Do not claim dual-motor/dual-limit/auxiliary support without a real adapter.
-- Never write settings, home, probe, or move automatically on connect. Physical commissioning actions require explanation and explicit user action.
-- Preserve manual reference/work zero when all optional hardware is off. Preserve compatibility for existing `MachineProfile`/`ProfileStore` imports.
-- Never modify, stage, delete, or commit user-owned untracked `config/work-zero.json`; persistence tests use temp paths.
-- Never disturb or launch TTC 3018. If an instance runs, do not terminate/restart/focus/capture/interact. Tell the user manual relaunch is required.
+- Preserve GRBL command semantics, response ownership, motion envelopes, job buffering, delayed M5/spindle-stop safety, pause/resume/abort, return sequencing, reference/work-zero trust, Wi-Fi behavior, and fail-closed rules.
+- Do not mark machine motion complete from animation, command transmission, or acknowledgement alone.
+- Do not perform machine motion, homing, probing, spindle start, tool measurement, or fixture restoration automatically.
+- Do not permit G38 in ordinary job G-code or expose arbitrary command execution.
+- Do not change text/plaque/STEP toolpath geometry or loosen parser/simulation/envelope validation.
+- Keep the modular monolith; no HTTP server, daemon, cloud dependency, executable packaging, or Tkinter.
+- Do not modify, stage, delete, or commit `config/work-zero.json`, generated `config/machines.json`, logs, or user data.
+- Do not launch, focus, capture, restart, terminate, or interact with a running TTC 3018 instance. Source/offscreen validation only unless the user gives explicit current permission.
 
 ## Implementation Steps
 
-1. **Definition domain — new `machine_config.py`, compatibility in `machine_state.py`.** Add frozen enums/dataclasses, exact JSON conversion, validation, subtree fingerprints, and legacy TTC 3018 factory. Adapt geometry to existing envelope APIs. Success: exact round trip, safe validation, stable relevant fingerprints, unchanged legacy envelope behavior.
+1. **Baseline and instrumentation — tests plus `qt/task_runner.py` test hooks.**
+   - Record baseline suite/shell time. Add an event-loop heartbeat probe and deterministic fake clock/executor used by later tests.
+   - Define performance fixtures: large synthetic G-code, representative engraving changes, and existing STEP examples.
 
-2. **Catalog/migration — new `machine_catalog.py`, controller bootstrap.** Add versioned atomic store, deterministic migration, CRUD/select rules, active-machine state, and disconnected/no-owner mutation gates. Selection rebuilds machine-bound services and clears session trust/TLO. Success: idempotent migration and restart-safe independent profiles.
+2. **Operation/readiness/issue domain — new `application/ux_state.py`; `state.py`, `events.py`.**
+   - Add enums and immutable snapshots exactly as Final State specifies.
+   - Implement `OperationCoordinator` with generation tokens, scoped conflicts, transitions, cancellation, stale-result rejection, elapsed time, and bounded completed-operation retention.
+   - Add pure readiness derivation and issue/recovery models. Extend `ApplicationState` with defaulted fields last for compatibility.
 
-3. **Machine-scoped stores — evolve `work_zero_settings.py`; add fixture/tool stores.** Read legacy and versioned formats; associate legacy work zero with supplied active ID and rewrite only on explicit save. Add strict, atomic machine-keyed stores. Success: two-machine isolation and safe malformed-record behavior.
+3. **Application-service phase integration — controller, connection, motion, job, homing, probing, tool, fixture, Wi-Fi services.**
+   - Map each service’s existing authoritative states to operation snapshots without changing command ownership.
+   - Expose exact safe-motion and job phases. Require fresh Idle/PRB/TLO/WCO completion as currently specified.
+   - Add conflict scopes and duplicate-action rejection. Preserve safety actions during all operations.
 
-4. **Adapters — new `controller_adapters.py`; extend `grbl.py`.** Add capability protocol/factory, exact Grbl11 builders/parsers, GenericGrbl unsupported behavior, PRB/TLO/G54–G59/setting structures, and pure offset math. Success: unsupported operations emit nothing and exact GRBL transcripts test deterministically.
+4. **Qt task runner and async migration — new `qt/task_runner.py`; ViewModel slots.**
+   - Implement QThreadPool worker/result/cancel API with generation tokens and GUI-thread-only completion.
+   - Migrate raw STEP thread first, retaining subprocess isolation, then STEP generation/simulation, G-code load/parse, engraving generation, file save, discovery, and connection.
+   - Capture immutable inputs before dispatch. Never pass mutable controller/session objects into workers.
 
-5. **Commissioning — evolve `commissioning.py`; new `application/commissioning_service.py`.** Migrate old booleans, add typed evidence/state, pure dependency invalidation, Pn tracking, bounded direction checks, settings review/write/readback, operation ownership, and response priority. Success: evidence cannot commission early; selective invalidation matrix passes.
+5. **Targeted ViewModel projection — `view_model.py`.**
+   - Add targeted signals and properties for operation, readiness, issues, profile cards, preview updating/stale state, and motion phase.
+   - Coalesce position notification to 30 FPS while emitting safety changes immediately. Keep global signal only for compatibility and remove unnecessary calls.
+   - Add action-routing slots for readiness cards and recovery actions; no safety decisions in QML.
 
-6. **Setup/commissioning UI — ViewModel and new `MachineSetupDialog.qml`/`CommissioningDialog.qml`.** Expose profile CRUD/drafts/capability reasons/workflow state; add compact selector/actions on Machine. Keep domain math in Python. Use exact wizard pages/defaults; save reports stale evidence. Success: current no-hardware profile is straightforward and unsupported actions cannot invoke services.
+6. **Reusable responsive QML components — new files under `qt/qml/components/`.**
+   - Create `BusyButton`, `ReadinessStrip`, `OperationBanner`, `IssueBanner`, `StateBadge`, `ActionCard`, `InlineValidation`, and `LoadingOverlay`.
+   - Components receive properties/actions only and match existing blue-accent dark design. Include hover/pressed/focus states, fixed geometry while labels change, reduced-motion support, and accessible text.
 
-7. **Homing — new `application/homing_service.py`; session/envelope changes.** Implement preflight, ownership, `$H`, ack+fresh Idle completion, min/max/mixed transforms, and fail-closed lifecycle. Wire explicit UI. Never auto-use `$X`. Success: exact reference math and no trust/follow-on motion after failure.
+7. **Header/workspace task flow — `Main.qml`.**
+   - Install readiness strip and operation banner across all pages.
+   - Compute one primary action per workspace from ViewModel properties. Route incomplete readiness items and retain all advanced controls under secondary disclosures.
+   - Ensure banners/status do not shift content when appearing.
 
-8. **Movable probing — new `application/probing_service.py`.** Build explicit command-correlated state machine and pure Z/XYZ plan builders. Add placement/geometry/corner UI and final motion confirmation. Set WCS only after successful slow touch and verify. Success: failure injection at every state cannot send premature G10.
+8. **Debounced preview pipeline — ViewModel, generation service, preview QML.**
+   - Add 150 ms text/plaque/STEP debouncing, latest-generation-only acceptance, bounded LRU, immutable fingerprints, previous-valid preview retention, and atomic swaps.
+   - Move expensive conversion/generation off-thread. Overlay updating/stale/validation states without canvas flicker.
+   - Separate preview repaint signals from position/state signals.
 
-9. **Fixed tool and fixture production workflows.** Extend probing for three-sample setter commissioning, production TLO measurement/confirmation/lifecycle clearing, named fixture CRUD, fixed-fixture commissioning, re-probe restoration, WCS verification, and safe-Z finish. Add status/actions in UI. Success: sign/tolerance/machine isolation/current-homing tests pass.
+9. **Profile/setup/commissioning redesign — machine QML dialogs and ViewModel/catalog APIs.**
+   - Build user-facing profile cards and complete CRUD flows. Hide IDs.
+   - Replace placeholder setup screens with the progressive wizard and capability-aware summary.
+   - Add commissioning cards/reasons/actions based on evidence and adapter support. Preserve all-options-off 3018 path.
 
-10. **Backlog documentation only.** Create the step-10 backlog with prerequisites, hazards, extension points, and future tests. Audit that no associated runtime controls/commands were added.
+10. **Machine task wizards — new QML dialogs; probing/tool/fixture ViewModel adapters.**
+    - Implement Set material surface, Find stock corner, Measure current tool, and Restore fixture workflows around existing services.
+    - Show diagrams/instructions using simple code-native QML shapes/icons, expected bounded motion, live phase, cancel/abort, and result confirmation.
+    - Do not add controller commands or calculations to QML.
 
-11. **Docs/evidence/commits.** Update README and ADR for setup, commissioning, adapters, machine-scoped state, and transactional ownership. Write execution result. Commit coherent passing milestones frequently and push `main`; never stage work-zero JSON.
+11. **Preview & Run and recovery redesign — `Main.qml`, ViewModel.**
+    - Add confidence summary, actionable prerequisites, start-state progression, operation-aware progress, and physical-versus-streaming completion text.
+    - Add persistent recovery panel with exact trust/spindle/reload consequences and approved actions.
+
+12. **First-run/expert preferences and polish — new `ui_preferences.py`, QML.**
+    - Add atomic versioned preferences, first-run wizard, expert toggle, last-workspace/disclosure persistence, focus restoration, keyboard/focus order, cursor states, subtle transitions, and reduced-motion handling.
+    - Never persist safety acknowledgements or active-operation state.
+
+13. **Documentation, cleanup, and milestone commits.**
+    - Update README and ADR. Remove obsolete duplicate UI paths only after replacement tests pass.
+    - Commit and push coherent milestones to `main`; never stage user config.
 
 ## Validation Plan
 
-1. **Baseline/static:** before edits run `git status --short` and `.venv\Scripts\python.exe -m pytest -q`. After milestones run `git diff --check` and status. Pass: baseline characterized, no whitespace errors, user work-zero remains untouched/untracked.
+1. **Static/baseline**
+   - `git status --short`; `.venv\Scripts\python.exe -m pytest -q`; `.venv\Scripts\python.exe run.py --check`; `git diff --check`.
+   - Pass: baseline recorded; no user config touched; existing suite and shell pass before edits.
 
-2. **Schema/catalog/persistence:** add `test_machine_config.py`, `test_machine_catalog.py`, and work-zero tests. Run those plus `test_machine_state.py`. Cover round trip, all-off defaults, invalid/future schema, stable/idempotent migration, atomic-failure preservation, CRUD/select/last-profile rule, legacy work-zero migration, two-machine isolation, name-only fingerprint stability.
+2. **Operation coordinator tests**
+   - Add `tests/test_ux_state.py`.
+   - Cover every state transition, fake-clock elapsed time, progress validation, scoped conflicts, cancel rules, duplicate request, stale token, background+machine coexistence, safety action availability, and bounded history.
 
-3. **Adapters/parsing:** run `test_grbl.py` plus new `test_controller_adapters.py`. Assert capability matrix, exact `$H`/G38.2/G10 L20/G43.1/G49, unsupported emits nothing, PRB success/failure, TLO/WCS reports, finite guards, TLO sign tables, setting allowlist.
+3. **Readiness/issue tests**
+   - Table-test disconnected, connecting, manual-reference, homing-capable, missing work zero, no job, invalid envelope, ready, running, paused, failed, spindle-uncertain, and lost-trust combinations.
+   - Pass: exact status/action/reason; no QML-derived safety result.
 
-4. **Commissioning:** expand `test_commissioning.py`, add `test_commissioning_service.py`. Cover old migration, every state transition, asserted/released and bounce, readback mismatch, ownership, timeout/disconnect/alarm, persistence, and invalidation matrix for name/travel/direction/controller/homing/every probe/unrelated edits.
+4. **Task-runner/threading tests**
+   - Verify worker runs off GUI thread, result/error returns on GUI thread, token propagation, cancellation, stale suppression, exception formatting, and shutdown without leaked threads/processes.
+   - Event-loop heartbeat must continue during delayed fake STEP import, generation, G-code parse, connection, and file save.
 
-5. **Homing:** add `test_homing_service.py`, expand session/envelope tests. Cover preflight denials, Idle/alarm-lock, no automatic `$X`, ack without fresh Idle, min/max/mixed transforms, noise, timeout/error/alarm/disconnect, no follow-on motion, manual-reference regression.
+5. **Preview tests**
+   - Fake clock/executor tests: burst edits cause one computation after 150 ms; old result cannot overwrite new; previous preview remains; invalid edit labels preview stale; cache hit skips generation; LRU bound; preview signal does not fire on position-only status.
 
-6. **Probing:** add `test_probing_service.py` using fake transport/clock/scripted reports. For Z and every XYZ corner cover preflight, initially closed probe, bounds, exact fast/retract/release/slow order, stale/failed PRB, timeout/error/alarm/disconnect/cancel at each state, no early G10, thickness/radius/direction math, WCS confirmation, safe retract.
+6. **Motion/job phase tests**
+   - Expand motion/job/homing/probing/application tests for exact phases, acknowledgement versus fresh Idle, waiting-controller elapsed state, failure/recovery issue contents, duplicate clicks, and safety-control availability.
+   - Existing delayed M5, spindle-stop, abort retention, jog, return, and streaming tests must pass unchanged.
 
-7. **Tool/fixtures:** add `test_tool_setting.py` and `test_fixtures.py`. Cover sample minimum/tolerance/outliers, sign tables, TLO mismatch, G49 lifecycle, no restore, G54–G59 CRUD, machine isolation, stale/unhomed denial, mandatory re-probe, origin math, WCO tolerance, safe-Z, and no persistence update on failure.
+7. **Profile/setup/commissioning tests**
+   - Test profile card projection, hidden IDs, CRUD gates, wizard defaults/validation, irrelevant-field hiding, evidence status/reason, stale dependency explanation, and all-options-off workflow.
 
-8. **Application regression:** expand application/session/connection tests. Verify response-routing priority, mutual exclusion with jobs/jogs/manual commands, profile-switch gates, lifecycle trust/TLO clearing, delayed M5, return-to-work-zero, Wi-Fi, and persistent work zero.
+8. **Probe/task wizard adapter tests**
+   - Test exact user task → service plan mappings, confirmations, cancellation, phase copy, geometry validation, successful result, and all existing fail-closed probe/tool/fixture cases.
 
-9. **Qt:** expand `test_qt_shell.py` with offscreen loading/ViewModel tests for dialogs, all-off drafts, validation, selector, capability reasons, disabled unsupported calls, confirmations, tool/fixture status, and existing layout/reference controls.
+9. **Qt/QML structural and offscreen tests**
+   - Expand `test_qt_shell.py`; load all components/dialogs offscreen.
+   - Assert readiness strip, one primary action/workspace, BusyButton states, operation/issue banners, no layout overlap at 1180×720 and 1500×920, focus order, first-run/expert visibility, and no QML warnings.
 
-10. **Full validation:** run `.venv\Scripts\python.exe -m pytest -q`, `.venv\Scripts\python.exe run.py --check`, and `git diff --check`. Pass: all tests, `TTC 3018 Qt shell check passed`, clean diff check.
+10. **Performance acceptance**
+    - Add deterministic/instrumented tests, not brittle absolute microbenchmarks:
+      - UI heartbeat gap stays below 100 ms during fake slow operations.
+      - 100 status reports cause at most 30 position notifications per second and no preview rebuild.
+      - 20 rapid preview edits cause one final generation.
+      - Large G-code and representative STEP processing run off the GUI thread.
+      - Repeated preview replacement leaves no unbounded worker/cache growth.
 
-11. **Backlog boundary:** `rg -n "dual.motor|squar|coolant|mist|air assist|vacuum|stepper enable|tool changer|rotary|encoder" src tests docs`; inspect every match. Pass: no new production implementation for step 10.
+11. **Full regression**
+    - `.venv\Scripts\python.exe -m pytest -q`; `.venv\Scripts\python.exe run.py --check`; `git diff --check`.
+    - Pass: all tests and shell pass, no generated/user config staged.
 
-12. **GUI/manual:** agents do not launch/interact with TTC 3018. Provide a user relaunch checklist: current 3018 selected/all options off; setup pages readable; create second mock profile; unsupported explanations shown; commissioning cards correct; switch back disconnected; manual reference/jog/job still available. Automated PASS relies on offscreen QML/shell tests, not physical commissioning.
+12. **Runtime GUI validation**
+    - Only when no TTC 3018 instance is running. The agent must not launch if one exists.
+    - Start disconnected at 1500×920, then 1180×720. Navigate all workspaces/dialogs; trigger fake/offline import/generation/load paths; verify immediate button feedback, responsive dragging/navigation, stable previews, banner layout, keyboard focus, and expert toggle. Do not connect to or move physical hardware.
+    - Pass: no freeze, overlap, unreadable state, focus trap, QML warning, or stale result. If an instance is running, record this optional visual step deferred; offscreen/performance tests remain required.
 
 ## Failure / Escalation Rules
 
-- `PLAN_INVALID` if transport ownership/fresh correlation requires redesigning protected streaming, GRBL semantics contradict adapter assumptions, machine scoping requires destructive migration, or fixed-tool sign cannot be proven with pure math/tests. Do not guess or expose unsafe production actions.
-- `PLAN_INVALID` if separate setup/commissioning components cannot fit the current ViewModel boundary without architectural redesign.
-- Luna fixes ordinary implementation/test/QML/routing issues. `BLOCKED` is for missing dependencies, permissions, or unusable test environment; a running app blocks only optional visual interaction.
-- Never weaken safety tests, bypass gates, auto-`$X`, or replace session homing/re-probing with blind persisted coordinates.
-- Implement and validate in order with milestone commits. Do not silently omit steps 1–9.
+- `PLAN_INVALID` if async connection cannot transfer transport ownership safely without redesigning ConnectionService, if QThreadPool cannot preserve existing STEP subprocess isolation, or if service phases cannot be exposed without changing protected GRBL response ownership.
+- `PLAN_INVALID` if targeted signals require abandoning current public ViewModel compatibility rather than staged migration.
+- Fix routine QML, worker, debounce, token, cache, focus, and test failures during execution.
+- `BLOCKED` for missing Qt/dependencies/permissions. A running TTC app blocks only optional runtime visual validation.
+- Never “improve responsiveness” by acknowledging machine completion early, allowing conflicting commands, reducing validation, or moving controller mutation to worker threads.
+- Do not mark PASS with placeholder setup/commissioning pages, synchronous expensive slots, or busy labels that are not tied to real operation state.
 
 ## Completion Criteria
 
-- Every rollout 1–9 requirement is implemented; rollout 10 exists only in backlog docs.
-- Legacy TTC 3018 migrates to all-options-off and retains its manual workflow.
-- Multiple machines, scoped persistence, capability gates, selective commissioning, homing, movable probes, fixed tool setting, and fixture restoration have deterministic coverage.
-- Automation requires declared hardware, current evidence, adapter support, session trust, safety preflight, and explicit initiation.
-- Targeted tests, full suite, shell check, diff check, and backlog audit pass.
-- Execution result records PASS/evidence or correct escalation; coherent commits are pushed to `main`; `config/work-zero.json` remains untouched.
+- Every Final State section is implemented with no placeholder controls.
+- Every potentially slow user action gives feedback immediately and does not block the GUI thread.
+- Machine operation completion remains controller-confirmed and all safety controls remain available.
+- Readiness, operation, issue, profile, commissioning, probing, Preview & Run, first-run, and expert UX are functional and tested.
+- Targeted signals materially reduce unnecessary preview/canvas updates; debounce/cache/stale-result protections pass.
+- Full tests, shell check, performance acceptance, and static checks pass.
+- Workflow result records exact evidence and deviations; coherent commits are pushed to `main`; user config remains untouched.

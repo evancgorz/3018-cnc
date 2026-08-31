@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-import threading
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 
 from ..application.controller import ApplicationController
+from ..application.ux_state import (
+    IssueSnapshot,
+    OperationCategory,
+    OperationCoordinator,
+    OperationSnapshot,
+    OperationState,
+    ReadinessSnapshot,
+)
 from ..gcode import GCodeError
 from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
@@ -18,6 +25,8 @@ from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
 from ..step_prepare_settings import StepPrepareSettings
 from ..text_engraver import FONT_NAMES
+from .task_runner import TaskResult, TaskRunner
+from .ui_preferences import UiPreferences, UiPreferencesStore
 
 
 class ControllerViewModel(QObject):
@@ -31,6 +40,14 @@ class ControllerViewModel(QObject):
     close_requested = Signal()
     step_import_completed = Signal(object, str)
     step_model_imported = Signal(str)
+    connection_changed = Signal()
+    position_changed = Signal()
+    readiness_changed = Signal()
+    operation_changed = Signal()
+    preview_changed = Signal()
+    job_changed = Signal()
+    issues_changed = Signal()
+    profiles_changed = Signal()
 
     def __init__(self, application: ApplicationController | None = None) -> None:
         super().__init__()
@@ -76,6 +93,31 @@ class ControllerViewModel(QObject):
         self._step_source_text = "No STEP model imported"
         self._step_import_status = "Import a planar STEP model to begin."
         self._step_importing = False
+        self._step_task_token = 0
+        self._preview_task_token = 0
+        self._preview_task_generation = 0
+        self._preview_generation = 0
+        self._pending_preview: tuple[str, tuple[object, ...]] | None = None
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(150)
+        self._preview_timer.timeout.connect(self._run_pending_preview)
+        self._task_runner = TaskRunner(self)
+        self._task_runner.completed.connect(self._finish_background_task)
+        self._operations = OperationCoordinator()
+        self._active_operation: OperationSnapshot | None = None
+        self._readiness_snapshot = ReadinessSnapshot()
+        self._issue: IssueSnapshot | None = None
+        self._position_emit_at = 0.0
+        self._last_position_projection = ""
+        self._last_preview_fingerprint: tuple[object, ...] | None = None
+        self._last_readiness_snapshot = ReadinessSnapshot()
+        self._last_issue: IssueSnapshot | None = None
+        self._last_operation_snapshot: OperationSnapshot | None = None
+        self._last_connection_projection: tuple[object, ...] | None = None
+        self._last_job_projection: tuple[object, ...] | None = None
+        self._ui_preferences_store = UiPreferencesStore(root / "config" / "ui-preferences.json")
+        self._ui_preferences = self._ui_preferences_store.load()
         self._guided_step = 0
         self._guided_preflight_confirmed = False
         self._log_lines: list[str] = []
@@ -119,6 +161,105 @@ class ControllerViewModel(QObject):
         if self._close_after_return_pending and self.at_reference:
             self._close_after_return_pending = False
             self.close_requested.emit()
+
+    @Property(str, notify=operation_changed)
+    def operation_name(self) -> str:
+        return self._active_operation.name if self._active_operation else ""
+
+    @Property(str, notify=operation_changed)
+    def operation_phase(self) -> str:
+        return self._active_operation.phase if self._active_operation else ""
+
+    @Property(float, notify=operation_changed)
+    def operation_progress(self) -> float:
+        return float(self._active_operation.progress or 0.0) if self._active_operation else 0.0
+
+    @Property(bool, notify=operation_changed)
+    def operation_active(self) -> bool:
+        return bool(self._active_operation and self._active_operation.active)
+
+    @Property(str, notify=readiness_changed)
+    def readiness_connection(self) -> str:
+        return self._readiness_snapshot.connection
+
+    @Property(str, notify=readiness_changed)
+    def readiness_reference(self) -> str:
+        return self._readiness_snapshot.reference
+
+    @Property(str, notify=readiness_changed)
+    def readiness_work_zero(self) -> str:
+        return self._readiness_snapshot.work_zero
+
+    @Property(str, notify=readiness_changed)
+    def readiness_job(self) -> str:
+        return self._readiness_snapshot.job
+
+    @Property(str, notify=readiness_changed)
+    def readiness_ready(self) -> str:
+        return self._readiness_snapshot.ready
+
+    @Property(str, notify=readiness_changed)
+    def readiness_next_action(self) -> str:
+        return self._readiness_snapshot.next_action
+
+    @Property(str, notify=readiness_changed)
+    def readiness_reason(self) -> str:
+        return self._readiness_snapshot.reason
+
+    @Property(bool, notify=issues_changed)
+    def has_issue(self) -> bool:
+        return self._issue is not None
+
+    @Property(str, notify=issues_changed)
+    def issue_title(self) -> str:
+        return self._issue.title if self._issue else ""
+
+    @Property(str, notify=issues_changed)
+    def issue_explanation(self) -> str:
+        return self._issue.explanation if self._issue else ""
+
+    @Property("QStringList", notify=issues_changed)
+    def issue_actions(self) -> list[str]:
+        return list(self._issue.actions) if self._issue else []
+
+    @Property(bool, constant=True)
+    def expert_mode(self) -> bool:
+        return self._ui_preferences.expert_mode
+
+    @Property(bool, constant=True)
+    def first_run_complete(self) -> bool:
+        return self._ui_preferences.first_run_complete
+
+    @Property(int, constant=True)
+    def initial_workspace(self) -> int:
+        return self._ui_preferences.last_workspace
+
+    @Slot(int)
+    def save_workspace(self, workspace: int) -> None:
+        workspace = max(0, min(2, int(workspace)))
+        if workspace == self._ui_preferences.last_workspace:
+            return
+        self._ui_preferences.last_workspace = workspace
+        try:
+            self._ui_preferences_store.save(self._ui_preferences)
+        except OSError:
+            self._set_notice("Workspace preference could not be saved")
+
+    @Slot(bool)
+    def set_expert_mode(self, enabled: bool) -> None:
+        self._ui_preferences.expert_mode = bool(enabled)
+        try:
+            self._ui_preferences_store.save(self._ui_preferences)
+        except OSError:
+            self._set_notice("Expert-mode preference could not be saved")
+
+    @Slot()
+    def complete_first_run(self) -> None:
+        self._ui_preferences.first_run_complete = True
+        try:
+            self._ui_preferences_store.save(self._ui_preferences)
+        except OSError:
+            self._set_notice("First-run preference could not be saved")
 
     @Property(str, notify=state_changed)
     def connection_text(self) -> str:
@@ -745,6 +886,49 @@ class ControllerViewModel(QObject):
             self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes · {border}"
         self._emit_state()
 
+    @Slot(str, str, float, float, float, float, float, float, float, str, int)
+    def request_preview_text(self, *args) -> None:
+        self._queue_preview("text", args)
+
+    @Slot(str, str, bool, str, str, float, float, float, float, float, str, float, float, float, float, int)
+    def request_preview_plaque(self, *args) -> None:
+        self._queue_preview("plaque", args)
+
+    def _queue_preview(self, kind: str, args: tuple[object, ...]) -> None:
+        self._preview_generation += 1
+        self._pending_preview = (kind, tuple(args))
+        self._preview_timer.start()
+        if self._active_operation is None:
+            self._active_operation = self._operations.begin(
+                OperationCategory.BACKGROUND,
+                "Preview",
+                phase="Updating preview…",
+                cancellable=False,
+                blocking_scopes={"preview"},
+            )
+        self._emit_state()
+
+    def _run_pending_preview(self) -> None:
+        if self._pending_preview is None:
+            return
+        kind, args = self._pending_preview
+        self._preview_task_generation = self._preview_generation
+        self._preview_task_token = self._task_runner.submit(lambda: self._generate_preview(kind, args))
+
+    def _generate_preview(self, kind: str, args: tuple[object, ...]):
+        if kind == "text":
+            return self.application.generate_text(
+                args[0], font=args[1], text_height=args[2], depth=args[3], safe_z=args[4], cut_feed=args[5],
+                plunge_feed=args[6], letter_spacing=args[7], line_spacing=args[8], alignment=args[9],
+                spindle_rpm=args[10] if args[10] > 0 else None,
+            )
+        return self.application.generate_plaque(
+            args[0], args[1], subtitle_enabled=args[2], title_font=args[3], subtitle_font=args[4],
+            title_height=args[5], subtitle_height=args[6], width=args[7], height=args[8], margin=args[9],
+            border=args[10], depth=args[11], safe_z=args[12], cut_feed=args[13], plunge_feed=args[14],
+            spindle_rpm=args[15] if args[15] > 0 else None,
+        )
+
     @Slot(QUrl)
     def import_step_file(self, selected_file: QUrl) -> None:
         """Import a STEP URL selected by Qt Quick's file dialog."""
@@ -760,16 +944,43 @@ class ControllerViewModel(QObject):
         self._step_importing = True
         self._step_source_text = f"Importing {path.name}…"
         self._step_import_status = "Reading STEP geometry and finding planar machining faces…"
+        self._active_operation = self._operations.begin(
+            OperationCategory.BACKGROUND,
+            "STEP import",
+            phase="Reading STEP geometry…",
+            cancellable=False,
+            blocking_scopes={"step_import"},
+        )
         self._emit_state()
-        threading.Thread(target=self._import_step_worker, args=(path,), daemon=True).start()
+        self._step_task_token = self._task_runner.submit(lambda: self.application.import_step(path))
 
-    def _import_step_worker(self, path: Path) -> None:
-        try:
-            model = self.application.import_step(path)
-        except Exception as exc:
-            self.step_import_completed.emit(None, str(exc))
+    @Slot(object)
+    def _finish_background_task(self, result: TaskResult) -> None:
+        if result.token == self._preview_task_token:
+            self._preview_task_token = 0
+            if self._preview_task_generation != self._preview_generation:
+                return
+            if result.error is not None:
+                self._preview_summary = "Enter valid settings to preview the toolpath."
+                self._finish_operation(success=False, error=str(result.error), recovery_action="Review settings")
+            else:
+                artifact = result.value
+                generated = artifact.result
+                self._preview_strokes = self._strokes_for_qml(generated.strokes)
+                self._preview_stock_width = 0.0
+                self._preview_stock_height = 0.0
+                suffix = f" · {generated.border}" if hasattr(generated, "border") else ""
+                self._preview_summary = f"{generated.width:.1f} × {generated.height:.1f} mm · {generated.stroke_count} strokes{suffix}"
+                self._finish_operation(success=True, summary="Preview ready")
+            self._emit_state()
+            return
+        if result.token != self._step_task_token:
+            return
+        self._step_task_token = 0
+        if result.error is not None:
+            self._finish_step_import(None, str(result.error))
         else:
-            self.step_import_completed.emit(model, "")
+            self._finish_step_import(result.value, "")
 
     @Slot(object, str)
     def _finish_step_import(self, model: object, error: str) -> None:
@@ -779,6 +990,7 @@ class ControllerViewModel(QObject):
             self._step_source_text = "STEP import failed"
             self._step_import_status = f"Import failed: {detail}"
             self._set_notice(f"STEP import rejected — {detail}")
+            self._finish_operation(success=False, error=detail, recovery_action="Import STEP")
             self._emit_state()
             return
         self._step_model = model
@@ -794,6 +1006,7 @@ class ControllerViewModel(QObject):
         self._step_preview_valid = False
         self._set_step_isometric_model(model)
         self._set_notice(f"Imported planar STEP model {model.path.name}")
+        self._finish_operation(success=True, summary=f"Imported {model.path.name}")
         self._emit_state()
         self.step_model_imported.emit(self._recommended_step_mode(model))
 
@@ -1579,6 +1792,15 @@ class ControllerViewModel(QObject):
         self._work_zero_text = "Not confirmed"
         self._spindle_text = "Off"
         self._guided_preflight_confirmed = False
+        self._issue = IssueSnapshot(
+            severity="error",
+            title="Controller disconnected",
+            explanation=reason or "The controller connection was closed.",
+            spindle_uncertain=False,
+            reference_lost=True,
+            work_zero_lost=True,
+            actions=("Connect", "Open console"),
+        )
         self._emit_state()
 
     def _guided_ready(self) -> tuple[bool, str]:
@@ -1613,6 +1835,104 @@ class ControllerViewModel(QObject):
     def _set_notice(self, message: str) -> None:
         self.toast_requested.emit(message)
 
+    def _finish_operation(
+        self,
+        *,
+        success: bool,
+        summary: str = "",
+        error: str = "",
+        recovery_action: str = "",
+    ) -> None:
+        if self._active_operation is None:
+            return
+        self._operations.finish(
+            self._active_operation.token,
+            success=success,
+            summary=summary,
+            error=error,
+            recovery_action=recovery_action,
+        )
+        self._active_operation = None
+
+    def _derive_readiness(self) -> ReadinessSnapshot:
+        if not self.connected:
+            return ReadinessSnapshot(next_action="Connect", reason="Connect to USB or Wi-Fi TCP first.")
+        if self.application.motion_busy or self.application.job_active:
+            return ReadinessSnapshot(
+                connection="complete",
+                reference="complete" if self.application.reference_trusted else "required",
+                work_zero="complete" if self.application.work_zero_confirmed else "required",
+                job="complete" if self.program else "required",
+                ready="working",
+                next_action="Monitor operation",
+                reason="A machine operation is in progress; keep the safety controls available.",
+            )
+        if self.status is None or not self.status.can_jog:
+            return ReadinessSnapshot(connection="complete", next_action="Wait for Idle", reason="Wait for a fresh GRBL Idle report.")
+        if not self.application.reference_trusted:
+            return ReadinessSnapshot(connection="complete", reference="required", next_action="Establish reference", reason="Manually position the machine, then establish its trusted reference.")
+        if not self.application.work_zero_confirmed:
+            return ReadinessSnapshot(connection="complete", reference="complete", work_zero="required", next_action="Set work zero", reason="Jog to the material origin and set XYZ work zero.")
+        if self.program is None:
+            return ReadinessSnapshot(connection="complete", reference="complete", work_zero="complete", next_action="Create or load job", reason="Create text/plaque/STEP output or load validated G-code.")
+        fits, reason = self.application.preflight()
+        if not fits:
+            return ReadinessSnapshot(connection="complete", reference="complete", work_zero="complete", job="warning", next_action="Review job", reason=reason)
+        return ReadinessSnapshot(connection="complete", reference="complete", work_zero="complete", job="complete", ready="complete", next_action="Run job", reason="All guarded prerequisites are satisfied.")
+
+    def _derive_issue(self) -> IssueSnapshot | None:
+        if not self.connected:
+            return self._issue if self._issue and self._issue.title == "Controller disconnected" else None
+        if self.application.job_state == "failed":
+            return IssueSnapshot(
+                title="Job stopped",
+                explanation=self.application.job.streamer.error or "The controller rejected the job.",
+                spindle_uncertain=True,
+                reference_lost=True,
+                work_zero_lost=True,
+                reload_required=True,
+                actions=("Spindle off", "Reconnect", "Reload job", "Open console"),
+            )
+        if self.status is not None and self.status.state in {"Alarm", "Door", "Sleep"}:
+            return IssueSnapshot(
+                title=f"Controller {self.status.state}",
+                explanation="Motion trust may be lost. Stop safely, inspect the machine, and re-establish the reference before moving again.",
+                reference_lost=True,
+                work_zero_lost=True,
+                actions=("Spindle off", "Establish reference", "Open console"),
+            )
+        return None
+
+    def _sync_controller_operation(self) -> None:
+        """Reflect authoritative service activity without owning its lifecycle."""
+        if self.application.job_active:
+            if self._active_operation is None:
+                self._active_operation = self._operations.begin(
+                    OperationCategory.JOB,
+                    "Engraving job",
+                    phase="Running…",
+                    cancellable=True,
+                    blocking_scopes={"machine_motion", "job"},
+                )
+            return
+        if self.application.motion_busy:
+            phase = self.application.motion.phase.replace("_", " ").capitalize()
+            if self._active_operation is None:
+                self._active_operation = self._operations.begin(
+                    OperationCategory.MACHINE_MOTION,
+                    "Machine motion",
+                    phase=phase,
+                    cancellable=True,
+                    blocking_scopes={"machine_motion"},
+                )
+            elif self._active_operation.category is OperationCategory.MACHINE_MOTION:
+                updated = self._operations.update(self._active_operation.token, phase=phase)
+                if updated is not None:
+                    self._active_operation = updated
+            return
+        if self._active_operation is not None and self._active_operation.category in {OperationCategory.MACHINE_MOTION, OperationCategory.JOB}:
+            self._finish_operation(success=True, summary="Controller confirmed complete")
+
     def _request_confirmation(self, operation: str, payload: object, title: str, message: str) -> None:
         self._confirmation_sequence += 1
         self._confirmation_token = f"{operation}:{self._confirmation_sequence}"
@@ -1626,6 +1946,47 @@ class ControllerViewModel(QObject):
         self._emit_state()
 
     def _emit_state(self) -> None:
+        """Project state once, with narrow signals for high-frequency consumers."""
+        self._sync_controller_operation()
+        readiness = self._derive_readiness()
+        issue = self._derive_issue()
+        operation = self._active_operation
+        if readiness != self._last_readiness_snapshot:
+            self._last_readiness_snapshot = readiness
+            self._readiness_snapshot = readiness
+            self.readiness_changed.emit()
+        if issue != self._last_issue:
+            self._last_issue = issue
+            self._issue = issue
+            self.issues_changed.emit()
+        if operation != self._last_operation_snapshot:
+            self._last_operation_snapshot = operation
+            self.operation_changed.emit()
+        position_projection = (self._machine_position_text, self._work_position_text)
+        now = time.monotonic()
+        safety_changed = self._state_text in {"Alarm", "Door", "Sleep"} or self._spindle_text not in {"Off", "0 RPM"}
+        if position_projection != self._last_position_projection and (safety_changed or now - self._position_emit_at >= 1 / 30):
+            self._last_position_projection = position_projection
+            self._position_emit_at = now
+            self.position_changed.emit()
+        preview_fingerprint = (
+            self._preview_summary,
+            self._job_file_text,
+            len(self._preview_strokes),
+            len(self._preview_model_strokes),
+            self._step_preview_valid,
+        )
+        if preview_fingerprint != self._last_preview_fingerprint:
+            self._last_preview_fingerprint = preview_fingerprint
+            self.preview_changed.emit()
+        job_projection = (self.application.job_state, self.application.job_progress, self.application.job_active)
+        if job_projection != self._last_job_projection:
+            self._last_job_projection = job_projection
+            self.job_changed.emit()
+        connection_projection = (self.connected, self._connection_text)
+        if connection_projection != self._last_connection_projection:
+            self._last_connection_projection = connection_projection
+            self.connection_changed.emit()
         self.state_changed.emit()
 
     @staticmethod

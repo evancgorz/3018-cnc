@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs as PlatformDialogs
 import QtQuick.Layouts
+import "components"
 
 ApplicationWindow {
     id: window
@@ -23,10 +24,32 @@ ApplicationWindow {
         success: Qt.color("#40C4D9")
     })
 
-    property int workspace: 2
+    property int workspace: appViewModel ? appViewModel.initial_workspace : 2
     property string toastText: ""
     property string selectedTransport: "USB serial"
     property bool exitBypass: false
+
+    readonly property var readinessEntries: [
+        { label: "Connection", status: appViewModel ? appViewModel.readiness_connection : "required", action: "Connect", reason: appViewModel ? appViewModel.readiness_reason : "Connect to the controller." },
+        { label: "Reference", status: appViewModel ? appViewModel.readiness_reference : "required", action: "Establish reference", reason: "Trust the machine position before guarded motion." },
+        { label: "Work zero", status: appViewModel ? appViewModel.readiness_work_zero : "required", action: "Set work zero", reason: "Set the origin on the material." },
+        { label: "Job", status: appViewModel ? appViewModel.readiness_job : "required", action: "Create or load job", reason: "Prepare a validated toolpath." },
+        { label: "Ready", status: appViewModel ? appViewModel.readiness_ready : "required", action: "Review & run", reason: appViewModel ? appViewModel.readiness_reason : "Complete the readiness steps." }
+    ]
+
+    function routeReadinessAction(action) {
+        if (action === "Connect") { connectionDialog.open(); return }
+        if (action === "Establish reference" || action === "Set work zero") { workspace = 2; return }
+        if (action === "Create or load job") { workspace = 0; return }
+        workspace = 1
+    }
+
+    function routeIssueAction(action) {
+        if (action === "Connect" || action === "Reconnect") { connectionDialog.open(); return }
+        if (action === "Reload job") { workspace = 0; return }
+        if (action === "Open console") { consoleDialog.open(); return }
+        workspace = 2
+    }
 
     onClosing: function(closeEvent) {
         if (exitBypass) {
@@ -227,6 +250,8 @@ ApplicationWindow {
         appPalette: window.palette
     }
 
+    onWorkspaceChanged: if (appViewModel) appViewModel.save_workspace(workspace)
+
     CommissioningDialog {
         id: commissioningDialog
         appPalette: window.palette
@@ -245,11 +270,11 @@ ApplicationWindow {
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
             if (!appViewModel) return
-            if (plaqueMode) appViewModel.preview_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
-            else appViewModel.preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
+            if (plaqueMode) appViewModel.request_preview_plaque(titleField.text, subtitleField.text, subtitleCheck.checked, titleFontCombo.currentText, subtitleFontCombo.currentText, Number(titleHeightField.text), Number(subtitleHeightField.text), Number(widthField.text), Number(plaqueHeightField.text), Number(marginField.text), borderCombo.currentText, Number(plaqueDepthField.text), Number(plaqueSafeField.text), Number(plaqueCutField.text), Number(plaquePlungeField.text), Number(plaqueRpmField.text))
+            else appViewModel.request_preview_text(textField.text, fontCombo.currentText, Number(heightField.text), Number(depthField.text), Number(safeField.text), Number(cutField.text), Number(plungeField.text), Number(letterSpacingField.text), Number(lineSpacingField.text), alignmentCombo.currentText, Number(rpmField.text))
         }
         onOpened: refreshPreview()
-        onClosed: if (appViewModel) appViewModel.preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0)
+        onClosed: if (appViewModel) appViewModel.request_preview_text("", "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0)
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
             Label { text: "Create a centerline engraving or a bordered plaque from the bundled stroke fonts."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -1022,7 +1047,7 @@ ApplicationWindow {
     }
 
     header: Rectangle {
-        height: 102
+        height: 192
         color: window.palette.surface
         border.color: window.palette.divider
         border.width: 1
@@ -1077,6 +1102,24 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 Label { text: "TTC 3018 workspace"; color: window.palette.subtle; font.pixelSize: 11 }
             }
+
+            ReadinessStrip {
+                id: readinessStrip
+                Layout.fillWidth: true
+                Layout.preferredHeight: 42
+                palette: window.palette
+                entries: window.readinessEntries
+                onActivated: window.routeReadinessAction(action)
+            }
+            OperationBanner {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                palette: window.palette
+                active: appViewModel && appViewModel.operation_active
+                name: appViewModel ? appViewModel.operation_name : ""
+                phase: appViewModel ? appViewModel.operation_phase : ""
+                progress: appViewModel ? appViewModel.operation_progress : 0
+            }
         }
     }
 
@@ -1097,6 +1140,23 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             StatusMetric { name: "Spindle"; value: appViewModel ? appViewModel.spindle : "Off"; tone: window.palette.muted }
         }
+    }
+
+    IssueBanner {
+        id: issueBanner
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.topMargin: 198
+        z: 20
+        palette: window.palette
+        active: appViewModel && appViewModel.has_issue
+        title: appViewModel ? appViewModel.issue_title : ""
+        explanation: appViewModel ? appViewModel.issue_explanation : ""
+        actions: appViewModel ? appViewModel.issue_actions : []
+        onActionRequested: window.routeIssueAction(action)
     }
 
     StackLayout {
@@ -1482,7 +1542,7 @@ ApplicationWindow {
                 ctx.beginPath(); ctx.arc(zero[0], zero[1], 5, 0, Math.PI * 2); ctx.fill()
             }
         }
-        Connections { target: appViewModel; function onState_changed() { isoCanvas.requestPaint() } }
+        Connections { target: appViewModel; function onPreview_changed() { isoCanvas.requestPaint() } function onState_changed() { if (!appViewModel || appViewModel.preview_strokes.length === 0) isoCanvas.requestPaint() } }
         Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 14; spacing: 8
             Pill { label: parent.parent.modeLabel; tone: window.palette.accent }
             Pill { visible: appViewModel && appViewModel.step_isometric_paths.length > 0; label: "Validated proposal"; tone: window.palette.success }
@@ -1586,7 +1646,7 @@ ApplicationWindow {
                 ctx.beginPath(); ctx.arc(workZeroX, workZeroY, 6, 0, Math.PI * 2); ctx.fill()
             }
         }
-        Connections { target: appViewModel; function onState_changed() { canvas.requestPaint() } }
+        Connections { target: appViewModel; function onPreview_changed() { canvas.requestPaint() } function onState_changed() { if (!appViewModel || appViewModel.preview_strokes.length === 0) canvas.requestPaint() } }
         Row { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 14; spacing: 8
             Pill { label: parent.parent.modeLabel; tone: window.palette.accent }
             Pill { visible: parent.parent.showEnvelope; label: "Virtual envelope"; tone: window.palette.warning }

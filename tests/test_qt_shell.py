@@ -178,6 +178,18 @@ def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
 
     view_model.preview_text("Hello", "Cursive", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Center", 0)
     assert view_model.preview_strokes
+
+
+def test_qt_preview_requests_are_debounced_and_complete_offscreen(qapp) -> None:
+    _engine, view_model = build_engine()
+    for text in ("H", "He", "Hello"):
+        view_model.request_preview_text(text, "Simple", 8, -0.3, 3, 300, 100, 0.18, 1.4, "Left", 0)
+    deadline = time.monotonic() + 2
+    while view_model.operation_active and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert not view_model.operation_active
+    assert "Hello" in view_model.preview_summary or view_model.preview_strokes
     assert view_model.preview_stock_width == 0
 
     view_model.create_plaque(
