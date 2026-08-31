@@ -153,15 +153,19 @@ class MotionService:
         self._changed()
         return ActionOutcome(True, outcome.message)
 
-    def return_to_work_zero(self, feed: float) -> ActionOutcome:
-        outcome, moves = self.session.plan_return_to_work_zero()
+    def return_to_work_zero(
+        self,
+        feed: float,
+        persisted_work_offset: Position | None = None,
+    ) -> ActionOutcome:
+        outcome, moves = self.session.plan_return_to_work_zero(persisted_work_offset)
         if not outcome.accepted:
             return outcome
         self._position_queue = [(axis, distance, feed) for axis, distance in moves]
         self._position_move_active = bool(self._position_queue)
         self._send_next_position_move()
         self._changed()
-        return ActionOutcome(True, "Returning to work zero via safe Z")
+        return ActionOutcome(True, f"{outcome.message.rstrip('.')} via safe Z")
 
     def return_to_reference(self, feed: float) -> ActionOutcome:
         return self.move_to(Position(0.0, 0.0, 0.0), feed)

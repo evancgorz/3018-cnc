@@ -125,10 +125,20 @@ class MachineSession:
             return ActionOutcome(False, str(exc)), []
         return ActionOutcome(True, "Position move accepted."), moves
 
-    def plan_return_to_work_zero(self) -> tuple[ActionOutcome, list[tuple[str, float]]]:
-        if not self.work_zero_confirmed or self.work_offset is None:
-            return ActionOutcome(False, "Work zero is not confirmed by a fresh GRBL report."), []
+    def plan_return_to_work_zero(
+        self,
+        persisted_work_offset: Position | None = None,
+    ) -> tuple[ActionOutcome, list[tuple[str, float]]]:
+        using_persisted = not self.work_zero_confirmed or self.work_offset is None
+        work_offset = persisted_work_offset if using_persisted else self.work_offset
+        if work_offset is None:
+            return ActionOutcome(False, "No persisted work-zero position is available."), []
         if not self.envelope.trusted or self.envelope.reference is None:
             return ActionOutcome(False, "The virtual machine reference is not trusted."), []
-        target = work_zero_virtual_target(self.envelope.reference, self.work_offset)
-        return self.plan_move_to(target)
+        target = work_zero_virtual_target(self.envelope.reference, work_offset)
+        outcome, moves = self.plan_move_to(target)
+        if outcome.accepted and using_persisted:
+            return ActionOutcome(True, "Returning to the persisted work-zero position."), moves
+        if outcome.accepted:
+            return ActionOutcome(True, "Returning to the confirmed work-zero position."), moves
+        return outcome, moves

@@ -42,6 +42,27 @@ def test_return_to_work_zero_uses_safe_position_plan() -> None:
     assert moves == [("Z", 23), ("X", 15), ("Y", 10), ("Z", -21)]
 
 
+def test_return_to_work_zero_can_use_persisted_offset_without_fresh_wco() -> None:
+    session = ready_session()
+    session.update_status(GrblStatus("Idle", machine_position=Position(20, 30, 10)))
+
+    outcome, moves = session.plan_return_to_work_zero(Position(35, 40, 12))
+
+    assert outcome.accepted
+    assert "persisted" in outcome.message
+    assert moves == [("Z", 23), ("X", 15), ("Y", 10), ("Z", -21)]
+
+
+def test_persisted_work_zero_still_obeys_virtual_envelope() -> None:
+    session = ready_session()
+
+    outcome, moves = session.plan_return_to_work_zero(Position(400, 40, 12))
+
+    assert not outcome.accepted
+    assert moves == []
+    assert "outside" in outcome.message
+
+
 def test_establishing_reference_preserves_confirmed_work_zero() -> None:
     session = MachineSession(profile=MachineProfile(travel_x=300, travel_y=180, travel_z=45, safe_z=30))
     session.update_status(

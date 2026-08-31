@@ -15,6 +15,7 @@ from ttc3018_control.application.state import ApplicationState, ConnectionMode, 
 from ttc3018_control.application.wifi_service import WifiProvisioningService
 from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
+from ttc3018_control.work_zero_settings import SavedWorkZero, WorkZeroStore
 
 
 def test_application_state_is_immutable_and_qt_independent() -> None:
@@ -169,6 +170,28 @@ def test_confirmed_work_zero_restores_only_after_matching_fresh_wco(tmp_path) ->
         GrblStatus("Idle", machine_position=Position(21, 20, 5), work_offset=Position(19, 20, 5))
     )
     assert not mismatch.work_zero_confirmed
+
+
+def test_controller_returns_to_persisted_work_zero_without_fresh_wco(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    WorkZeroStore(tmp_path / "config" / "work-zero.json").save(SavedWorkZero(35, 40, 12))
+    controller = ApplicationController(tmp_path)
+    controller.session.profile = MachineProfile(travel_x=300, travel_y=180, travel_z=45, safe_z=30)
+    transport = _Transport()
+    transport.connected = True
+    sent: list[bytes] = []
+    transport.send_line = lambda command, display_text=None: sent.append(command)  # type: ignore[method-assign]
+    controller.set_transport_for_testing(transport)
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(10, 20, 3)))
+    assert controller.establish_reference().accepted
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(20, 30, 10)))
+
+    outcome = controller.return_to_work_zero()
+
+    assert outcome.accepted
+    assert "persisted" in outcome.message
+    assert sent == [b"$J=G91 G21 Z23 F500\n"]
 
 
 def test_controller_rejects_overlapping_motion_and_job_start_without_preflight(tmp_path) -> None:

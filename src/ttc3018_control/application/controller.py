@@ -448,7 +448,8 @@ class ApplicationController:
         blocked = self._motion_operation_allowed()
         if not blocked.accepted:
             return blocked
-        return self.motion.return_to_work_zero(feed)
+        persisted = self._saved_work_zero.position if self._saved_work_zero is not None else None
+        return self.motion.return_to_work_zero(feed, persisted)
 
     def set_work_zero(self, axes: str) -> ActionOutcome:
         if not self.connected:
