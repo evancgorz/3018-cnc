@@ -12,7 +12,7 @@ from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
 from ..machine_catalog import MachineCatalog, MachineCatalogStore
-from ..machine_config import MachineDefinition
+from ..machine_config import MachineDefinition, SwitchMode
 from ..controller_adapters import Grbl11Adapter, GenericGrblAdapter
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
@@ -459,6 +459,37 @@ class ApplicationController:
         except (OSError, ValueError, TypeError) as exc:
             return ActionOutcome(False, f"Machine selection failed — {exc}")
         return ActionOutcome(True, f"Selected machine {self._machine_definition.name}.")
+
+    def save_capabilities(self, *, limit_switches: bool, z_plate: bool, tool_setter: bool,
+                          movable_xyz: bool, fixed_fixture: bool) -> ActionOutcome:
+        if self.connected or self.motion_busy or self.job_active:
+            return ActionOutcome(False, "Machine capabilities can only be changed while disconnected and idle.")
+        if self.machine_catalog is None or self._machine_definition is None:
+            return ActionOutcome(False, "Machine catalog is unavailable for this controller instance.")
+        axes = self._machine_definition.axes
+        if limit_switches:
+            axes = {axis: replace(item, switch_mode=SwitchMode.SINGLE, input_pin=axis) for axis, item in axes.items()}
+        else:
+            axes = {axis: replace(item, switch_mode=SwitchMode.NONE, input_pin=None, hard_limit=False) for axis, item in axes.items()}
+        from ..machine_config import ProbeDefinition, ProbeKind
+        probes = []
+        if z_plate:
+            probes.append(ProbeDefinition(ProbeKind.MOVABLE_Z_PLATE, enabled=True))
+        if tool_setter:
+            probes.append(ProbeDefinition(ProbeKind.FIXED_TOOL_SETTER, enabled=True))
+        if movable_xyz:
+            probes.append(ProbeDefinition(ProbeKind.MOVABLE_XYZ, enabled=True))
+        if fixed_fixture:
+            probes.append(ProbeDefinition(ProbeKind.FIXED_XYZ, enabled=True))
+        updated = replace(self._machine_definition, axes=axes, probes=tuple(probes))
+        try:
+            updated.validate()
+            self.machine_catalog = self.machine_catalog_store.upsert(self.machine_catalog, updated)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Capability configuration rejected — {exc}")
+        self._machine_definition = updated
+        self.session.invalidate_reference("Machine capabilities changed; recommission and re-establish reference")
+        return ActionOutcome(True, "Machine capabilities saved; commissioning evidence and session reference require review.")
 
     def home_machine(self) -> ActionOutcome:
         status = self.status

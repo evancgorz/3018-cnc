@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 import json
 from typing import Any
+
+from .machine_records import MachineRecordStore
 from pathlib import Path
 
 
@@ -206,3 +208,17 @@ def capability_ready(
     if evidence is None or evidence.status is not CommissioningStatus.COMMISSIONED:
         return False, "Capability must be commissioned for the current machine configuration."
     return True, "Capability is ready."
+
+
+class CommissioningRecordStore:
+    def __init__(self, path: Path) -> None:
+        self.records = MachineRecordStore(path)
+
+    def load(self, machine_id: str) -> CommissioningRecord | None:
+        data = self.records.load(machine_id)
+        return CommissioningRecord.from_dict(data) if data is not None else None
+
+    def save(self, record: CommissioningRecord) -> None:
+        if not record.machine_id.strip():
+            raise ValueError("Commissioning record requires a machine ID")
+        self.records.save(record.machine_id, record.to_dict())

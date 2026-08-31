@@ -1108,6 +1108,15 @@ class ControllerViewModel(QObject):
         self._set_notice(outcome.message)
         self._emit_state()
 
+    @Slot(bool, bool, bool, bool, bool)
+    def save_machine_capabilities(self, limit_switches: bool, z_plate: bool, tool_setter: bool,
+                                  movable_xyz: bool, fixed_fixture: bool) -> None:
+        outcome = self.application.save_capabilities(limit_switches=limit_switches, z_plate=z_plate,
+                                                     tool_setter=tool_setter, movable_xyz=movable_xyz,
+                                                     fixed_fixture=fixed_fixture)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
     @Slot(str)
     def select_machine(self, label: str) -> None:
         for machine in self.application.machine_profiles:

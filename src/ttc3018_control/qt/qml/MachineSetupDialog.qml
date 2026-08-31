@@ -5,6 +5,11 @@ import QtQuick.Layouts
 Dialog {
     id: dialog
     property var appPalette: ({ background: "#181A1F", surface: "#22252B", raised: "#2B2F36", divider: "#3A3F48", text: "#F2F4F7", muted: "#A8AFBA", subtle: "#737B87", warning: "#F5B942", accent: "#168BFF" })
+    property bool switchesEnabled: false
+    property bool zPlateEnabled: false
+    property bool toolSetterEnabled: false
+    property bool movableXyzEnabled: false
+    property bool fixedFixtureEnabled: false
     modal: true
     title: "Machine setup"
     width: 720
@@ -42,11 +47,12 @@ Dialog {
             }
             ColumnLayout { spacing: 10
                 Label { text: "Optional hardware"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
-                CheckBox { text: "Limit switches and automatic homing"; enabled: false; checked: false }
-                CheckBox { text: "Movable Z touch plate"; enabled: false; checked: false }
-                CheckBox { text: "Fixed tool setter"; enabled: false; checked: false }
-                CheckBox { text: "Movable XYZ probe / fixed fixture"; enabled: false; checked: false }
-                Label { text: "These controls are intentionally read-only in this first setup surface until the corresponding typed configuration fields are exposed. The current 3018 remains an all-options-off profile."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                CheckBox { text: "Limit switches and automatic homing"; checked: dialog.switchesEnabled; onToggled: dialog.switchesEnabled = checked }
+                CheckBox { text: "Movable Z touch plate"; checked: dialog.zPlateEnabled; onToggled: dialog.zPlateEnabled = checked }
+                CheckBox { text: "Fixed tool setter"; checked: dialog.toolSetterEnabled; onToggled: dialog.toolSetterEnabled = checked }
+                CheckBox { text: "Movable XYZ probe"; checked: dialog.movableXyzEnabled; onToggled: dialog.movableXyzEnabled = checked }
+                CheckBox { text: "Fixed XYZ fixture"; checked: dialog.fixedFixtureEnabled; onToggled: dialog.fixedFixtureEnabled = checked }
+                Label { text: "Switches use one input per axis in this first adapter. Pin polarity, end selection, probe dimensions, and fixture approach geometry are commissioned separately."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 Item { Layout.fillHeight: true }
             }
             ColumnLayout { spacing: 10
@@ -59,6 +65,7 @@ Dialog {
         }
         RowLayout { Layout.fillWidth: true
             Item { Layout.fillWidth: true }
+            Button { text: "Save declarations"; onClicked: { if (appViewModel) appViewModel.save_machine_capabilities(dialog.switchesEnabled, dialog.zPlateEnabled, dialog.toolSetterEnabled, dialog.movableXyzEnabled, dialog.fixedFixtureEnabled); dialog.close() } }
             Button { text: "Close"; onClicked: dialog.close() }
         }
     }

@@ -3,6 +3,7 @@ from pathlib import Path
 from ttc3018_control.machine_catalog import MachineCatalogStore
 from ttc3018_control.machine_config import MachineDefinition
 from ttc3018_control.machine_state import MachineProfile
+from ttc3018_control.application.controller import ApplicationController
 
 
 def test_catalog_migrates_legacy_profile_idempotently(tmp_path: Path) -> None:
@@ -32,3 +33,11 @@ def test_catalog_crud_and_last_machine_guard(tmp_path: Path) -> None:
     else:
         raise AssertionError("last profile deletion was accepted")
 
+
+def test_controller_saves_optional_capability_declarations(tmp_path: Path) -> None:
+    controller = ApplicationController(tmp_path)
+    outcome = controller.save_capabilities(limit_switches=True, z_plate=True, tool_setter=False,
+                                           movable_xyz=False, fixed_fixture=False)
+    assert outcome.accepted
+    assert all(axis.switch_mode.value == "single" for axis in controller.machine_definition.axes.values())
+    assert [probe.kind.value for probe in controller.machine_definition.probes] == ["movable_z_plate"]
