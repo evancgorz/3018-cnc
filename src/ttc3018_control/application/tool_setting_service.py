@@ -6,6 +6,7 @@ from typing import Callable
 
 from ..controller_adapters import ControllerAdapter
 from ..grbl import Position
+from ..grbl import parse_tool_length_report
 from ..tool_settings import ToolSetterRecord, calculate_tool_length_offset
 from .machine_session import ActionOutcome, MachineSession
 
@@ -18,6 +19,7 @@ class ToolSettingService:
         self._send_line = send_line
         self._on_notice = on_notice or (lambda _message: None)
         self.active_offset: float | None = None
+        self.pending_offset: float | None = None
 
     def apply_measurement(self, record: ToolSetterRecord, measured_trigger_z: float, *, connected: bool,
                           spindle_off: bool) -> ActionOutcome:
@@ -36,21 +38,43 @@ class ToolSettingService:
             self._send_line(self.adapter.tool_offset_command(offset))
         except (RuntimeError, ValueError) as exc:
             return ActionOutcome(False, f"Tool offset was not sent — {exc}")
-        self.active_offset = offset
+        self.pending_offset = offset
         self._on_notice(f"Tool length offset requested: {offset:.4f} mm")
         return ActionOutcome(True, "Tool length offset requested; wait for the controller confirmation.")
 
     def clear(self, *, connected: bool) -> ActionOutcome:
         if not connected:
             self.active_offset = None
+            self.pending_offset = None
             return ActionOutcome(True, "Tool offset cleared locally after disconnect.")
         try:
             self._send_line(self.adapter.clear_tool_offset_command())
         except (RuntimeError, ValueError) as exc:
             return ActionOutcome(False, f"Tool offset clear was not sent — {exc}")
         self.active_offset = None
+        self.pending_offset = None
         return ActionOutcome(True, "Tool length offset cleared.")
+
+    def handle_response(self, response: str) -> bool:
+        if self.pending_offset is None:
+            return False
+        text = response.strip().lower()
+        if text.startswith("error:") or text.startswith("alarm:"):
+            self.pending_offset = None
+            self._on_notice(f"Tool offset rejected — {response.strip()}")
+            return True
+        reported = parse_tool_length_report(response)
+        if reported is not None:
+            if abs(reported - self.pending_offset) > 0.001:
+                self.pending_offset = None
+                self._on_notice("Tool offset confirmation did not match the requested value")
+            else:
+                self.active_offset = reported
+                self.pending_offset = None
+                self._on_notice("Tool length offset confirmed")
+            return True
+        return False
 
     def reset(self) -> None:
         self.active_offset = None
-
+        self.pending_offset = None

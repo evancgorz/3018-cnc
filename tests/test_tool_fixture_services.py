@@ -21,6 +21,9 @@ def test_tool_service_requires_repeatable_record_and_sends_tlo() -> None:
     record = ToolSetterRecord("m1", Position(1, 2, 30), 10, samples=(4, 4.01, 4.02))
     assert service.apply_measurement(record, 8, connected=True, spindle_off=True).accepted
     assert sent == [b"G43.1 Z2\n"]
+    assert service.active_offset is None
+    assert service.handle_response("[TLO:2]")
+    assert service.active_offset == 2
     assert service.clear(connected=True).accepted
     assert sent[-1] == b"G49\n"
 
@@ -34,4 +37,3 @@ def test_fixture_service_never_restores_without_trusted_reference() -> None:
     outcome = service.restore_from_probe(record, Position(4, 5, 6), connected=True, spindle_off=True)
     assert not outcome.accepted
     assert sent == []
-

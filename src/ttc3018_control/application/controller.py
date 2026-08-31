@@ -527,6 +527,7 @@ class ApplicationController:
         self.homing.reset(outcome.message)
         self.probing.reset()
         self.tool_setting.reset()
+        self.fixtures.reset()
         self.manual_pending_acks = 0
         self._preserve_reference_on_next_reset = False
         self.status = None
@@ -670,6 +671,7 @@ class ApplicationController:
         self.session.update_status(status)
         self.homing.observe_status(status, self.machine_definition)
         self.probing.observe_status(status)
+        self.fixtures.observe_status(status)
         if status.work_offset is not None:
             if awaiting_confirmation and self.session.work_zero_confirmed:
                 self._save_work_zero(status.work_offset)
@@ -710,6 +712,8 @@ class ApplicationController:
             return True
         if self.probing.handle_response(text):
             return True
+        if self.tool_setting.handle_response(text):
+            return True
         if self.motion.handle_response(text, feed):
             return True
         if self.manual_pending_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
@@ -729,6 +733,7 @@ class ApplicationController:
             self.homing.reset("GRBL reset")
         self.probing.reset()
         self.tool_setting.reset()
+        self.fixtures.reset()
         self.status = None
         self.session.clear_status(retain_work_zero=preserve_reference)
         if not preserve_reference:
