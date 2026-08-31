@@ -27,6 +27,8 @@ from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
 from .homing_service import HomingService
 from .probing_service import ProbePlan, ProbingService
+from .tool_setting_service import ToolSettingService
+from .fixture_service import FixtureService
 from .ports import ConnectionSettingsStorePort, ProfileStorePort, StepPrepareSettingsStorePort, WorkZeroStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 from .wifi_service import WifiProvisioningService
@@ -79,6 +81,8 @@ class ApplicationController:
                 profile = MachineProfile()
             self._machine_definition = MachineDefinition.legacy_3018(profile=profile)
             self.machine_id = self._machine_definition.machine_id
+        if hasattr(self.work_zero_store, "legacy_machine_id"):
+            self.work_zero_store.legacy_machine_id = MachineDefinition.legacy_3018().machine_id
         try:
             settings = self.connection_store.load()
         except (OSError, ValueError, TypeError):
@@ -129,6 +133,8 @@ class ApplicationController:
         )
         self.homing = HomingService(self.session, self.connection_service.send_line, self._publish_notice)
         self.probing = ProbingService(self.session, self.adapter, self.connection_service.send_line, on_notice=self._publish_notice)
+        self.tool_setting = ToolSettingService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
+        self.fixtures = FixtureService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
 
     def bind_callbacks(
         self,
@@ -209,6 +215,8 @@ class ApplicationController:
             profile=self.profile,
             program=program_snapshot,
             job=JobSnapshot(streamer.state, streamer.completed, streamer.total, streamer.error),
+            machine_id=self.machine_id or "",
+            machine_name=self.machine_definition.name,
         )
 
     @property
@@ -454,6 +462,8 @@ class ApplicationController:
             self.session.profile = self._machine_definition.to_profile()
             self.adapter = Grbl11Adapter() if self._machine_definition.controller.value == "grbl_1_1" else GenericGrblAdapter()
             self.probing = ProbingService(self.session, self.adapter, self.connection_service.send_line, on_notice=self._publish_notice)
+            self.tool_setting = ToolSettingService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
+            self.fixtures = FixtureService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
             self.session.invalidate_reference("Machine profile changed")
             self._saved_work_zero = self.work_zero_store.load(self.machine_id)
         except (OSError, ValueError, TypeError) as exc:
@@ -516,6 +526,7 @@ class ApplicationController:
         self.job.reset()
         self.homing.reset(outcome.message)
         self.probing.reset()
+        self.tool_setting.reset()
         self.manual_pending_acks = 0
         self._preserve_reference_on_next_reset = False
         self.status = None
@@ -717,6 +728,7 @@ class ApplicationController:
         else:
             self.homing.reset("GRBL reset")
         self.probing.reset()
+        self.tool_setting.reset()
         self.status = None
         self.session.clear_status(retain_work_zero=preserve_reference)
         if not preserve_reference:

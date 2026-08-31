@@ -387,6 +387,14 @@ class ControllerViewModel(QObject):
     def machine_id(self) -> str:
         return self.application.machine_id or ""
 
+    @Property(float, notify=state_changed)
+    def tool_length_offset(self) -> float:
+        return self.application.tool_setting.active_offset or 0.0
+
+    @Property(bool, notify=state_changed)
+    def tool_length_offset_active(self) -> bool:
+        return self.application.tool_setting.active_offset is not None
+
     @Property("QStringList", notify=state_changed)
     def machine_profiles(self) -> list[str]:
         return [f"{machine.name} ({machine.machine_id[:8]})" for machine in self.application.machine_profiles]

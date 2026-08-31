@@ -30,8 +30,9 @@ class SavedWorkZero:
 
 
 class WorkZeroStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, legacy_machine_id: str | None = None) -> None:
         self.path = path
+        self.legacy_machine_id = legacy_machine_id
 
     def load(self, machine_id: str | None = None) -> SavedWorkZero | None:
         if not self.path.exists():
@@ -41,6 +42,8 @@ class WorkZeroStore:
             data = data.get("machines", {}).get(machine_id)
             if data is None:
                 return None
+        elif machine_id is not None and self.legacy_machine_id is not None and machine_id != self.legacy_machine_id:
+            return None
         saved = SavedWorkZero(**data)
         saved.validate()
         return saved

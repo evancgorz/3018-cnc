@@ -52,4 +52,6 @@ class ApplicationState:
     program: ProgramSnapshot | None = None
     job: JobSnapshot = JobSnapshot()
     active_operation: str = ""
+    machine_id: str = ""
+    machine_name: str = ""
 

@@ -27,6 +27,14 @@ def test_legacy_work_zero_is_read_and_only_migrated_on_explicit_save(tmp_path: P
     assert store.load("new-machine") == legacy
 
 
+def test_legacy_work_zero_can_be_restricted_to_its_migrated_machine(tmp_path: Path) -> None:
+    path = tmp_path / "work-zero.json"
+    WorkZeroStore(path).save(SavedWorkZero(1, 2, 3))
+    store = WorkZeroStore(path, legacy_machine_id="legacy")
+    assert store.load("legacy") == SavedWorkZero(1, 2, 3)
+    assert store.load("other") is None
+
+
 def test_generic_machine_record_store_isolated_and_atomic(tmp_path: Path) -> None:
     store = MachineRecordStore(tmp_path / "commissioning.json")
     store.save("a", {"status": "commissioned"})
