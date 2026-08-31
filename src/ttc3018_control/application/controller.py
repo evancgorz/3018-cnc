@@ -10,6 +10,8 @@ from typing import Callable, Iterable
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
+from ..machine_catalog import MachineCatalog, MachineCatalogStore
+from ..machine_config import MachineDefinition
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
 from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
@@ -46,22 +48,39 @@ class ApplicationController:
         discover_hosts: Callable[[int], Iterable[str]] | None = None,
         usb_ports: Callable[[], list[tuple[str, str]]] | None = None,
     ) -> None:
+        self.machine_catalog_store = MachineCatalogStore(
+            root / "config" / "machines.json", root / "config" / "machine-profile.json"
+        )
+        self.machine_catalog: MachineCatalog | None = None
+        self._machine_definition: MachineDefinition | None = None
+        self.machine_id: str | None = None
         self.profile_store = profile_store or ProfileStore(root / "config" / "machine-profile.json")
         self.connection_store = connection_store or ConnectionSettingsStore(root / "config" / "connection.json")
         self.work_zero_store = work_zero_store or WorkZeroStore(root / "config" / "work-zero.json")
         self.step_prepare_store = step_prepare_store or StepPrepareSettingsStore(
             root / "config" / "step-prepare.json"
         )
-        try:
-            profile = self.profile_store.load()
-        except (OSError, ValueError, TypeError):
-            profile = MachineProfile()
+        if profile_store is None:
+            try:
+                self.machine_catalog = self.machine_catalog_store.load()
+                self._machine_definition = self.machine_catalog.selected()
+                self.machine_id = self._machine_definition.machine_id
+                profile = self._machine_definition.to_profile()
+            except (OSError, ValueError, TypeError):
+                profile = MachineProfile()
+        else:
+            try:
+                profile = self.profile_store.load()
+            except (OSError, ValueError, TypeError):
+                profile = MachineProfile()
+            self._machine_definition = MachineDefinition.legacy_3018(profile=profile)
+            self.machine_id = self._machine_definition.machine_id
         try:
             settings = self.connection_store.load()
         except (OSError, ValueError, TypeError):
             settings = ConnectionSettings()
         try:
-            saved_work_zero = self.work_zero_store.load()
+            saved_work_zero = self.work_zero_store.load(self.machine_id)
         except (OSError, ValueError, TypeError):
             saved_work_zero = None
         try:
@@ -188,6 +207,17 @@ class ApplicationController:
     @property
     def profile(self) -> MachineProfile:
         return self.session.profile
+
+    @property
+    def machine_definition(self) -> MachineDefinition:
+        """The selected machine's capability-aware definition."""
+        if self._machine_definition is None:
+            self._machine_definition = MachineDefinition.legacy_3018(profile=self.profile)
+        return self._machine_definition
+
+    @property
+    def machine_profiles(self) -> tuple[MachineDefinition, ...]:
+        return self.machine_catalog.machines if self.machine_catalog else (self.machine_definition,)
 
     @property
     def reference_trusted(self) -> bool:
@@ -399,6 +429,10 @@ class ApplicationController:
         profile.validate()
         self.profile_store.save(profile)
         self.session.profile = profile
+        if self.machine_catalog is not None and self._machine_definition is not None:
+            updated = MachineDefinition.legacy_3018(machine_id=self.machine_id, profile=profile)
+            self.machine_catalog = self.machine_catalog_store.upsert(self.machine_catalog, updated)
+            self._machine_definition = updated
 
     def save_step_prepare_settings(self, settings: StepPrepareSettings) -> None:
         settings.validate()
@@ -573,7 +607,7 @@ class ApplicationController:
     def _save_work_zero(self, offset: Position) -> None:
         saved = SavedWorkZero.from_position(offset)
         try:
-            self.work_zero_store.save(saved)
+            self.work_zero_store.save(saved, self.machine_id)
         except OSError:
             self._publish_notice("Work zero confirmed, but it could not be saved for the next session")
             return
@@ -582,7 +616,7 @@ class ApplicationController:
     def _clear_saved_work_zero(self) -> None:
         self._saved_work_zero = None
         try:
-            self.work_zero_store.clear()
+            self.work_zero_store.clear(self.machine_id)
         except OSError:
             self._publish_notice("Previous saved work zero could not be removed")
 
