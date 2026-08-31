@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 import json
+from typing import Any
 from pathlib import Path
 
 
@@ -118,3 +120,89 @@ class InputTestTracker:
     @staticmethod
     def _name(target: str) -> str:
         return "probe plate" if target == "P" else f"{target} limit switch"
+
+
+class CommissioningStatus(StrEnum):
+    OFF = "off"
+    DECLARED = "declared"
+    NEEDS_COMMISSIONING = "needs_commissioning"
+    IN_PROGRESS = "in_progress"
+    COMMISSIONED = "commissioned"
+    FAILED = "failed"
+    STALE = "stale"
+    UNSUPPORTED = "unsupported"
+
+
+@dataclass(frozen=True)
+class CapabilityEvidence:
+    """Machine-scoped proof that an optional capability was tested."""
+
+    status: CommissioningStatus = CommissioningStatus.DECLARED
+    fingerprint: str = ""
+    timestamp: str = ""
+    measurements: dict[str, float] | None = None
+    note: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["status"] = self.status.value
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CapabilityEvidence":
+        return cls(status=CommissioningStatus(data.get("status", CommissioningStatus.DECLARED)),
+                   fingerprint=str(data.get("fingerprint", "")), timestamp=str(data.get("timestamp", "")),
+                   measurements=dict(data.get("measurements") or {}) or None, note=str(data.get("note", "")))
+
+
+@dataclass(frozen=True)
+class CommissioningRecord:
+    machine_id: str
+    capabilities: dict[str, CapabilityEvidence]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"schema_version": 1, "machine_id": self.machine_id,
+                "capabilities": {key: value.to_dict() for key, value in self.capabilities.items()}}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CommissioningRecord":
+        if data.get("schema_version", 1) != 1:
+            raise ValueError("Unsupported commissioning schema version")
+        machine_id = str(data.get("machine_id", ""))
+        if not machine_id:
+            raise ValueError("Commissioning record requires a machine ID")
+        return cls(machine_id, {key: CapabilityEvidence.from_dict(value) for key, value in data.get("capabilities", {}).items()})
+
+
+def invalidate_evidence(
+    old_fingerprints: dict[str, str],
+    new_fingerprints: dict[str, str],
+    evidence: dict[str, CapabilityEvidence],
+) -> dict[str, CapabilityEvidence]:
+    """Mark only changed dependency areas stale, preserving cosmetic records."""
+    result = dict(evidence)
+    for capability, item in evidence.items():
+        if item.status not in {CommissioningStatus.COMMISSIONED, CommissioningStatus.STALE}:
+            continue
+        if old_fingerprints.get(capability) != new_fingerprints.get(capability):
+            result[capability] = CapabilityEvidence(
+                status=CommissioningStatus.STALE, fingerprint=new_fingerprints.get(capability, ""),
+                timestamp=item.timestamp, measurements=item.measurements, note="Machine configuration changed; recommission this capability."
+            )
+    return result
+
+
+def capability_ready(
+    capability: str,
+    *,
+    declared: bool,
+    evidence: CapabilityEvidence | None,
+    adapter_supported: bool,
+) -> tuple[bool, str]:
+    if not declared:
+        return False, "Capability is disabled in this machine profile."
+    if not adapter_supported:
+        return False, "The selected controller does not support this capability."
+    if evidence is None or evidence.status is not CommissioningStatus.COMMISSIONED:
+        return False, "Capability must be commissioned for the current machine configuration."
+    return True, "Capability is ready."

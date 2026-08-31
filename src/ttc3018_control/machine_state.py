@@ -69,6 +69,18 @@ class VirtualEnvelope:
         self.reference = machine_position
         self.invalid_reason = ""
 
+    def establish_homed(self, machine_position: Position, profile: MachineProfile, homing_ends: dict[str, str]) -> None:
+        """Establish the virtual minimum from a confirmed homing position."""
+        profile.validate()
+        values = {}
+        for axis, current, travel in zip("XYZ", (machine_position.x, machine_position.y, machine_position.z), profile.travels):
+            end = homing_ends.get(axis, "min")
+            if end not in {"min", "max"}:
+                raise ValueError(f"{axis} homing end must be min or max")
+            values[axis] = current if end == "min" else current - travel
+        self.reference = Position(values["X"], values["Y"], values["Z"])
+        self.invalid_reason = ""
+
     def invalidate(self, reason: str) -> None:
         self.reference = None
         self.invalid_reason = reason

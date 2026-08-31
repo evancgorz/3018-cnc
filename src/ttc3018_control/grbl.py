@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import re
 from typing import Mapping
 
@@ -102,12 +103,70 @@ def make_work_zero(axes: str) -> bytes:
     return f"G10 L20 P1 {values}\n".encode("ascii")
 
 
+def make_probe(axis: str, distance_mm: float, feed_mm_min: float) -> bytes:
+    """Build a bounded incremental GRBL probe move.
+
+    Probe moves intentionally use ordinary G-code, not ``$J``.  The
+    application only exposes this builder to the dedicated probing service;
+    ordinary job parsing continues to reject G38.
+    """
+    axis = axis.upper()
+    if axis not in {"X", "Y", "Z"}:
+        raise ValueError("Probe axis must be X, Y, or Z")
+    if distance_mm == 0 or not -1000 < distance_mm < 1000:
+        raise ValueError("Probe distance must be non-zero and bounded")
+    if not 0 < feed_mm_min <= 1500:
+        raise ValueError("Probe feed must be between 0 and 1500 mm/min")
+    return f"G91 G21 G38.2 {axis}{distance_mm:g} F{feed_mm_min:g}\n".encode("ascii")
+
+
+def make_probe_retract(axis: str, distance_mm: float, feed_mm_min: float) -> bytes:
+    axis = axis.upper()
+    if axis not in {"X", "Y", "Z"} or distance_mm == 0 or not 0 < feed_mm_min <= 1500:
+        raise ValueError("Invalid probe retract")
+    return f"G91 G21 {axis}{distance_mm:g} F{feed_mm_min:g}\n".encode("ascii")
+
+
+def make_work_offset(slot: int, position: Position) -> bytes:
+    if slot not in range(1, 7):
+        raise ValueError("GRBL work-coordinate slot must be between 1 and 6")
+    if not all(math.isfinite(value) for value in (position.x, position.y, position.z)):
+        raise ValueError("Work offset coordinates must be finite")
+    return f"G10 L20 P{slot} X{position.x:g} Y{position.y:g} Z{position.z:g}\n".encode("ascii")
+
+
+def make_tool_length_offset(z_offset: float) -> bytes:
+    if not math.isfinite(z_offset):
+        raise ValueError("Tool length offset must be finite")
+    return f"G43.1 Z{z_offset:g}\n".encode("ascii")
+
+
+def clear_tool_length_offset() -> bytes:
+    return b"G49\n"
+
+
 def parse_setting(line: str) -> tuple[int, float] | None:
     """Parse a GRBL setting response such as ``$22=1``."""
     match = re.fullmatch(r"\s*\$(\d+)\s*=\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*", line)
     if match is None:
         return None
     return int(match.group(1)), float(match.group(2))
+
+
+def parse_probe_report(line: str) -> tuple[Position, bool] | None:
+    """Parse GRBL's ``[PRB:x,y,z:1]`` report."""
+    match = re.fullmatch(r"\s*\[PRB:([^]]+)\]\s*", line)
+    if match is None:
+        return None
+    values = match.group(1).rsplit(":", 1)
+    if len(values) != 2:
+        return None
+    return _position(values[0]), values[1] == "1"
+
+
+def parse_tool_length_report(line: str) -> float | None:
+    match = re.fullmatch(r"\s*\[TLO:(-?(?:\d+(?:\.\d*)?|\.\d+))\]\s*", line)
+    return float(match.group(1)) if match else None
 
 
 COMMISSIONING_SETTINGS = {5, 6, 20, 21, 22, 23, 24, 25, 26, 27, 130, 131, 132}
