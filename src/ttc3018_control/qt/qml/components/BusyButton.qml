@@ -5,7 +5,7 @@ Button {
     id: root
     required property var palette
     property bool actionEnabled: true
-    property string idleText: text
+    property string idleText: ""
     property string busyText: "Working…"
     property bool busy: false
     property bool dangerous: false

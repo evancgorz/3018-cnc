@@ -44,6 +44,7 @@ class ControllerViewModel(QObject):
     position_changed = Signal()
     readiness_changed = Signal()
     operation_changed = Signal()
+    expert_mode_changed = Signal()
     preview_changed = Signal()
     job_changed = Signal()
     issues_changed = Signal()
@@ -178,6 +179,10 @@ class ControllerViewModel(QObject):
     def operation_active(self) -> bool:
         return bool(self._active_operation and self._active_operation.active)
 
+    @Property(str, notify=operation_changed)
+    def motion_phase(self) -> str:
+        return self.application.motion.phase
+
     @Property(str, notify=readiness_changed)
     def readiness_connection(self) -> str:
         return self._readiness_snapshot.connection
@@ -222,7 +227,7 @@ class ControllerViewModel(QObject):
     def issue_actions(self) -> list[str]:
         return list(self._issue.actions) if self._issue else []
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=expert_mode_changed)
     def expert_mode(self) -> bool:
         return self._ui_preferences.expert_mode
 
@@ -248,6 +253,7 @@ class ControllerViewModel(QObject):
     @Slot(bool)
     def set_expert_mode(self, enabled: bool) -> None:
         self._ui_preferences.expert_mode = bool(enabled)
+        self.expert_mode_changed.emit()
         try:
             self._ui_preferences_store.save(self._ui_preferences)
         except OSError:

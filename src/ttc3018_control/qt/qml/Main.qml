@@ -594,7 +594,7 @@ ApplicationWindow {
                                 Label { text: "The importer finds a usable machining face, identifies recesses and raised bosses, and detects accessible ramp surfaces."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
                                 MutedLabel { text: "Nothing moves during import or preview. The generated program still passes the normal parser, stock simulation, and machine-envelope checks." }
                                 Divider {}
-                                PrimaryButton { Layout.fillWidth: true; text: appViewModel && appViewModel.step_importing ? "Importing…" : "Import STEP file…"; enabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
+                                BusyButton { Layout.fillWidth: true; palette: window.palette; idleText: "Import STEP file…"; busy: appViewModel && appViewModel.step_importing; actionEnabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
                                 Label { text: appViewModel ? appViewModel.step_source : "No model selected"; color: window.palette.accent; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 Label { text: appViewModel ? appViewModel.step_model_summary : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                                 Item { Layout.fillHeight: true }
@@ -767,7 +767,7 @@ ApplicationWindow {
             anchors.fill: parent; anchors.margins: 20; spacing: 10
             Label { text: "Import a STEP model and generate a bounded 2.5D toolpath from accessible planar faces, pockets, bosses, holes, and ramps."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             RowLayout { Layout.fillWidth: true; spacing: 10
-                SecondaryButton { text: appViewModel && appViewModel.step_importing ? "Importing…" : "Import STEP…"; enabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
+                BusyButton { palette: window.palette; idleText: "Import STEP…"; busy: appViewModel && appViewModel.step_importing; actionEnabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
                 Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
             }
             Label { text: appViewModel ? appViewModel.step_model_summary : "Import a planar STEP model to begin."; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }
@@ -1254,6 +1254,7 @@ ApplicationWindow {
                         SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Machine setup"; onClicked: machineSetupDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Commissioning"; onClicked: commissioningDialog.open() }
+                        CheckBox { Layout.fillWidth: true; text: "Show expert details"; checked: appViewModel && appViewModel.expert_mode; onClicked: if (appViewModel) appViewModel.set_expert_mode(checked); contentItem: Text { text: parent.text; color: window.palette.muted; font.pixelSize: 11; leftPadding: parent.indicator.width + parent.spacing } }
                         SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
                         SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
