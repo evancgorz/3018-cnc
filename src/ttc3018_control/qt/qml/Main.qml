@@ -222,6 +222,16 @@ ApplicationWindow {
         }
     }
 
+    MachineSetupDialog {
+        id: machineSetupDialog
+        appPalette: window.palette
+    }
+
+    CommissioningDialog {
+        id: commissioningDialog
+        appPalette: window.palette
+    }
+
     Dialog {
         id: engravingDialog
         modal: true
@@ -1182,6 +1192,8 @@ ApplicationWindow {
                         SecondaryButton { Layout.fillWidth: true; text: "Connection"; onClicked: connectionDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Configure controller Wi-Fi"; enabled: appViewModel && appViewModel.connected; onClicked: wifiSetupDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Machine setup"; onClicked: machineSetupDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Commissioning"; onClicked: commissioningDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
                         SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
@@ -1248,6 +1260,7 @@ ApplicationWindow {
                         SecondaryButton { visible: machinePage.coordinatesExpanded; Layout.fillWidth: true; text: "Move safely"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.move_to(Number(targetX.text), Number(targetY.text), Number(targetZ.text), Number(jogFeedField.text)) }
                         Divider {}
                         PrimaryButton { Layout.fillWidth: true; text: "Establish reference"; enabled: appViewModel && appViewModel.connected && !appViewModel.job_active; onClicked: appViewModel.establish_reference() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Home machine"; enabled: appViewModel && appViewModel.can_home_machine; onClicked: appViewModel.home_machine() }
                         SecondaryButton { Layout.fillWidth: true; text: "Go to reference"; enabled: appViewModel && appViewModel.can_return_to_reference; onClicked: appViewModel.return_to_reference() }
                         SecondaryButton { Layout.fillWidth: true; text: "Retract to safe Z"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.retract_safe_z() }
                         GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 6

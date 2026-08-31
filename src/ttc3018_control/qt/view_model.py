@@ -383,6 +383,31 @@ class ControllerViewModel(QObject):
     def profile_safe_z(self) -> float:
         return self.application.profile.safe_z
 
+    @Property(str, notify=state_changed)
+    def machine_id(self) -> str:
+        return self.application.machine_id or ""
+
+    @Property("QStringList", notify=state_changed)
+    def machine_profiles(self) -> list[str]:
+        return [f"{machine.name} ({machine.machine_id[:8]})" for machine in self.application.machine_profiles]
+
+    @Property(str, notify=state_changed)
+    def machine_capabilities(self) -> str:
+        definition = self.application.machine_definition
+        enabled = [probe.kind.value.replace("_", " ") for probe in definition.probes if probe.enabled]
+        switches = [axis for axis, item in definition.axes.items() if item.switch_mode.value != "none"]
+        return "Optional hardware: " + (", ".join([*(f"{axis} homing" for axis in switches), *enabled]) if switches or enabled else "none")
+
+    @Property(str, notify=state_changed)
+    def homing_state(self) -> str:
+        return self.application.homing.state.value
+
+    @Property(bool, notify=state_changed)
+    def can_home_machine(self) -> bool:
+        definition = self.application.machine_definition
+        return bool(self.connected and not self.application.job_active and not self.application.motion_busy
+                    and all(axis.switch_mode.value != "none" for axis in definition.axes.values()))
+
     @Property("QStringList", notify=state_changed)
     def log_lines(self) -> list[str]:
         return self._log_lines
@@ -1076,6 +1101,22 @@ class ControllerViewModel(QObject):
             self._unreferenced_jog_allowed = False
         self._set_notice(outcome.message)
         self._emit_state()
+
+    @Slot()
+    def home_machine(self) -> None:
+        outcome = self.application.home_machine()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(str)
+    def select_machine(self, label: str) -> None:
+        for machine in self.application.machine_profiles:
+            if label.startswith(machine.name + " ("):
+                outcome = self.application.select_machine(machine.machine_id)
+                self._set_notice(outcome.message)
+                self._emit_state()
+                return
+        self._set_notice("Machine selection ignored — profile not found")
 
     @Slot(str)
     def set_work_zero(self, axes: str) -> None:

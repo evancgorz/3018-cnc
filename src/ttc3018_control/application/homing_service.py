@@ -83,6 +83,11 @@ class HomingService:
         self._acknowledged = False
         self.session.envelope.invalidate(reason)
 
+    def clear_activity(self) -> None:
+        """Drop a pending homing transaction without changing manual trust."""
+        self.state = HomingState.IDLE
+        self._acknowledged = False
+
     def _fail(self, message: str) -> ActionOutcome:
         self.state = HomingState.FAILED
         self._acknowledged = False

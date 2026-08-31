@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import queue
 import time
+from dataclasses import replace
 from typing import Callable, Iterable
 
 from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
@@ -12,6 +13,7 @@ from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REA
 from ..machine_state import MachineProfile, ProfileStore
 from ..machine_catalog import MachineCatalog, MachineCatalogStore
 from ..machine_config import MachineDefinition
+from ..controller_adapters import Grbl11Adapter, GenericGrblAdapter
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
 from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
@@ -23,6 +25,8 @@ from .generation_service import GenerationService
 from .job_service import JobService
 from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
+from .homing_service import HomingService
+from .probing_service import ProbePlan, ProbingService
 from .ports import ConnectionSettingsStorePort, ProfileStorePort, StepPrepareSettingsStorePort, WorkZeroStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 from .wifi_service import WifiProvisioningService
@@ -89,6 +93,7 @@ class ApplicationController:
             step_prepare_settings = StepPrepareSettings()
 
         self.session = MachineSession(profile=profile)
+        self.adapter = Grbl11Adapter() if self.machine_definition.controller.value == "grbl_1_1" else GenericGrblAdapter()
         self.settings = settings
         self._saved_work_zero = saved_work_zero
         self.step_prepare_settings = step_prepare_settings
@@ -122,6 +127,8 @@ class ApplicationController:
             on_change=self._publish_change,
             on_ready_to_return=on_ready_to_return,
         )
+        self.homing = HomingService(self.session, self.connection_service.send_line, self._publish_notice)
+        self.probing = ProbingService(self.session, self.adapter, self.connection_service.send_line, on_notice=self._publish_notice)
 
     def bind_callbacks(
         self,
@@ -430,9 +437,38 @@ class ApplicationController:
         self.profile_store.save(profile)
         self.session.profile = profile
         if self.machine_catalog is not None and self._machine_definition is not None:
-            updated = MachineDefinition.legacy_3018(machine_id=self.machine_id, profile=profile)
+            updated = replace(self._machine_definition, name=profile.name, travel_x=profile.travel_x,
+                              travel_y=profile.travel_y, travel_z=profile.travel_z, safe_z=profile.safe_z)
             self.machine_catalog = self.machine_catalog_store.upsert(self.machine_catalog, updated)
             self._machine_definition = updated
+
+    def select_machine(self, machine_id: str) -> ActionOutcome:
+        if self.connected or self.motion_busy or self.job_active or self.homing.active or self.probing.active:
+            return ActionOutcome(False, "Machine selection requires a disconnected, idle application.")
+        if self.machine_catalog is None:
+            return ActionOutcome(False, "Machine catalog is unavailable for this controller instance.")
+        try:
+            self.machine_catalog = self.machine_catalog_store.select(self.machine_catalog, machine_id)
+            self._machine_definition = self.machine_catalog.selected()
+            self.machine_id = self._machine_definition.machine_id
+            self.session.profile = self._machine_definition.to_profile()
+            self.adapter = Grbl11Adapter() if self._machine_definition.controller.value == "grbl_1_1" else GenericGrblAdapter()
+            self.probing = ProbingService(self.session, self.adapter, self.connection_service.send_line, on_notice=self._publish_notice)
+            self.session.invalidate_reference("Machine profile changed")
+            self._saved_work_zero = self.work_zero_store.load(self.machine_id)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Machine selection failed — {exc}")
+        return ActionOutcome(True, f"Selected machine {self._machine_definition.name}.")
+
+    def home_machine(self) -> ActionOutcome:
+        status = self.status
+        spindle_off = status is None or status.spindle in (None, 0)
+        return self.homing.start(self.machine_definition, connected=self.connected, spindle_off=spindle_off)
+
+    def start_probe(self, plan: ProbePlan) -> ActionOutcome:
+        status = self.status
+        spindle_off = status is None or status.spindle in (None, 0)
+        return self.probing.start(plan, connected=self.connected, spindle_off=spindle_off)
 
     def save_step_prepare_settings(self, settings: StepPrepareSettings) -> None:
         settings.validate()
@@ -447,6 +483,8 @@ class ApplicationController:
         outcome = self.connection_service.disconnect()
         self.motion.reset()
         self.job.reset()
+        self.homing.reset(outcome.message)
+        self.probing.reset()
         self.manual_pending_acks = 0
         self._preserve_reference_on_next_reset = False
         self.status = None
@@ -588,6 +626,8 @@ class ApplicationController:
         self.status = status
         awaiting_confirmation = self.session.awaiting_work_zero_report
         self.session.update_status(status)
+        self.homing.observe_status(status, self.machine_definition)
+        self.probing.observe_status(status)
         if status.work_offset is not None:
             if awaiting_confirmation and self.session.work_zero_confirmed:
                 self._save_work_zero(status.work_offset)
@@ -624,6 +664,10 @@ class ApplicationController:
         """Dispatch one controller response to the owning application service."""
         text = response.strip()
         lowered = text.lower()
+        if self.homing.handle_response(text):
+            return True
+        if self.probing.handle_response(text):
+            return True
         if self.motion.handle_response(text, feed):
             return True
         if self.manual_pending_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
@@ -637,6 +681,11 @@ class ApplicationController:
         self.manual_pending_acks = 0
         self.motion.reset()
         self.job.reset()
+        if preserve_reference:
+            self.homing.clear_activity()
+        else:
+            self.homing.reset("GRBL reset")
+        self.probing.reset()
         self.status = None
         self.session.clear_status(retain_work_zero=preserve_reference)
         if not preserve_reference:
