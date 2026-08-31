@@ -34,7 +34,7 @@ Dialog {
         StackLayout { currentIndex: setupTabs.currentIndex; Layout.fillWidth: true; Layout.fillHeight: true
             ColumnLayout { spacing: 10
                 Label { text: "Active machine"; color: dialog.appPalette.subtle; font.pixelSize: 11 }
-                ComboBox { Layout.fillWidth: true; model: appViewModel ? appViewModel.machine_profiles : [] }
+                ComboBox { Layout.fillWidth: true; model: appViewModel ? appViewModel.machine_profiles : []; onActivated: appViewModel.select_machine(currentText) }
                 Label { text: "Controller: GRBL 1.1"; color: dialog.appPalette.muted }
                 Label { text: "The current controller adapter supports ordinary motion. Homing, probing, tool setting, and fixtures are shown only when declared, commissioned, and supported."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 Item { Layout.fillHeight: true }

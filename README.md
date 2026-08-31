@@ -15,7 +15,7 @@ the PySide6/Qt Quick interface.
 - Sends jogs only while GRBL reports `Idle`.
 - Provides feed hold, resume, jog cancel, and confirmed soft reset.
 - Records every transmitted and received message in `logs/`.
-- Saves a machine profile with measured X/Y/Z travel and a safe-Z height.
+- Saves a versioned machine profile with measured X/Y/Z travel, safe Z, and optional hardware declarations; multiple profiles are supported.
 - Maintains a session-only virtual reference and coordinate display.
 - Checks referenced jog endpoints against the configured virtual envelope.
 - Accepts virtual XYZ targets, rejects coordinates outside the configured travel,
@@ -36,9 +36,10 @@ the PySide6/Qt Quick interface.
 - Stops sending on GRBL errors or alarms and requests spindle stop on completion or failure.
 
 This version deliberately has no arbitrary command box or automatic probe motion.
-Automatic `$H` homing is unavailable until home switches have been installed and
-commissioned. Manual machine reference and work-zero setup are required for every
-connection/reset session before an engraving job can start.
+Automatic `$H` homing and probing are capability-gated: they appear only after
+the hardware is declared, commissioned, and supported by the selected controller.
+The default TTC 3018 profile has every optional capability off, so its manual
+reference and work-zero workflow remains unchanged.
 
 ## Application architecture
 
@@ -85,6 +86,12 @@ explicit operator actions.
 8. **Pause** uses GRBL feed hold and is resumable. **Abort** feed-holds and resets
    GRBL; the job cannot resume, but references are retained while the controller
    stays connected and powered.
+
+For machines with declared switches or probes, use **Machine setup** first and
+then **Commissioning**. Commissioning records are tied to the machine profile;
+geometry, wiring, or probe changes make dependent evidence stale. **Home machine**
+is always an explicit operator action and requires a fresh successful controller
+report before the app trusts the new envelope.
 
 The MVP accepts common metric engraving programs using G0/G1 and I/J-form G2/G3
 arcs. Radius-form (`R`) arcs, inch mode, probing, automatic homing, tool changes,
@@ -224,8 +231,10 @@ and offers Rectangle, Rounded Rectangle, Double-line, Inset-corner, Scallop, and
 Simple Flourish borders. Its live preview is generated from the same centerline
 geometry that becomes G-code.
 
-Commissioning of switches and probing is intentionally deferred from this Qt
-workflow while the machine remains switchless and probe-less.
+The current TTC 3018 remains switchless and probe-less by default. Future
+controller and accessory ideas, including dual-motor squaring and auxiliary
+outputs, are tracked in [`docs/CNC_PLATFORM_BACKLOG.md`](docs/CNC_PLATFORM_BACKLOG.md)
+and are not advertised as implemented capabilities.
 
 ## Establishing the virtual reference
 

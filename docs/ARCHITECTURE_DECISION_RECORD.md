@@ -69,3 +69,23 @@ Reconsider a separate process or API only for one of these concrete needs:
 If one trigger appears, define control leases, authentication, heartbeats,
 emergency-stop behavior, orphaned-job policy, and local IPC/network exposure
 before selecting a protocol.
+
+## Machine platform extension
+
+Machine configuration is now a versioned local catalog rather than one flat
+profile. The catalog keeps geometry, optional hardware declarations, controller
+kind, and stable machine identity together. Work-zero, commissioning, fixture,
+and tool records are machine-scoped so selecting another machine cannot reuse
+coordinates or evidence accidentally.
+
+Controller-specific behavior is behind capability adapters. The GRBL 1.1
+adapter owns homing, probing, work-offset, and tool-length command semantics;
+a generic adapter can expose only the basic motion contract. Declared hardware
+alone never unlocks a production action: the capability must also be supported
+by the adapter and have current commissioning evidence.
+
+Homing and probing are explicit application services with exclusive response
+ownership and fresh-status/report confirmation. They are separate from ordinary
+job parsing and streaming. A reset, disconnect, or safety-relevant configuration
+change clears session motion trust; persisted fixture geometry is reusable only
+after a new homing and probe confirmation.
