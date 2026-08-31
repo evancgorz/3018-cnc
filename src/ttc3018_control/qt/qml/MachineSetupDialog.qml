@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components"
 
 Dialog {
     id: dialog
@@ -13,9 +14,9 @@ Dialog {
     modal: true
     title: "Machine setup"
     width: 720
-    height: 620
+    height: Math.min(620, (ApplicationWindow.window ? ApplicationWindow.window.contentItem.height - 24 : 620))
     x: Math.round(((ApplicationWindow.window ? ApplicationWindow.window.width : 1500) - width) / 2)
-    y: Math.round(((ApplicationWindow.window ? ApplicationWindow.window.height : 920) - height) / 2)
+    y: Math.max(12, Math.round(((ApplicationWindow.window ? ApplicationWindow.window.contentItem.height : 674) - height) / 2))
     standardButtons: Dialog.NoButton
     background: Rectangle { color: dialog.appPalette.surface; radius: 12; border.color: dialog.appPalette.divider; border.width: 1 }
 
@@ -47,11 +48,11 @@ Dialog {
             }
             ColumnLayout { spacing: 10
                 Label { text: "Optional hardware"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
-                CheckBox { text: "Limit switches and automatic homing"; checked: dialog.switchesEnabled; onToggled: dialog.switchesEnabled = checked }
-                CheckBox { text: "Movable Z touch plate"; checked: dialog.zPlateEnabled; onToggled: dialog.zPlateEnabled = checked }
-                CheckBox { text: "Fixed tool setter"; checked: dialog.toolSetterEnabled; onToggled: dialog.toolSetterEnabled = checked }
-                CheckBox { text: "Movable XYZ probe"; checked: dialog.movableXyzEnabled; onToggled: dialog.movableXyzEnabled = checked }
-                CheckBox { text: "Fixed XYZ fixture"; checked: dialog.fixedFixtureEnabled; onToggled: dialog.fixedFixtureEnabled = checked }
+                ModernCheckBox { palette: dialog.appPalette; text: "Limit switches and automatic homing"; checked: dialog.switchesEnabled; onToggled: dialog.switchesEnabled = checked }
+                ModernCheckBox { palette: dialog.appPalette; text: "Movable Z touch plate"; checked: dialog.zPlateEnabled; onToggled: dialog.zPlateEnabled = checked }
+                ModernCheckBox { palette: dialog.appPalette; text: "Fixed tool setter"; checked: dialog.toolSetterEnabled; onToggled: dialog.toolSetterEnabled = checked }
+                ModernCheckBox { palette: dialog.appPalette; text: "Movable XYZ probe"; checked: dialog.movableXyzEnabled; onToggled: dialog.movableXyzEnabled = checked }
+                ModernCheckBox { palette: dialog.appPalette; text: "Fixed XYZ fixture"; checked: dialog.fixedFixtureEnabled; onToggled: dialog.fixedFixtureEnabled = checked }
                 Label { text: "Switches use one input per axis in this first adapter. Pin polarity, end selection, probe dimensions, and fixture approach geometry are commissioned separately."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 Item { Layout.fillHeight: true }
             }

@@ -824,6 +824,8 @@ class ControllerViewModel(QObject):
                 self._set_notice(f"Job blocked — {reason}")
                 return
             outcome = self.application.start_job()
+            if outcome.accepted:
+                self._guided_preflight_confirmed = False
             self._set_notice(outcome.message)
         elif operation == "job_abort":
             if not self.application.job_active:
@@ -890,6 +892,12 @@ class ControllerViewModel(QObject):
             self._preview_stock_width = 0.0
             self._preview_stock_height = 0.0
             self._preview_summary = f"{result.width:.1f} × {result.height:.1f} mm · {result.stroke_count} strokes · {border}"
+        self._emit_state()
+
+    @Slot(bool)
+    def set_physical_preflight_confirmed(self, confirmed: bool) -> None:
+        """Record the explicit per-run material/tool check from Preview & Run."""
+        self._guided_preflight_confirmed = bool(confirmed)
         self._emit_state()
 
     @Slot(str, str, float, float, float, float, float, float, float, str, int)
@@ -1419,6 +1427,7 @@ class ControllerViewModel(QObject):
             f"Y {bounds.minimum.y:.3f}…{bounds.maximum.y:.3f}, Z {bounds.minimum.z:.3f}…{bounds.maximum.z:.3f} mm "
             f"(size {size.x:.3f} × {size.y:.3f} mm)"
         )
+        self._guided_preflight_confirmed = False
         self._set_notice("G-code loaded and validated")
         self._emit_state()
 
@@ -1443,6 +1452,7 @@ class ControllerViewModel(QObject):
         self._preview_summary = summary
         self._job_file_text = filename
         self._job_summary_text = summary
+        self._guided_preflight_confirmed = False
         self._set_notice(f"Generated {filename} and loaded it for review")
         self._emit_state()
 

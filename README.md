@@ -4,6 +4,22 @@ A small, safety-focused Qt Quick desktop controller for the Two Trees TTC 3018
 and its MKS DLC32 GRBL-compatible motion controller. The production launcher is
 the PySide6/Qt Quick interface.
 
+## Interface tour
+
+<p align="center">
+  <img src="docs/images/ux-machine-workspace.png" width="49%" alt="Machine workspace with guarded jog and reference controls">
+  <img src="docs/images/ux-engraving-designer.png" width="49%" alt="Live text engraving designer">
+</p>
+<p align="center">
+  <img src="docs/images/ux-guided-step.png" width="49%" alt="Guided STEP import workflow">
+  <img src="docs/images/ux-preview-run.png" width="49%" alt="Preview and guarded preflight workspace">
+</p>
+
+The three workspaces follow the normal job sequence: prepare a validated
+toolpath, review the run and physical preflight, then operate the machine with
+guarded motion controls. Long-running preparation work reports progress without
+blocking navigation or machine status updates.
+
 ## Current capabilities
 
 - Keeps one persistent USB serial connection open.

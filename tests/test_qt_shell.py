@@ -128,6 +128,9 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     assert 'id: textDialog' not in qml
     assert 'id: plaqueDialog' not in qml
     assert '"Guided Setup"]' not in qml
+    assert "window.usableContentHeight - height" in qml
+    assert 'set_physical_preflight_confirmed(checked)' in qml
+    assert 'index === 3 ?' not in qml
 
 
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:

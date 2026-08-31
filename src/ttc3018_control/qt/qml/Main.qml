@@ -28,6 +28,7 @@ ApplicationWindow {
     property string toastText: ""
     property string selectedTransport: "USB serial"
     property bool exitBypass: false
+    readonly property real usableContentHeight: height - header.height - footer.height
 
     readonly property var readinessEntries: [
         { label: "Connection", status: appViewModel ? appViewModel.readiness_connection : "required", action: "Connect", reason: appViewModel ? appViewModel.readiness_reason : "Connect to the controller." },
@@ -109,7 +110,7 @@ ApplicationWindow {
         width: 560
         height: 320
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -134,7 +135,7 @@ ApplicationWindow {
         width: 510
         height: 270
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -165,7 +166,7 @@ ApplicationWindow {
         width: 560
         height: 280
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -190,7 +191,7 @@ ApplicationWindow {
         width: 460
         height: 360
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
 
@@ -263,9 +264,9 @@ ApplicationWindow {
         property bool plaqueMode: false
         title: plaqueMode ? "Plaque builder" : "Text engraving"
         width: 760
-        height: 760
+        height: Math.min(720, window.usableContentHeight - 24)
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
@@ -315,7 +316,7 @@ ApplicationWindow {
                             Label { text: "Subtitle"; color: window.palette.muted }
                             Field { id: subtitleField; Layout.fillWidth: true; text: ""; onTextChanged: engravingDialog.refreshPreview() }
                             Label { text: "Enable subtitle"; color: window.palette.muted }
-                            CheckBox { id: subtitleCheck; checked: true; onCheckedChanged: engravingDialog.refreshPreview() }
+                            ModernCheckBox { id: subtitleCheck; palette: window.palette; checked: true; onCheckedChanged: engravingDialog.refreshPreview() }
                             Label { text: "Subtitle font"; color: window.palette.muted }
                             ComboBox { id: subtitleFontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: engravingDialog.refreshPreview() }
                             Label { text: "Subtitle height (mm)"; color: window.palette.muted }
@@ -385,7 +386,7 @@ ApplicationWindow {
         width: 560
         height: 370
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -412,7 +413,7 @@ ApplicationWindow {
         width: 480
         height: 470
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -447,7 +448,7 @@ ApplicationWindow {
         width: 820
         height: 520
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         ColumnLayout {
@@ -471,9 +472,9 @@ ApplicationWindow {
         modal: true
         title: "Guided STEP setup · " + (currentStep + 1) + " of 4"
         width: 1080
-        height: 780
+        height: Math.min(740, window.usableContentHeight - 24)
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 14; border.color: window.palette.divider; border.width: 1 }
 
@@ -750,9 +751,9 @@ ApplicationWindow {
         modal: true
         title: "STEP / 2.5D machining"
         width: 980
-        height: 760
+        height: Math.min(720, window.usableContentHeight - 24)
         x: Math.round((window.width - width) / 2)
-        y: Math.round((window.height - height) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
         standardButtons: Dialog.NoButton
         background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
         function refreshPreview() {
@@ -1216,15 +1217,16 @@ ApplicationWindow {
                             Label { visible: appViewModel && appViewModel.job_active; text: appViewModel ? appViewModel.job_time_remaining : ""; color: window.palette.accent; font.pixelSize: 12; font.weight: Font.DemiBold }
                         }
                         ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: appViewModel ? appViewModel.job_progress : 0; visible: appViewModel && appViewModel.job_file !== "No G-code loaded" }
-                        Repeater { model: ["Machine is connected and Idle", "Virtual reference is trusted", "XYZ work zero is confirmed", "Job fits the virtual envelope", "Material and tool are secure"]
+                        Repeater { model: ["Machine is connected and Idle", "Virtual reference is trusted", "XYZ work zero is confirmed", "Job fits the virtual envelope"]
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 8
-                                property bool passed: index === 0 ? (appViewModel && appViewModel.grbl_state === "Idle") : index === 1 ? (appViewModel && appViewModel.reference_trusted) : index === 2 ? (appViewModel && appViewModel.work_zero_confirmed) : index === 3 ? (appViewModel && appViewModel.job_file !== "No G-code loaded") : true
+                                property bool passed: index === 0 ? (appViewModel && appViewModel.grbl_state === "Idle") : index === 1 ? (appViewModel && appViewModel.reference_trusted) : index === 2 ? (appViewModel && appViewModel.work_zero_confirmed) : (appViewModel && appViewModel.job_file !== "No G-code loaded")
                                 Rectangle { width: 17; height: 17; radius: 8.5; color: parent.passed ? Qt.rgba(window.palette.success.r, window.palette.success.g, window.palette.success.b, 0.18) : "transparent"; border.color: parent.passed ? window.palette.success : window.palette.subtle; border.width: 1; Label { anchors.centerIn: parent; text: parent.parent.passed ? "✓" : ""; color: window.palette.success; font.bold: true } }
                                 Label { text: modelData; color: parent.passed ? window.palette.text : window.palette.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                             }
                         }
+                        ModernCheckBox { Layout.fillWidth: true; palette: window.palette; text: "Material and tool are secure"; checked: appViewModel && appViewModel.guided_preflight_confirmed; onClicked: if (appViewModel) appViewModel.set_physical_preflight_confirmed(checked) }
                         Item { Layout.fillHeight: true }
-                        PrimaryButton { Layout.fillWidth: true; text: "Start job"; enabled: appViewModel && appViewModel.can_start_job; opacity: enabled ? 1 : 0.55; onClicked: appViewModel.start_job() }
+                        PrimaryButton { Layout.fillWidth: true; text: "Start job"; enabled: appViewModel && appViewModel.can_start_job && appViewModel.guided_preflight_confirmed; opacity: enabled ? 1 : 0.55; onClicked: appViewModel.start_job() }
                         RowLayout { Layout.fillWidth: true
                             SecondaryButton { Layout.fillWidth: true; text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job() }
                             SecondaryButton { Layout.fillWidth: true; text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job() }
@@ -1254,7 +1256,7 @@ ApplicationWindow {
                         SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Machine setup"; onClicked: machineSetupDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Commissioning"; onClicked: commissioningDialog.open() }
-                        CheckBox { Layout.fillWidth: true; text: "Show expert details"; checked: appViewModel && appViewModel.expert_mode; onClicked: if (appViewModel) appViewModel.set_expert_mode(checked); contentItem: Text { text: parent.text; color: window.palette.muted; font.pixelSize: 11; leftPadding: parent.indicator.width + parent.spacing } }
+                        ModernCheckBox { Layout.fillWidth: true; palette: window.palette; text: "Show expert details"; checked: appViewModel && appViewModel.expert_mode; onClicked: if (appViewModel) appViewModel.set_expert_mode(checked) }
                         SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
                         SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
@@ -1343,9 +1345,9 @@ ApplicationWindow {
             modal: true
             title: "Guided setup"
             width: 1080
-            height: 780
+            height: Math.min(740, window.usableContentHeight - 24)
             x: Math.round((window.width - width) / 2)
-            y: Math.round((window.height - height) / 2)
+            y: Math.round((window.usableContentHeight - height) / 2)
             standardButtons: Dialog.NoButton
             background: Rectangle { color: window.palette.surface; radius: 14; border.color: window.palette.divider; border.width: 1 }
             RowLayout { anchors.fill: parent; spacing: 14
@@ -1412,7 +1414,7 @@ ApplicationWindow {
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 7; Layout.fillWidth: true; spacing: 12
                             Label { text: "Confirm that the material is secured, the tool is tightened, the spindle behavior is understood, safe Z is clear, and emergency power removal is available."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                            CheckBox { id: guidedPreflightCheck; text: "I have completed the physical preflight"; checked: appViewModel ? appViewModel.guided_preflight_confirmed : false; onClicked: appViewModel.confirm_guided_preflight(); contentItem: Text { text: parent.text; color: window.palette.text; font.pixelSize: 14; leftPadding: parent.indicator.width + parent.spacing } }
+                            ModernCheckBox { id: guidedPreflightCheck; palette: window.palette; text: "I have completed the physical preflight"; checked: appViewModel ? appViewModel.guided_preflight_confirmed : false; onClicked: appViewModel.confirm_guided_preflight() }
                         }
                         ColumnLayout { visible: appViewModel && appViewModel.guided_step === 8; Layout.fillWidth: true; spacing: 12
                             Label { text: "The job will use acknowledged, capacity-limited GRBL streaming. Keep watching the machine throughout the run."; color: window.palette.text; wrapMode: Text.Wrap; Layout.fillWidth: true }

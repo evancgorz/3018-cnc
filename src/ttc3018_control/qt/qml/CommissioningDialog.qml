@@ -8,9 +8,9 @@ Dialog {
     modal: true
     title: "Commissioning"
     width: 720
-    height: 560
+    height: Math.min(560, (ApplicationWindow.window ? ApplicationWindow.window.contentItem.height - 24 : 560))
     x: Math.round(((ApplicationWindow.window ? ApplicationWindow.window.width : 1500) - width) / 2)
-    y: Math.round(((ApplicationWindow.window ? ApplicationWindow.window.height : 920) - height) / 2)
+    y: Math.max(12, Math.round(((ApplicationWindow.window ? ApplicationWindow.window.contentItem.height : 674) - height) / 2))
     standardButtons: Dialog.NoButton
     background: Rectangle { color: dialog.appPalette.surface; radius: 12; border.color: dialog.appPalette.divider; border.width: 1 }
     ColumnLayout {
