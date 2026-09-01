@@ -1,8 +1,13 @@
-# TTC 3018 Control
+# Pine
 
-A small, safety-focused Qt Quick desktop controller for the Two Trees TTC 3018
-and its MKS DLC32 GRBL-compatible motion controller. The production launcher is
-the PySide6/Qt Quick interface.
+<p align="center">
+  <img src="src/ttc3018_control/qt/assets/pine-mark.svg" width="112" alt="Pine logo">
+</p>
+
+Pine is a safety-focused desktop CNC studio built with Qt Quick. It currently
+targets the Two Trees TTC 3018 and its MKS DLC32 GRBL-compatible motion
+controller while its machine-profile architecture expands toward custom hobby
+CNC hardware.
 
 ## Interface tour
 
@@ -280,7 +285,7 @@ Open PowerShell in this directory and run:
 
 ## Run
 
-The recommended entry point is the **TTC 3018 Control** desktop shortcut. It is
+The recommended entry point is the **Pine** desktop shortcut. It is
 created or refreshed automatically by `setup.ps1`. You can also double-click
 `run.bat` in File Explorer, or run it from Command Prompt. This launches the Qt
 Quick interface:
@@ -293,7 +298,8 @@ The batch launcher automatically runs setup if the project virtual environment
 is missing and keeps its console open when startup fails so the error remains
 visible. There is one supported desktop application launcher; `setup.ps1` is
 only for installing or repairing the environment and desktop shortcut. The
-Python package also exposes `ttc3018-control` for managed environments.
+Python package exposes `pine-cnc` for managed environments and retains
+`ttc3018-control` as a compatibility alias.
 
 Select a detected serial port, connect, and wait for `Idle` before jogging. The
 same centered connection dialog also supports Wi-Fi TCP when USB is removed.

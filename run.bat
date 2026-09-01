@@ -6,7 +6,7 @@ cd /d "%~dp0"
 set "TTC3018_PYTHON=%CD%\.venv\Scripts\python.exe"
 
 if not exist "%TTC3018_PYTHON%" (
-    echo TTC 3018 Control needs its Python environment. Running setup now...
+    echo Pine needs its Python environment. Running setup now...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\setup.ps1"
     if errorlevel 1 goto :setup_failed
 )
@@ -15,20 +15,20 @@ if not exist "%TTC3018_PYTHON%" goto :setup_failed
 
 "%TTC3018_PYTHON%" -c "import serial, PySide6" >nul 2>nul
 if errorlevel 1 (
-    echo TTC 3018 Control is updating its Qt environment. Running setup now...
+    echo Pine is updating its Qt environment. Running setup now...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\setup.ps1"
     if errorlevel 1 goto :setup_failed
 )
 
 if /i "%~1"=="--check" goto :check
 
-echo Starting TTC 3018 Control...
+echo Starting Pine...
 "%TTC3018_PYTHON%" "%CD%\run.py"
 set "TTC3018_EXIT=%errorlevel%"
 
 if not "%TTC3018_EXIT%"=="0" (
     echo.
-    echo TTC 3018 Control stopped with error code %TTC3018_EXIT%.
+    echo Pine stopped with error code %TTC3018_EXIT%.
     echo The error details are shown above. Press any key to close this window.
     pause >nul
 )

@@ -45,8 +45,23 @@ def test_qt_shell_loads(qapp) -> None:
     engine, view_model = build_engine()
     roots = engine.rootObjects()
     assert len(roots) == 1
-    assert roots[0].property("title") == "TTC 3018 Control"
+    assert roots[0].property("title") == "Pine"
     assert view_model.connection_text == "Disconnected"
+
+
+def test_pine_brand_assets_and_launch_surfaces_are_packaged() -> None:
+    root = Path(__file__).parents[1]
+    assets = root / "src" / "ttc3018_control" / "qt" / "assets"
+    assert (assets / "pine-mark.svg").is_file()
+    assert (assets / "pine-mark.png").stat().st_size > 10_000
+    assert (assets / "pine.ico").stat().st_size > 10_000
+    assert (assets / "pine-splash.png").stat().st_size > 10_000
+    bootstrap = (root / "src" / "ttc3018_control" / "qt" / "main.py").read_text(encoding="utf-8")
+    setup = (root / "setup.ps1").read_text(encoding="utf-8")
+    assert 'app.setApplicationDisplayName("Pine")' in bootstrap
+    assert "QSplashScreen" in bootstrap
+    assert '"Pine.lnk"' in setup
+    assert "$shortcut.IconLocation" in setup
 
 
 def test_qt_shutdown_releases_transport_once(qapp) -> None:
@@ -134,6 +149,7 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     engraving_dialog = qml.split("id: engravingDialog", 1)[1].split("id: wifiSetupDialog", 1)[0]
     assert 'SectionTitle { text: "Live preview"' in engraving_dialog
     assert 'ToolpathCanvas { Layout.fillWidth: true; Layout.fillHeight: true' in engraving_dialog
+    assert 'source: "../assets/pine-mark.svg"' in qml
 
 
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:

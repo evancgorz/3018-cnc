@@ -10,8 +10,8 @@ ApplicationWindow {
     height: 920
     minimumWidth: 1180
     minimumHeight: 720
-    visible: true
-    title: "TTC 3018 Control"
+    visible: startupWindowVisible
+    title: "Pine"
     color: window.palette.background
 
     readonly property var palette: ({
@@ -199,7 +199,7 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.margins: 22
             spacing: 12
-            Label { text: "Choose how TTC 3018 should reach GRBL."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Choose how Pine should reach GRBL."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             Label { text: "Transport"; color: window.palette.subtle; font.pixelSize: 11 }
             ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP"]; currentIndex: appViewModel && appViewModel.preferred_transport === "Wi-Fi TCP" ? 1 : 0; onActivated: window.selectedTransport = currentText }
 
@@ -289,7 +289,7 @@ ApplicationWindow {
                         ColumnLayout { width: parent.width; spacing: 9
                     ColumnLayout { visible: !engravingDialog.plaqueMode; Layout.fillWidth: true; spacing: 8
                         Label { text: "Text"; color: window.palette.subtle; font.pixelSize: 11 }
-                        Field { id: textField; Layout.fillWidth: true; text: "TTC 3018"; onTextChanged: engravingDialog.refreshPreview() }
+                        Field { id: textField; Layout.fillWidth: true; text: "PINE"; onTextChanged: engravingDialog.refreshPreview() }
                         GridLayout { Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 8
                             Label { text: "Font"; color: window.palette.muted }
                             ComboBox { id: fontCombo; Layout.fillWidth: true; model: appViewModel ? appViewModel.fonts : ["Simple"]; onActivated: engravingDialog.refreshPreview() }
@@ -1077,11 +1077,9 @@ ApplicationWindow {
 
                 Row {
                     spacing: 9
-                    Rectangle { width: 25; height: 25; radius: 7; color: window.palette.accent; anchors.verticalCenter: parent.verticalCenter
-                        Label { anchors.centerIn: parent; text: "T"; color: "white"; font.bold: true; font.pixelSize: 14 }
-                    }
-                    Label { text: "TTC 3018"; color: window.palette.text; font.pixelSize: 16; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
-                    Label { text: "CONTROL"; color: window.palette.subtle; font.pixelSize: 11; font.letterSpacing: 1.5; anchors.verticalCenter: parent.verticalCenter }
+                    Image { width: 28; height: 28; source: "../assets/pine-mark.svg"; fillMode: Image.PreserveAspectFit; anchors.verticalCenter: parent.verticalCenter }
+                    Label { text: "PINE"; color: window.palette.text; font.pixelSize: 16; font.weight: Font.Bold; font.letterSpacing: 1.2; anchors.verticalCenter: parent.verticalCenter }
+                    Label { text: "CNC STUDIO"; color: window.palette.subtle; font.pixelSize: 10; font.letterSpacing: 1.4; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Item { Layout.fillWidth: true }
                 Pill { label: appViewModel ? appViewModel.connection_text : "Disconnected"; tone: window.palette.warning }
@@ -1112,7 +1110,7 @@ ApplicationWindow {
                     }
                 }
                 Item { Layout.fillWidth: true }
-                Label { text: "TTC 3018 workspace"; color: window.palette.subtle; font.pixelSize: 11 }
+                Label { text: "Pine workspace"; color: window.palette.subtle; font.pixelSize: 11 }
             }
 
             ReadinessStrip {
