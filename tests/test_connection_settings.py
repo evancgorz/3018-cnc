@@ -32,6 +32,7 @@ def test_connection_settings_round_trip(tmp_path: Path) -> None:
         wifi_host="192.168.86.36",
         wifi_port=23,
         preferred_transport="Wi-Fi TCP",
+        usb_port="COM7",
     )
     store.save(expected)
     assert store.load() == expected

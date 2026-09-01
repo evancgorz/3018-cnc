@@ -60,8 +60,10 @@ def test_pine_brand_assets_and_launch_surfaces_are_packaged() -> None:
     setup = (root / "setup.ps1").read_text(encoding="utf-8")
     assert 'app.setApplicationDisplayName("Pine")' in bootstrap
     assert "QSplashScreen" in bootstrap
+    assert "RotatingFileHandler" in bootstrap
     assert '"Pine.lnk"' in setup
     assert "$shortcut.IconLocation" in setup
+    assert "pythonw.exe" in setup
 
 
 def test_qt_shutdown_releases_transport_once(qapp) -> None:
@@ -75,6 +77,53 @@ def test_qt_shutdown_releases_transport_once(qapp) -> None:
     assert connection.disconnect_calls == 1
     assert not connection.connected
     assert view_model.application.transport is None
+
+
+def test_qt_auto_connects_to_last_successful_usb_endpoint(qapp, tmp_path) -> None:
+    from ttc3018_control.connection_settings import ConnectionSettings, ConnectionSettingsStore
+
+    transport = _FakeConnection()
+    transport.connected = False
+    transport.connect = lambda port: setattr(transport, "connected", port == "COM7")  # type: ignore[attr-defined]
+    ConnectionSettingsStore(tmp_path / "config" / "connection.json").save(
+        ConnectionSettings(preferred_transport="USB serial", usb_port="COM7")
+    )
+    controller = ApplicationController(
+        tmp_path,
+        usb_factory=lambda: transport,
+        usb_ports=lambda: [("COM7", "Pine test controller")],
+    )
+    view_model = ControllerViewModel(controller)
+
+    view_model._auto_connect_last()
+
+    assert view_model.connected
+    assert controller.settings.usb_port == "COM7"
+    assert controller.settings.preferred_transport == "USB serial"
+
+
+def test_qt_auto_connects_to_last_successful_wifi_endpoint(qapp, tmp_path) -> None:
+    from ttc3018_control.application.connection_service import ConnectionOutcome
+    from ttc3018_control.application.state import ConnectionMode
+    from ttc3018_control.connection_settings import ConnectionSettings, ConnectionSettingsStore
+
+    ConnectionSettingsStore(tmp_path / "config" / "connection.json").save(
+        ConnectionSettings("192.168.86.36", 23, "Wi-Fi TCP")
+    )
+    controller = ApplicationController(tmp_path)
+    attempts: list[tuple[str, int]] = []
+
+    def begin_wifi(host: str, port: int) -> ConnectionOutcome:
+        attempts.append((host, port))
+        return ConnectionOutcome(True, "Connecting", ConnectionMode.WIFI, host, port)
+
+    controller.begin_wifi = begin_wifi  # type: ignore[method-assign]
+    view_model = ControllerViewModel(controller)
+
+    view_model._auto_connect_last()
+
+    assert attempts == [("192.168.86.36", 23)]
+    assert view_model.preferred_transport == "Wi-Fi TCP"
 
 
 def test_guided_setup_is_state_gated_and_advances_in_order(qapp) -> None:

@@ -437,7 +437,16 @@ class ApplicationController:
         return self.generation_service.import_step(path, plane)
 
     def save_wifi_settings(self, host: str, port: int) -> None:
-        self.settings = ConnectionSettings(host, port, "Wi-Fi TCP")
+        self.settings = ConnectionSettings(host, port, "Wi-Fi TCP", self.settings.usb_port)
+        self.connection_store.save(self.settings)
+
+    def save_usb_settings(self, port: str) -> None:
+        self.settings = ConnectionSettings(
+            self.settings.wifi_host,
+            self.settings.wifi_port,
+            "USB serial",
+            port.strip(),
+        )
         self.connection_store.save(self.settings)
 
     def save_profile(self, profile: MachineProfile) -> None:

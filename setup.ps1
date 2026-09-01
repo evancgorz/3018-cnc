@@ -21,11 +21,16 @@ if (-not $ShortcutOnly) {
 }
 
 $desktop = [Environment]::GetFolderPath("Desktop")
+$pythonw = Join-Path $projectRoot ".venv\Scripts\pythonw.exe"
+if (-not (Test-Path -LiteralPath $pythonw)) {
+    throw "Pine's Python environment is not ready. Run .\setup.ps1 without -ShortcutOnly first."
+}
 $shortcutPath = Join-Path $desktop "Pine.lnk"
 $legacyShortcutPath = Join-Path $desktop "TTC 3018 Control.lnk"
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = Join-Path $projectRoot "run.bat"
+$shortcut.TargetPath = $pythonw
+$shortcut.Arguments = '"' + (Join-Path $projectRoot "run.py") + '"'
 $shortcut.WorkingDirectory = $projectRoot
 $shortcut.Description = "Launch Pine CNC Studio"
 $shortcut.IconLocation = (Join-Path $projectRoot "src\ttc3018_control\qt\assets\pine.ico") + ",0"

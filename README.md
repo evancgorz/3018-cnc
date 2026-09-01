@@ -29,6 +29,7 @@ blocking navigation or machine status updates.
 
 - Keeps one persistent USB serial connection open.
 - Connects through either USB serial or the DLC32's raw Wi-Fi TCP stream.
+- Automatically retries the last successful USB or Wi-Fi connection after startup.
 - Detects Windows COM ports and defaults to the detected COM3 controller.
 - Polls and displays live GRBL state and reported XYZ position.
 - Provides guarded incremental X, Y, and Z jogging.
@@ -285,10 +286,13 @@ Open PowerShell in this directory and run:
 
 ## Run
 
-The recommended entry point is the **Pine** desktop shortcut. It is
-created or refreshed automatically by `setup.ps1`. You can also double-click
-`run.bat` in File Explorer, or run it from Command Prompt. This launches the Qt
-Quick interface:
+The recommended entry point is the **Pine** desktop shortcut. It is created or
+refreshed automatically by `setup.ps1` and launches with no terminal window.
+Pine records rotating diagnostics in `logs/pine.log`; failures that happen
+before Qt loads are written to `logs/pine-bootstrap.log`. You can still
+double-click `run.bat` in File Explorer, or run it from Command Prompt, when
+interactive startup troubleshooting is useful. This launches the same Qt Quick
+interface:
 
 ```bat
 run.bat

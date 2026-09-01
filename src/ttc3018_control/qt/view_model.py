@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
@@ -50,7 +51,7 @@ class ControllerViewModel(QObject):
     issues_changed = Signal()
     profiles_changed = Signal()
 
-    def __init__(self, application: ApplicationController | None = None) -> None:
+    def __init__(self, application: ApplicationController | None = None, *, auto_connect: bool = False) -> None:
         super().__init__()
         root = Path.cwd()
         self.application = application or ApplicationController(root)
@@ -122,8 +123,9 @@ class ControllerViewModel(QObject):
         self._guided_step = 0
         self._guided_preflight_confirmed = False
         self._log_lines: list[str] = []
+        self._logger = logging.getLogger("pine.transport")
         self.transport = self.application.settings.preferred_transport
-        self.port = ""
+        self.port = self.application.settings.usb_port
         self.wifi_host = self.application.settings.wifi_host
         self.wifi_port = self.application.settings.wifi_port
         self._refresh_ports()
@@ -132,6 +134,8 @@ class ControllerViewModel(QObject):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
         self._timer.start(50)
+        if auto_connect:
+            QTimer.singleShot(800, self._auto_connect_last)
 
     @property
     def session(self):
@@ -1225,6 +1229,11 @@ class ControllerViewModel(QObject):
             self._set_notice(outcome.message)
             return
         self.transport = outcome.mode.value if outcome.mode else "USB serial"
+        self.port = port
+        try:
+            self.application.save_usb_settings(port)
+        except (OSError, ValueError):
+            self._logger.exception("Unable to save the last successful USB connection")
         self._connection_text = outcome.message
         self._set_notice(self._connection_text)
         self._emit_state()
@@ -1532,9 +1541,31 @@ class ControllerViewModel(QObject):
 
     def _refresh_ports(self) -> None:
         self._ports = [f"{device} — {description}" for device, description in self.application.usb_ports()]
-        if self._ports and not self.port:
+        saved_port = self.application.settings.usb_port
+        saved_label = next((label for label in self._ports if label.split(" ", 1)[0] == saved_port), "")
+        if saved_label:
+            self.port = saved_label
+        elif self._ports and not self.port:
             self.port = self._ports[0]
         self.ports_changed.emit()
+
+    def _auto_connect_last(self) -> None:
+        """Try the last successful endpoint once without opening a dialog."""
+        if self.connected:
+            return
+        settings = self.application.settings
+        if settings.preferred_transport == "Wi-Fi TCP":
+            self._set_notice(f"Connecting automatically to {settings.wifi_host}:{settings.wifi_port}…")
+            self.connect_to_wifi(settings.wifi_host, settings.wifi_port)
+            return
+        if not settings.usb_port:
+            return
+        available = {label.split(" ", 1)[0] for label in self._ports}
+        if settings.usb_port not in available:
+            self._set_notice(f"Last USB connection {settings.usb_port} is not available")
+            return
+        self._set_notice(f"Connecting automatically to {settings.usb_port}…")
+        self.connect_to_usb(settings.usb_port)
 
     def _poll(self) -> None:
         self._poll_wifi_result()
@@ -1849,6 +1880,7 @@ class ControllerViewModel(QObject):
         return False, "Unknown guided setup step."
 
     def _set_notice(self, message: str) -> None:
+        logging.getLogger("pine.ui").info(message)
         self.toast_requested.emit(message)
 
     def _finish_operation(
@@ -1959,6 +1991,7 @@ class ControllerViewModel(QObject):
     def _append_log(self, event) -> None:
         line = f"{event.timestamp:%H:%M:%S}  {event.kind.upper():<11} {event.text}"
         self._log_lines = (*self._log_lines[-399:], line)
+        self._logger.info("%s %-11s %s", event.timestamp.isoformat(timespec="milliseconds"), event.kind.upper(), event.text)
         self._emit_state()
 
     def _emit_state(self) -> None:

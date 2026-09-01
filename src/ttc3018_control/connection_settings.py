@@ -12,6 +12,7 @@ class ConnectionSettings:
     wifi_host: str = "192.168.4.1"
     wifi_port: int = 23
     preferred_transport: str = "USB serial"
+    usb_port: str = ""
 
     def validate(self) -> None:
         if not self.wifi_host.strip():
@@ -20,6 +21,8 @@ class ConnectionSettings:
             raise ValueError("TCP port must be between 1 and 65535")
         if self.preferred_transport not in {"USB serial", "Wi-Fi TCP"}:
             raise ValueError("Preferred transport must be USB serial or Wi-Fi TCP")
+        if "\x00" in self.usb_port:
+            raise ValueError("USB port contains an invalid character")
 
 
 class ConnectionSettingsStore:
