@@ -24,6 +24,7 @@ class JobService:
     # one burst. 512 bytes keeps substantially more than the 15-slot motion
     # planner supplied while retaining ample bridge and status-report headroom.
     MAX_STREAM_WINDOW = 512
+    REQUIRED_SPINDLE_STOP_ACKS = 2
 
     def __init__(
         self,
@@ -45,6 +46,7 @@ class JobService:
         self.program: GCodeProgram | None = None
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
         self._restart_requires_reload = False
@@ -142,6 +144,10 @@ class JobService:
             self.streamer.start(commands)
         except (RuntimeError, ValueError) as exc:
             return ActionOutcome(False, f"Job not started — {exc}")
+        self._completion_waiting_for_idle = False
+        self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
+        self._return_waiting_for_idle = False
         self._elapsed_seconds = 0.0
         self._timing_started_at = self._clock()
         self._changed()
@@ -172,6 +178,7 @@ class JobService:
         self._freeze_timing()
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._changed()
 
@@ -181,8 +188,11 @@ class JobService:
         if self._spindle_stop_pending:
             if lowered == "ok":
                 self._spindle_stop_pending = False
+                self._spindle_stop_acks += 1
                 self._return_waiting_for_idle = True
-                self._on_notice("Job complete; spindle stop accepted, waiting for GRBL Idle at 0 RPM")
+                self._on_notice(
+                    "Job complete; spindle stop accepted, waiting for GRBL Idle at 0 RPM"
+                )
             elif lowered.startswith("error:") or lowered.startswith("alarm:"):
                 self._spindle_stop_pending = False
                 self._return_waiting_for_idle = False
@@ -222,14 +232,7 @@ class JobService:
         if self._completion_waiting_for_idle and status.can_jog:
             self._freeze_timing()
             self._completion_waiting_for_idle = False
-            try:
-                self._send_line(b"M5\n")
-            except RuntimeError as exc:
-                self._restart_requires_reload = True
-                self._on_notice(f"Job motion finished but spindle stop was not sent — {exc}; remove machine power")
-            else:
-                self._spindle_stop_pending = True
-                self._on_notice("Job motion finished; spindle stop sent")
+            self._request_spindle_stop("Job motion finished; spindle stop sent")
             self._changed()
             return
         # An M5 acknowledgement only confirms that GRBL accepted the command.
@@ -238,6 +241,13 @@ class JobService:
         # an authoritative status report confirms both Idle and zero spindle
         # speed.
         if self._return_waiting_for_idle and status.can_jog and status.spindle == 0:
+            if self._spindle_stop_acks < self.REQUIRED_SPINDLE_STOP_ACKS:
+                self._return_waiting_for_idle = False
+                self._request_spindle_stop(
+                    "Zero RPM reported; spindle stop verification sent before return motion"
+                )
+                self._changed()
+                return
             self._return_waiting_for_idle = False
             self._on_notice("Job complete; spindle stopped and GRBL Idle, returning to work zero")
             self._on_ready_to_return()
@@ -251,6 +261,7 @@ class JobService:
         self._freeze_timing()
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
         self.streamer.buffer_capacity = self.DEFAULT_RX_CAPACITY
@@ -296,6 +307,7 @@ class JobService:
         self._restart_requires_reload = True
         self._completion_waiting_for_idle = False
         self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         try:
             # A failure can leave later buffered commands queued behind the
@@ -313,6 +325,18 @@ class JobService:
                 f"Job failed — {reason}; motion queue reset and spindle stop requested. "
                 "Re-establish references and reload the job before restarting."
             )
+
+    def _request_spindle_stop(self, notice: str) -> None:
+        """Send one completion-owned M5 or fail closed if it cannot be sent."""
+        try:
+            self._send_line(b"M5\n")
+        except RuntimeError as exc:
+            reason = f"spindle stop was not sent — {exc}"
+            self.streamer.fail(reason)
+            self._fail_closed(reason)
+            return
+        self._spindle_stop_pending = True
+        self._on_notice(notice)
 
     @staticmethod
     def _motion_commands_without_terminal_stop(commands: Sequence[str]) -> tuple[str, ...]:

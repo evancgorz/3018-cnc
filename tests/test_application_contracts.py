@@ -476,6 +476,12 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
     assert lines[-1] == b"M5\n"
     assert service.spindle_stop_pending
     assert service.handle_response("ok")
+    service.observe_status(GrblStatus("Idle", spindle=0))
+    assert lines[-1] == b"M5\n"
+    assert lines.count(b"M5\n") == 2
+    assert service.spindle_stop_pending
+    assert ready == []
+    assert service.handle_response("ok")
     service.observe_status(GrblStatus("Idle", spindle=12000))
     assert ready == []
     assert service.return_waiting_for_idle
@@ -484,6 +490,44 @@ def test_job_service_streams_and_stops_spindle_before_return() -> None:
 
     assert ready == [True]
     assert any("spindle stopped" in notice for notice in notices)
+
+
+def test_job_completion_never_returns_without_reported_spindle_speed() -> None:
+    lines: list[bytes] = []
+    ready: list[bool] = []
+    service = JobService(
+        MachineSession(),
+        lines.append,
+        lambda _command: None,
+        on_ready_to_return=lambda: ready.append(True),
+    )
+
+    assert service.start(("G1 X1", "M5", "M2")).accepted
+    assert service.handle_response("ok")
+    service.observe_status(GrblStatus("Idle"))
+    assert service.handle_response("ok")
+    service.observe_status(GrblStatus("Idle"))
+
+    assert ready == []
+    assert service.return_waiting_for_idle
+
+
+def test_job_completion_stop_send_failure_fails_closed() -> None:
+    realtime: list[bytes] = []
+
+    def send_line(command: bytes) -> None:
+        if command == b"M5\n":
+            raise RuntimeError("transport unavailable")
+
+    service = JobService(MachineSession(), send_line, realtime.append)
+    assert service.start(("G1 X1", "M5", "M2")).accepted
+    assert service.handle_response("ok")
+
+    service.observe_status(GrblStatus("Idle", spindle=0))
+
+    assert service.state == "failed"
+    assert service.restart_requires_reload
+    assert realtime[-2:] == [b"!", b"\x18"]
 
 
 def test_job_service_remaining_time_is_pause_aware_and_stops_at_motion_idle() -> None:
