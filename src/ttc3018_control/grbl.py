@@ -124,7 +124,9 @@ def make_probe_retract(axis: str, distance_mm: float, feed_mm_min: float) -> byt
     axis = axis.upper()
     if axis not in {"X", "Y", "Z"} or distance_mm == 0 or not 0 < feed_mm_min <= 1500:
         raise ValueError("Invalid probe retract")
-    return f"G91 G21 {axis}{distance_mm:g} F{feed_mm_min:g}\n".encode("ascii")
+    # G38.x is modal in GRBL. Explicitly select linear motion so a retract
+    # cannot be interpreted as another probe cycle while the input is active.
+    return f"G91 G21 G1 {axis}{distance_mm:g} F{feed_mm_min:g}\n".encode("ascii")
 
 
 def make_work_offset(slot: int, position: Position) -> bytes:
@@ -133,6 +135,20 @@ def make_work_offset(slot: int, position: Position) -> bytes:
     if not all(math.isfinite(value) for value in (position.x, position.y, position.z)):
         raise ValueError("Work offset coordinates must be finite")
     return f"G10 L20 P{slot} X{position.x:g} Y{position.y:g} Z{position.z:g}\n".encode("ascii")
+
+
+def make_work_offset_axis(slot: int, axis: str, value: float) -> bytes:
+    """Build a work-offset update for exactly one axis.
+
+    This is intentionally separate from ``make_work_offset``: probing a
+    movable Z plate must never rewrite the established X/Y origin.
+    """
+    axis = axis.upper()
+    if slot not in range(1, 7) or axis not in {"X", "Y", "Z"}:
+        raise ValueError("Invalid work-offset slot or axis")
+    if not math.isfinite(value):
+        raise ValueError("Work offset coordinate must be finite")
+    return f"G10 L20 P{slot} {axis}{value:g}\n".encode("ascii")
 
 
 def make_tool_length_offset(z_offset: float) -> bytes:

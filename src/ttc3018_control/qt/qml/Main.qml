@@ -201,7 +201,7 @@ ApplicationWindow {
             spacing: 12
             Label { text: "Choose how Pine should reach GRBL."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             Label { text: "Transport"; color: window.palette.subtle; font.pixelSize: 11 }
-            ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP"]; currentIndex: appViewModel && appViewModel.preferred_transport === "Wi-Fi TCP" ? 1 : 0; onActivated: window.selectedTransport = currentText }
+            ComboBox { id: transportCombo; Layout.fillWidth: true; model: ["USB serial", "Wi-Fi TCP", "Virtual Machine (Digital Twin)"]; currentIndex: appViewModel && appViewModel.preferred_transport === "Wi-Fi TCP" ? 1 : 0; onActivated: window.selectedTransport = currentText }
 
             ColumnLayout {
                 visible: transportCombo.currentText === "USB serial"
@@ -228,18 +228,89 @@ ApplicationWindow {
                 MutedLabel { text: "You can remove USB and connect over the controller's Wi-Fi TCP endpoint." }
             }
 
+            ColumnLayout {
+                visible: transportCombo.currentText === "Virtual Machine (Digital Twin)"
+                Layout.fillWidth: true
+                spacing: 7
+                Label { text: "Digital twin"; color: window.palette.subtle; font.pixelSize: 11 }
+                Label { text: "Runs an isolated TTC 3018 controller on loopback. No serial port or physical/network controller will be accessed."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                RowLayout { Layout.fillWidth: true
+                    Label { text: "Speed"; color: window.palette.muted }
+                    ComboBox { id: simulationSpeed; Layout.fillWidth: true; model: ["Realtime", "2×", "5×", "10×", "Uncapped"]; currentIndex: appViewModel && appViewModel.simulation_speed ? model.indexOf(appViewModel.simulation_speed) : 0 }
+                    Label { text: "Workpiece"; color: window.palette.muted }
+                    ComboBox { id: simulationWorkpiece; Layout.fillWidth: true; model: ["Pocket + retained island", "Collision-only STEP"]; currentIndex: appViewModel && appViewModel.simulation_workpiece === "Collision-only STEP" ? 1 : 0 }
+                }
+            }
+
             Item { Layout.fillHeight: true }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 SecondaryButton { text: "Cancel"; onClicked: connectionDialog.close() }
                 PrimaryButton {
-                    text: "Connect"
-                    enabled: appViewModel && (transportCombo.currentText === "USB serial" ? portCombo.currentText.length > 0 : wifiHostField.text.trim().length > 0)
+                    text: transportCombo.currentText === "Virtual Machine (Digital Twin)" ? "Start Digital Twin" : "Connect"
+                    enabled: appViewModel && (transportCombo.currentText === "USB serial" ? portCombo.currentText.length > 0 : transportCombo.currentText === "Virtual Machine (Digital Twin)" ? true : wifiHostField.text.trim().length > 0)
                     onClicked: {
                         if (transportCombo.currentText === "USB serial") appViewModel.connect_to_usb(portCombo.currentText)
-                        else appViewModel.connect_to_wifi(wifiHostField.text, Number(wifiPortField.text))
+                        else if (transportCombo.currentText === "Wi-Fi TCP") appViewModel.connect_to_wifi(wifiHostField.text, Number(wifiPortField.text))
+                        else { appViewModel.configure_simulation(simulationSpeed.currentText, simulationWorkpiece.currentText); appViewModel.connect_to_simulation() }
                         connectionDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+    Window {
+        id: simulationWindow
+        visible: appViewModel && appViewModel.simulation_active
+        title: "Pine — Digital Twin — NO PHYSICAL MACHINE"
+        width: 980
+        height: 680
+        minimumWidth: 720
+        minimumHeight: 520
+        color: window.palette.background
+        flags: Qt.Window
+        onClosing: function(closeEvent) {
+            if (appViewModel && appViewModel.job_active) {
+                closeEvent.accepted = false
+                appViewModel.show_preview_notice("Stop or abort the simulated job before closing the digital-twin window.")
+            }
+        }
+        ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 10
+            RowLayout { Layout.fillWidth: true
+                Label { text: appViewModel ? appViewModel.simulation_banner : "DIGITAL TWIN — NO PHYSICAL MACHINE"; color: window.palette.accent; font.weight: Font.Bold; font.pixelSize: 15 }
+                Item { Layout.fillWidth: true }
+                Label { text: appViewModel && appViewModel.simulation_supervisor_healthy ? "Supervisor: healthy" : "Supervisor: unavailable"; color: appViewModel && appViewModel.simulation_supervisor_healthy ? window.palette.success : window.palette.danger }
+            }
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
+                Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; color: "#12161B"; radius: 10; border.color: window.palette.divider
+                    Canvas { id: simulationCanvas; anchors.fill: parent; anchors.margins: 12
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset(); ctx.fillStyle = "#12161B"; ctx.fillRect(0, 0, width, height)
+                            ctx.strokeStyle = "#536274"; ctx.lineWidth = 3; ctx.strokeRect(32, height - 42, width - 64, 18)
+                            ctx.strokeStyle = "#65788B"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(50, height - 42); ctx.lineTo(50, 52); ctx.moveTo(width - 50, height - 42); ctx.lineTo(width - 50, 52); ctx.moveTo(50, 52); ctx.lineTo(width - 50, 52); ctx.stroke()
+                            const text = appViewModel ? appViewModel.machine_position : "X0  Y0  Z0"
+                            const xMatch = text.match(/X([^ ]+)/); const yMatch = text.match(/Y([^ ]+)/); const zMatch = text.match(/Z([^ ]+)/)
+                            const px = xMatch ? Number(xMatch[1]) : 0; const py = yMatch ? Number(yMatch[1]) : 0; const pz = zMatch ? Number(zMatch[1]) : 0
+                            const tx = 50 + Math.max(0, Math.min(290, px)) / 290 * (width - 100)
+                            const ty = height - 42 - Math.max(0, Math.min(170, py)) / 170 * (height - 110)
+                            ctx.strokeStyle = "#40C4D9"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tx, 52); ctx.lineTo(tx, ty); ctx.stroke()
+                            ctx.fillStyle = "#ED5B5B"; ctx.beginPath(); ctx.arc(tx, ty - Math.max(0, Math.min(40, pz)) * 1.4, 7, 0, Math.PI * 2); ctx.fill()
+                        }
+                    }
+                    Connections { target: appViewModel; function onSimulation_changed() { simulationCanvas.requestPaint() } function onState_changed() { simulationCanvas.requestPaint() } }
+                }
+                Rectangle { Layout.preferredWidth: 260; Layout.fillHeight: true; color: window.palette.surface; radius: 10
+                    ColumnLayout { anchors.fill: parent; anchors.margins: 14; spacing: 8
+                        Label { text: "Authoritative plant"; color: window.palette.text; font.weight: Font.DemiBold }
+                        Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
+                        Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
+                        Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
+                        Label { text: "Hazards"; color: window.palette.text; font.weight: Font.DemiBold }
+                        ListView { Layout.fillWidth: true; Layout.fillHeight: true; model: appViewModel ? appViewModel.simulation_hazards : []; delegate: Label { width: parent.width; text: "• " + modelData; color: window.palette.danger; wrapMode: Text.Wrap } }
+                        SecondaryButton { Layout.fillWidth: true; text: "Disconnect digital twin"; enabled: appViewModel && appViewModel.simulation_active; onClicked: appViewModel.disconnect() }
                     }
                 }
             }
@@ -256,6 +327,13 @@ ApplicationWindow {
     CommissioningDialog {
         id: commissioningDialog
         appPalette: window.palette
+        onOpenZProbeWizard: { commissioningDialog.close(); zProbeWizard.open() }
+    }
+
+    ZProbeWizard {
+        id: zProbeWizard
+        appPalette: window.palette
+        onContinueToCommissioning: { zProbeWizard.close(); commissioningDialog.open() }
     }
 
     Dialog {
@@ -1082,7 +1160,7 @@ ApplicationWindow {
                     Label { text: "CNC STUDIO"; color: window.palette.subtle; font.pixelSize: 10; font.letterSpacing: 1.4; anchors.verticalCenter: parent.verticalCenter }
                 }
                 Item { Layout.fillWidth: true }
-                Pill { label: appViewModel ? appViewModel.connection_text : "Disconnected"; tone: window.palette.warning }
+                Pill { label: appViewModel && appViewModel.simulation_active ? appViewModel.simulation_banner : (appViewModel ? appViewModel.connection_text : "Disconnected"); tone: appViewModel && appViewModel.simulation_active ? window.palette.accent : window.palette.warning }
                 Pill { label: appViewModel ? appViewModel.grbl_state : "Unknown"; tone: window.palette.muted }
                 SecondaryButton { text: appViewModel && appViewModel.connected ? "Disconnect" : "Connect"; onClicked: appViewModel && appViewModel.connected ? appViewModel.disconnect() : connectionDialog.open() }
             }
@@ -1226,6 +1304,7 @@ ApplicationWindow {
                             Label { visible: appViewModel && appViewModel.job_active; text: appViewModel ? appViewModel.job_time_remaining : ""; color: window.palette.accent; font.pixelSize: 12; font.weight: Font.DemiBold }
                         }
                         ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: appViewModel ? appViewModel.job_progress : 0; visible: appViewModel && appViewModel.job_file !== "No G-code loaded" }
+                        PineLiveCard { Layout.fillWidth: true; palette: window.palette }
                         Repeater { model: ["Machine is connected and Idle", "Virtual reference is trusted", "XYZ work zero is confirmed", "Job fits the virtual envelope"]
                             delegate: RowLayout { Layout.fillWidth: true; spacing: 8
                                 property bool passed: index === 0 ? (appViewModel && appViewModel.grbl_state === "Idle") : index === 1 ? (appViewModel && appViewModel.reference_trusted) : index === 2 ? (appViewModel && appViewModel.work_zero_confirmed) : (appViewModel && appViewModel.job_file !== "No G-code loaded")
@@ -1258,19 +1337,14 @@ ApplicationWindow {
             RowLayout { anchors.fill: parent; spacing: 14
                 Panel { Layout.preferredWidth: 210; Layout.minimumWidth: 210; Layout.maximumWidth: 210; Layout.fillHeight: true
                     ColumnLayout { anchors.fill: parent; anchors.margins: 16; spacing: 8
-                        SectionTitle { text: "Machine" }
-                        SecondaryButton { Layout.fillWidth: true; text: "Status"; onClicked: window.toastText = appViewModel.grbl_state + " · " + appViewModel.machine_position }
-                        SecondaryButton { Layout.fillWidth: true; text: "Connection"; onClicked: connectionDialog.open() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Configure controller Wi-Fi"; enabled: appViewModel && appViewModel.connected; onClicked: wifiSetupDialog.open() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Machine profile"; onClicked: profileDialog.open() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Machine setup"; onClicked: machineSetupDialog.open() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Commissioning"; onClicked: commissioningDialog.open() }
-                        ModernCheckBox { Layout.fillWidth: true; palette: window.palette; text: "Show expert details"; checked: appViewModel && appViewModel.expert_mode; onClicked: if (appViewModel) appViewModel.set_expert_mode(checked) }
-                        SecondaryButton { Layout.fillWidth: true; text: "Coordinates"; onClicked: window.toastText = "Machine " + appViewModel.machine_position + " · Work " + appViewModel.work_position }
-                        SecondaryButton { Layout.fillWidth: true; text: "Console"; onClicked: consoleDialog.open() }
-                        SecondaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
+                        SectionTitle { text: "Machine readiness" }
+                        MutedLabel { text: appViewModel ? appViewModel.readiness_reason : "Connect, establish reference, set work zero, then run a validated job."; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Divider {}
+                        PrimaryButton { Layout.fillWidth: true; text: "Guided setup"; onClicked: guidedSetupDialog.open() }
+                        SecondaryButton { Layout.fillWidth: true; text: "Machine settings…"; onClicked: machineSettingsDialog.open() }
+                        SecondaryButton { visible: appViewModel && appViewModel.expert_mode; Layout.fillWidth: true; text: "Console…"; onClicked: consoleDialog.open() }
                         Item { Layout.fillHeight: true }
-                        MutedLabel { text: "Reference and work zero are intentionally separate safety states." }
+                        MutedLabel { text: "Connection stays in the header. Positioning and zeroing stay together on this page."; wrapMode: Text.Wrap; Layout.fillWidth: true }
                     }
                 }
                 Panel { Layout.fillWidth: true; Layout.fillHeight: true
@@ -1342,8 +1416,47 @@ ApplicationWindow {
                             PrimaryButton { Layout.fillWidth: true; text: "Zero XYZ"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.set_work_zero("XYZ") }
                         }
                         SecondaryButton { Layout.fillWidth: true; text: "Return to work zero"; enabled: appViewModel && appViewModel.can_jog; onClicked: appViewModel.return_to_work_zero() }
+                        Rectangle { visible: appViewModel && appViewModel.z_touch_plate_enabled; Layout.fillWidth: true; Layout.preferredHeight: 112; radius: 10; color: window.palette.raised
+                            ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 6
+                                Label { text: "Z touch plate"; color: window.palette.text; font.weight: Font.DemiBold }
+                                Label { text: appViewModel ? ("Status: " + appViewModel.z_touch_plate_status_text) : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                RowLayout { Layout.fillWidth: true
+                                    SecondaryButton { text: "Test input…"; enabled: appViewModel && appViewModel.connected; onClicked: zProbeWizard.open() }
+                                    PrimaryButton { text: "Probe work Z"; enabled: appViewModel && appViewModel.connected && appViewModel.z_touch_plate_status === "ready" && appViewModel.work_zero_confirmed; onClicked: appViewModel.probe_work_z() }
+                                    SecondaryButton { visible: appViewModel && appViewModel.z_touch_plate_status === "remove plate"; text: "Puck removed"; onClicked: appViewModel.acknowledge_z_touch_plate_removed() }
+                                }
+                            }
+                        }
                     }
                     }
+                }
+            }
+        }
+
+        Dialog {
+            id: machineSettingsDialog
+            modal: true
+            title: "Machine settings"
+            width: 560
+            height: 390
+            x: Math.round((window.width - width) / 2)
+            y: Math.round((window.usableContentHeight - height) / 2)
+            standardButtons: Dialog.NoButton
+            background: Rectangle { color: window.palette.surface; radius: 14; border.color: window.palette.divider; border.width: 1 }
+            ColumnLayout {
+                anchors.fill: parent; anchors.margins: 20; spacing: 10
+                MutedLabel { text: "Less-used machine configuration lives here so the working page stays focused."; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                SecondaryButton { Layout.fillWidth: true; text: "Connection…"; onClicked: { machineSettingsDialog.close(); connectionDialog.open() } }
+                SecondaryButton { Layout.fillWidth: true; text: "Configure controller Wi-Fi…"; enabled: appViewModel && appViewModel.connected; onClicked: { machineSettingsDialog.close(); wifiSetupDialog.open() } }
+                SecondaryButton { Layout.fillWidth: true; text: "Machine profile…"; onClicked: { machineSettingsDialog.close(); profileDialog.open() } }
+                SecondaryButton { Layout.fillWidth: true; text: "Hardware capabilities…"; onClicked: { machineSettingsDialog.close(); machineSetupDialog.open() } }
+                SecondaryButton { Layout.fillWidth: true; text: "Commissioning…"; onClicked: { machineSettingsDialog.close(); commissioningDialog.open() } }
+                ModernCheckBox { Layout.fillWidth: true; palette: window.palette; text: "Show expert details"; checked: appViewModel && appViewModel.expert_mode; onClicked: if (appViewModel) appViewModel.set_expert_mode(checked) }
+                Item { Layout.fillHeight: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    SecondaryButton { text: "Close"; onClicked: machineSettingsDialog.close() }
                 }
             }
         }

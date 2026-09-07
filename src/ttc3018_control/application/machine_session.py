@@ -48,12 +48,17 @@ class MachineSession:
         position = self.machine_position
         return self.envelope.relative_position(position) if position else None
 
-    def update_status(self, status: GrblStatus) -> None:
-        """Apply a fresh controller report and confirm requested XYZ work zero."""
+    def update_status(self, status: GrblStatus, *, confirm_pending_work_zero: bool = True) -> None:
+        """Apply a controller report and optionally confirm a pending work zero.
+
+        Application callers suppress confirmation while the G10 command's
+        acknowledgement is still outstanding.  This prevents an already
+        queued status report from confirming a newly requested zero.
+        """
         self.status = status
         if status.work_offset is not None:
             self.work_offset = status.work_offset
-            if self.awaiting_work_zero_report:
+            if self.awaiting_work_zero_report and confirm_pending_work_zero:
                 self.work_zero_confirmed = True
                 self.awaiting_work_zero_report = False
 

@@ -224,6 +224,21 @@ exercise the topology distinction. They have the same top-view rectangle and
 circle, but the first contains a 2 mm circular recess while the second contains
 a 2 mm raised circular boss.
 
+The compact STEP showcase fixtures are designed for inexpensive 3018-sized test
+stock and are exercised by the automatic import, planning, simulation, and
+G-code validation tests:
+
+| Example | Size (mm) | Capability demonstrated |
+| --- | ---: | --- |
+| `showcase-mounting-plate.step` | 40 × 28 × 4 | Four through-holes, a through-slot, and outer profile |
+| `showcase-pocket-island.step` | 40 × 30 × 5 | Blind pocket with a retained same-depth island |
+| `showcase-profile-hole.step` | 40 × 25 × 4 | Chamfered silhouette, through-hole, and profile cutout |
+| `showcase-raised-bosses.step` | 40 × 28 × 6 | Round and rectangular raised bosses |
+| `showcase-stepped-pockets.step` | 42 × 28 × 6 | Three pockets at independent depths and mixed geometry |
+
+Run `scripts/generate_step_showcase.py` to regenerate these deterministic STEP
+files using OpenCASCADE.
+
 ### Guided STEP review examples
 
 These captures show the isometric stock/model preview and the validated toolpath
@@ -241,10 +256,36 @@ proposal for each representative fixture:
 
 ![Wedge guided STEP review](docs/images/step-wedge-review.jpg)
 
-This release is intentionally planar. It does not yet perform arbitrary-face
-selection, general 3D surface machining, adaptive/rest clearing, full-resolution
-stock collision simulation, or CAM-grade lead-in/lead-out compensation. Confirm
-the stock, tool, work zero, and machine envelope before starting a generated job.
+This release is intentionally planar for CAM generation. It does not yet perform
+arbitrary-face selection, general 3D surface machining, adaptive/rest clearing,
+or CAM-grade lead-in/lead-out compensation. The separate Digital Twin provides
+bounded 2.5D stock removal and swept tool/holder/fixture collision checks for
+hardware-free controller and UI testing; it is not a substitute for a physical
+emergency stop or a final machine commissioning check.
+
+### Digital Twin (hardware-free controller test rig)
+
+Choose **Virtual Machine (Digital Twin)** in the normal connection dialog to
+exercise Pine through the same TCP/GRBL transport path used by a controller.
+The twin is loopback-only and starts two owned subprocesses: a GRBL-compatible
+backend/plant and an independent operator/safety supervisor. The supervisor
+recomputes travel, bed, fixture, holder, rapid-into-stock, spindle-off, and
+workpiece hazards from telemetry and can interlock the backend. It cannot open a
+COM port, discover a LAN controller, or mutate physical work-zero/settings.
+
+The default profile is the stated TTC 3018 usable travel (X 290 mm, Y 170 mm,
+Z 40 mm). Simulation speed, a STEP showcase workpiece, stock metrics, traces,
+fault injection, deterministic scenarios, and replay/parity captures are
+documented in [`docs/SIMULATION_IMPLEMENTATION.md`](docs/SIMULATION_IMPLEMENTATION.md).
+Run the evidence CLI with:
+
+```text
+PYTHONPATH=src .venv/Scripts/python -m ttc3018_control.simulation.verify --all --output <evidence-dir>
+```
+
+Physical-vs-twin A/B capture is deliberately a later, explicit commissioning
+step. It is disabled unless the operator authorizes it and supplies a validated
+endpoint; no automated test connects to real hardware.
 
 The Plaque mode additionally supports:
 
@@ -342,6 +383,15 @@ Do not expose its GRBL TCP port to the public internet. Guest networks with
 client isolation may prevent the PC from reaching the controller. Wi-Fi loss
 invalidates the application's virtual reference; physical power removal remains
 the primary emergency stop.
+
+## Pine Live viewer (deferred)
+
+The LAN-only Pine Live prototype remains in the codebase for future development,
+but all of its user-facing controls are currently hidden. The product requirement
+is remote viewing from outside the machine's local network, so Pine Live will
+return after an outbound secure relay and internet-facing authentication flow are
+designed and tested. Do not expose Pine or the GRBL controller through router port
+forwarding. Live video is situational awareness, not a safety interlock.
 
 Routine control feedback appears in the non-modal status strip at the bottom of
 the window. Jog commands are ignored while GRBL is not `Idle`; reference,

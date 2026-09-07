@@ -643,6 +643,157 @@ def test_real_step_jobs_are_deterministic_and_nonnegative(
     assert program.bounds.minimum.y >= -0.001
 
 
+@pytest.mark.parametrize(
+    ("fixture", "expected_feature_kind"),
+    [
+        ("showcase-mounting-plate.step", "Recess"),
+        ("showcase-pocket-island.step", "Recess"),
+        ("showcase-profile-hole.step", "Recess"),
+        ("showcase-raised-bosses.step", "Raised boss"),
+        ("showcase-stepped-pockets.step", "Recess"),
+    ],
+)
+def test_showcase_step_files_import_and_slice_automatically(
+    fixture: str,
+    expected_feature_kind: str,
+) -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+
+    assert model.face_plane == "XY"
+    assert model.width <= 42.001
+    assert model.height <= 30.001
+    assert model.thickness <= 6.001
+    assert any(feature.kind == expected_feature_kind for feature in model.features)
+
+    job = generate_step_gcode(
+        model,
+        mode="Automatic part",
+        stock_width=model.width + 3.175,
+        stock_height=model.height + 3.175,
+        stock_thickness=model.thickness,
+        tool_diameter=3.175,
+        max_stepdown=2,
+        tab_count=0,
+    )
+    program = parse_gcode(job.gcode)
+
+    assert job.stroke_count > 0
+    assert job.operations[-1].kind == "Outer profile"
+    assert program.bounds.minimum.x >= -0.001
+    assert program.bounds.minimum.y >= -0.001
+    assert program.bounds.minimum.z == pytest.approx(-(model.thickness + 0.2), abs=0.01)
+    assert job.profile_simulation is not None and job.profile_simulation.passed
+    assert all(simulation.passed for simulation in job.feature_simulations)
+    assert job.gcode.rstrip().endswith("M2")
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "cusp-nested-relief.step",
+        "cusp-ramp-and-features.step",
+        "cusp-mixed-feature-plate.step",
+        "cusp-two-part-nest.step",
+    ],
+)
+def test_cusp_step_files_cover_compound_automatic_plans(fixture: str) -> None:
+    model = load_step_isolated(Path(__file__).parents[1] / "examples" / fixture)
+    job = generate_step_gcode(
+        model,
+        mode="Automatic part",
+        stock_width=model.width + 3.175,
+        stock_height=model.height + 3.175,
+        stock_thickness=model.thickness,
+        tool_diameter=3.175,
+        max_stepdown=2,
+        tab_count=0,
+    )
+    parsed = parse_gcode(job.gcode)
+    operation_ids = [operation.operation_id for operation in job.operations]
+
+    assert operation_ids[-1] == "outer-profile"
+    assert set(job.operations[-1].depends_on) == set(operation_ids[:-1])
+    assert parsed.bounds.minimum.x >= -0.001
+    assert parsed.bounds.minimum.y >= -0.001
+    assert parsed.bounds.minimum.z == pytest.approx(-(model.thickness + 0.2), abs=0.02)
+    assert job.profile_simulation is not None and job.profile_simulation.passed
+    assert all(simulation.passed for simulation in job.feature_simulations)
+    if fixture == "cusp-ramp-and-features.step":
+        assert "surface-planar-surface" in operation_ids
+        assert operation_ids.index("surface-planar-surface") < operation_ids.index("outer-profile")
+        assert job.surface_simulation is not None and job.surface_simulation.passed
+
+
+def test_showcase_pocket_preserves_same_depth_island() -> None:
+    model = load_step_isolated(
+        Path(__file__).parents[1] / "examples" / "showcase-pocket-island.step"
+    )
+
+    job = generate_step_gcode(
+        model,
+        mode="Detected feature",
+        stock_width=model.width + 3.175,
+        stock_height=model.height + 3.175,
+        stock_thickness=model.thickness,
+        tool_diameter=3.175,
+        max_stepdown=2,
+    )
+
+    assert len(job.feature_simulations) == 1
+    assert job.feature_simulations[0].passed
+    assert job.feature_simulations[0].gouged_area == pytest.approx(0, abs=0.001)
+
+
+def test_showcase_mounting_holes_use_smooth_contours_before_slot_clearing() -> None:
+    model = load_step_isolated(
+        Path(__file__).parents[1] / "examples" / "showcase-mounting-plate.step"
+    )
+
+    job = generate_step_gcode(
+        model,
+        mode="Detected feature",
+        stock_width=model.width + 3.175,
+        stock_height=model.height + 3.175,
+        stock_thickness=model.thickness,
+        tool_diameter=3.175,
+        max_stepdown=2,
+    )
+
+    closed = [stroke for stroke in job.strokes if math.dist(stroke[0], stroke[-1]) <= 1e-7]
+    smooth_circles = [stroke for stroke in closed if len(stroke) == 73]
+    assert len(smooth_circles) == 4
+    assert all(len(stroke) >= 5 for stroke in job.strokes)
+    assert job.stroke_count == 5
+    assert job.feature_simulations and job.feature_simulations[0].passed
+    # The center slot and each corner hole must remain independent strokes.
+    # Joining either at cutting depth would reproduce the observed diagonal
+    # gouge between the center and lower-right hole.
+    lower_right = (35.0 + job.placement_offset_x, 5.0 + job.placement_offset_y)
+    center = (20.0 + job.placement_offset_x, 14.0 + job.placement_offset_y)
+    assert not any(
+        any(math.dist(point, lower_right) < 4 for point in stroke)
+        and any(math.dist(point, center) < 8 for point in stroke)
+        for stroke in job.strokes
+    )
+
+
+def test_pocket_starts_with_compensated_perimeter_before_infill() -> None:
+    job = generate_step_gcode(
+        _solid_model(),
+        mode="Pocket",
+        stock_width=45,
+        stock_height=30,
+        tool_diameter=3,
+        depth=-1,
+    )
+
+    first = job.strokes[0]
+    perimeter_end = next(index for index in range(1, len(first)) if first[index] == first[0])
+    perimeter = first[:perimeter_end + 1]
+    assert Polygon(perimeter).area == pytest.approx((40 - 3) * (25 - 3), abs=0.1)
+    assert job.simulation is not None and job.simulation.passed
+
+
 def test_outside_contour_rejects_stock_that_cannot_contain_tool_offset() -> None:
     with pytest.raises(ValueError, match="outside the declared stock"):
         generate_step_gcode(_model(), mode="Outside contour", tool_diameter=3, stock_width=40, stock_height=25)

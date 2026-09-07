@@ -106,6 +106,12 @@ streaming pipeline.
 - [x] Show the current validated operation plan with target depths and
   dependencies, and disable generation when the preview is stale or rejected.
 - [x] Reject geometry or generated motion outside the trusted virtual envelope.
+- [x] Add four compact cusp-of-2.5D regression fixtures covering nested relief,
+  ramp-plus-features, mixed pockets/bosses/slots, and disconnected parts.
+- [x] Compose feature and planar-surface families in one automatic plan, with
+  internal work before the final outer profile and stable cross-family IDs.
+- [x] Regression-test every cusp fixture through import, automatic planning,
+  exact parser bounds, operation dependencies, and simulation acceptance.
 
 ## Completed foundation
 

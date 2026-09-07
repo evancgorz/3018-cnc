@@ -182,6 +182,35 @@ def test_confirmed_work_zero_restores_only_after_matching_fresh_wco(tmp_path) ->
     assert not mismatch.work_zero_confirmed
 
 
+@pytest.mark.parametrize("lifecycle", ["disconnect", "reset"])
+def test_stale_wco_cannot_confirm_after_lifecycle_cleanup(tmp_path, lifecycle) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    transport = _Transport()
+    transport.connected = True
+    controller = ApplicationController(tmp_path)
+    controller.set_transport_for_testing(transport)
+    controller.apply_status(GrblStatus("Idle", machine_position=Position(20, 20, 5)))
+
+    assert controller.set_work_zero("XYZ").accepted
+    stale_report = GrblStatus(
+        "Idle",
+        machine_position=Position(20, 20, 5),
+        work_offset=Position(20, 20, 5),
+    )
+
+    if lifecycle == "disconnect":
+        controller.disconnect("link lost")
+    else:
+        controller.reset()
+
+    assert not controller._work_zero_request_pending_ack
+    assert controller._work_zero_expected_offset is None
+    assert controller._work_zero_expected_axes == ""
+    controller.apply_status(stale_report)
+    assert not controller.work_zero_confirmed
+
+
 def test_controller_returns_to_persisted_work_zero_without_fresh_wco(tmp_path) -> None:
     from ttc3018_control.application.controller import ApplicationController
 
@@ -602,6 +631,36 @@ def test_unsafe_controller_state_fails_active_job_closed(state: str) -> None:
     assert realtime[-2:] == [b"!", b"\x18"]
 
 
+def test_job_watchdog_fails_closed_after_controller_silence() -> None:
+    now = [100.0]
+    realtime: list[bytes] = []
+    notices: list[str] = []
+    service = JobService(
+        MachineSession(),
+        lambda _command: None,
+        realtime.append,
+        notices.append,
+        clock=lambda: now[0],
+    )
+    assert service.start(("M3 S1000", "G1 X20 F100")).accepted
+
+    now[0] += service.CONTROLLER_SILENCE_TIMEOUT - 0.01
+    assert service.check_controller_watchdog() is None
+    service.handle_response("ok")
+    now[0] += service.CONTROLLER_SILENCE_TIMEOUT - 0.01
+    assert service.check_controller_watchdog() is None
+
+    now[0] += 0.02
+    reason = service.check_controller_watchdog()
+
+    assert reason is not None and "no responses" in reason
+    assert service.state == "failed"
+    assert service.restart_requires_reload
+    assert realtime[-2:] == [b"!", b"\x18"]
+    assert "connection or controller power may have been lost" in notices[-1]
+    assert service.check_controller_watchdog() is None
+
+
 def test_job_service_uses_dlc32_reported_rx_capacity() -> None:
     lines: list[bytes] = []
     service = JobService(MachineSession(), lines.append, lambda _command: None)
@@ -612,6 +671,38 @@ def test_job_service_uses_dlc32_reported_rx_capacity() -> None:
     assert service.streamer.buffer_capacity == 512
     assert len(lines) == 85
     assert service.streamer.buffered_bytes == 510
+
+
+def test_job_service_recovers_missing_final_ack_only_from_idle_empty_dlc32() -> None:
+    lines: list[bytes] = []
+    notices: list[str] = []
+    service = JobService(
+        MachineSession(), lines.append, lambda _command: None, notices.append
+    )
+    service.observe_status(GrblStatus("Idle", fields={"Bf": "15,1200"}))
+    assert service.start(("M3 S1000", "G1 X1 F100")).accepted
+    assert service.streamer.awaiting_ack
+
+    service.observe_status(
+        GrblStatus("Idle", fields={"Bf": "15,1200", "FS": "0,1000"})
+    )
+
+    assert service.state == "complete"
+    assert service.spindle_stop_pending
+    assert lines[-1] == b"M5\n"
+    assert any("missing final acknowledgement" in notice for notice in notices)
+
+
+def test_job_service_does_not_infer_empty_queue_from_idle_without_full_bf() -> None:
+    lines: list[bytes] = []
+    service = JobService(MachineSession(), lines.append, lambda _command: None)
+    assert service.start(("M3 S1000", "G1 X1 F100")).accepted
+
+    service.observe_status(GrblStatus("Idle", fields={"Bf": "15,128"}))
+
+    assert service.state == "running"
+    assert not service.spindle_stop_pending
+    assert lines[-1] != b"M5\n"
 
 
 def test_job_service_keeps_standard_grbl_capacity_and_resets_detection() -> None:

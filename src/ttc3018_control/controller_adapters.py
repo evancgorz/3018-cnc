@@ -7,7 +7,7 @@ from enum import StrEnum
 import math
 from typing import FrozenSet
 
-from .grbl import Position, clear_tool_length_offset, make_probe, make_probe_retract, make_setting, make_tool_length_offset, make_work_offset
+from .grbl import Position, clear_tool_length_offset, make_probe, make_probe_retract, make_setting, make_tool_length_offset, make_work_offset, make_work_offset_axis
 from .machine_config import ControllerKind
 
 
@@ -62,6 +62,10 @@ class ControllerAdapter:
         self.require(Capability.WORK_OFFSETS)
         return make_work_offset(slot, position)
 
+    def work_offset_axis_command(self, slot: int, axis: str, value: float) -> bytes:
+        self.require(Capability.WORK_OFFSETS)
+        return make_work_offset_axis(slot, axis, value)
+
     def tool_offset_command(self, z_offset: float) -> bytes:
         self.require(Capability.TOOL_LENGTH)
         return make_tool_length_offset(z_offset)
@@ -96,4 +100,3 @@ class Grbl11Adapter(ControllerAdapter):
 class GenericGrblAdapter(ControllerAdapter):
     kind = ControllerKind.GENERIC_GRBL
     capabilities = CapabilitySet(frozenset({Capability.MOTION}))
-

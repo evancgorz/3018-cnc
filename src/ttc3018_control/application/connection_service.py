@@ -41,10 +41,15 @@ class ConnectionService:
         usb_factory: Callable[[], Any],
         wifi_factory: Callable[[], Any],
         discover_hosts: Callable[[int], Iterable[str]],
+        simulation_factory: Callable[[], Any] | None = None,
+        simulation_transport_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._usb_factory = usb_factory
         self._wifi_factory = wifi_factory
         self._discover_hosts = discover_hosts
+        self._simulation_factory = simulation_factory
+        self._simulation_transport_factory = simulation_transport_factory
+        self.simulation_runtime: Any | None = None
         self.transport: Any | None = None
         self.mode = ConnectionMode.USB
         self.endpoint = ""
@@ -87,6 +92,47 @@ class ConnectionService:
             self.mode = ConnectionMode.USB
             self.endpoint = port
         return ConnectionOutcome(True, f"Connected to {port}; waiting for GRBL status", self.mode, port)
+
+    def connect_simulation(self) -> ConnectionOutcome:
+        """Start a loopback twin and connect through the ordinary TCP transport."""
+        with self._state_lock:
+            if self._closed:
+                return ConnectionOutcome(False, "Connection service is closed")
+            if self.connected or self._wifi_connecting:
+                return ConnectionOutcome(False, "Disconnect the current connection first")
+        runtime = None
+        transport = None
+        try:
+            if self._simulation_factory is None or self._simulation_transport_factory is None:
+                raise RuntimeError("Digital twin support is unavailable")
+            runtime = self._simulation_factory()
+            host, port = runtime.start()
+            if host != "127.0.0.1":
+                raise RuntimeError("Digital twin endpoint is not loopback")
+            transport = self._simulation_transport_factory()
+            transport.connect(host, port)
+        except Exception as exc:
+            self._safe_disconnect(transport)
+            if runtime is not None:
+                try:
+                    runtime.stop()
+                except Exception:
+                    pass
+            return ConnectionOutcome(False, f"Digital twin failed to start: {exc}")
+        with self._state_lock:
+            if self._closed or self.connected:
+                self._safe_disconnect(transport)
+                try:
+                    runtime.stop()
+                except Exception:
+                    pass
+                return ConnectionOutcome(False, "Digital twin connection was superseded")
+            self.transport = transport
+            self.simulation_runtime = runtime
+            self.mode = ConnectionMode.SIMULATION
+            self.endpoint = "127.0.0.1"
+            self.port = port
+        return ConnectionOutcome(True, f"Connected to Virtual Machine (Digital Twin) on loopback:{port}", self.mode, "127.0.0.1", port)
 
     def begin_wifi(self, host: str, port: int) -> ConnectionOutcome:
         with self._state_lock:
@@ -220,10 +266,17 @@ class ConnectionService:
         with self._state_lock:
             self._cancel_wifi_locked()
             transport = self.transport
+            runtime = self.simulation_runtime
             self.transport = None
+            self.simulation_runtime = None
             self._wifi_connecting = False
             self._drain_wifi_results_locked()
         self._safe_disconnect(transport)
+        if runtime is not None:
+            try:
+                runtime.stop()
+            except Exception:
+                pass
         return ConnectionOutcome(True, "Disconnected; physical position cannot be guaranteed", self.mode)
 
     def close(self) -> ConnectionOutcome:

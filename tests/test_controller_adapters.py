@@ -8,7 +8,7 @@ def test_grbl11_builds_guarded_commands() -> None:
     adapter = Grbl11Adapter()
     assert adapter.home_command() == b"$H\n"
     assert adapter.probe_command("Z", -5, 100) == b"G91 G21 G38.2 Z-5 F100\n"
-    assert adapter.retract_command("Z", 2, 25) == b"G91 G21 Z2 F25\n"
+    assert adapter.retract_command("Z", 2, 25) == b"G91 G21 G1 Z2 F25\n"
     assert adapter.work_offset_command(1, Position(10, 20, 30)) == b"G10 L20 P1 X10 Y20 Z30\n"
     assert adapter.tool_offset_command(1.25) == b"G43.1 Z1.25\n"
     assert adapter.clear_tool_offset_command() == b"G49\n"
@@ -27,6 +27,10 @@ def test_probe_and_tlo_reports() -> None:
     assert parse_probe_report("[PRB:1.000,-2.000,3.000:1]") == (Position(1, -2, 3), True)
     assert parse_probe_report("[PRB:1,2,3:0]") == (Position(1, 2, 3), False)
     assert parse_probe_report("[PRB:bad]") is None
+
+
+def test_adapter_builds_axis_only_work_offset() -> None:
+    assert Grbl11Adapter().work_offset_axis_command(1, "Z", 2.0) == b"G10 L20 P1 Z2\n"
     assert parse_tool_length_report("[TLO:-1.25]") == -1.25
 
 
@@ -36,4 +40,3 @@ def test_probe_and_tlo_reports() -> None:
 )
 def test_tool_length_delta(reference: float, measured: float, expected: float) -> None:
     assert Grbl11Adapter.tool_length_delta(reference, measured) == expected
-

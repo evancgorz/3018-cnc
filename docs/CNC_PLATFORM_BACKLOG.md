@@ -67,3 +67,21 @@ This document is intentionally backlog-only. None of the capabilities below are 
 ## Exit criteria for this backlog
 
 Each item requires a concrete adapter, declared schema, commissioning evidence, fail-closed behavior, deterministic fake-controller tests, and a manual hardware validation procedure before it may move into production scope.
+
+## Deferred corrective work
+
+### G-code picker handoff and keyboard focus retest
+
+The earlier GUI campaign found that accepting `air-cut-test.gcode` and
+`text-engraving.gcode` from the native picker did not visibly replace the
+active job. Both files are valid through the production parser (`16` and
+`187` commands respectively). The follow-up contract requires a deterministic
+QML-to-Python file-dialog handoff test, atomic replacement/failure-preservation
+tests, actionable feedback for unusable selections, and a real native-picker
+retest.
+
+The same campaign reported Tab focus remaining on the Pine label. That result
+was inconclusive because Windows accessibility metadata was stale while other
+controls responded. Reproduce it with Qt `activeFocusItem` and key events
+before changing focus scopes or tab policy. This work is deferred while Pine
+Live is implemented and must not be silently treated as complete.

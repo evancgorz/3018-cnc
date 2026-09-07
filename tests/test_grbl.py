@@ -1,6 +1,6 @@
 import pytest
 
-from ttc3018_control.grbl import Position, make_jog, make_setting, make_work_zero, parse_setting, parse_status
+from ttc3018_control.grbl import Position, make_jog, make_probe_retract, make_setting, make_work_offset_axis, make_work_zero, parse_setting, parse_status
 
 
 def test_parse_status_from_ttc3018() -> None:
@@ -34,9 +34,17 @@ def test_make_jog() -> None:
     assert make_jog("X", -5, 100) == b"$J=G91 G21 X-5 F100\n"
 
 
+def test_probe_retract_explicitly_leaves_modal_probe_motion() -> None:
+    assert make_probe_retract("Z", 2, 100) == b"G91 G21 G1 Z2 F100\n"
+
+
 def test_make_work_zero() -> None:
     assert make_work_zero("z") == b"G10 L20 P1 Z0\n"
     assert make_work_zero("ZYX") == b"G10 L20 P1 X0 Y0 Z0\n"
+
+
+def test_make_work_offset_axis_never_emits_other_axes() -> None:
+    assert make_work_offset_axis(1, "z", 1.5) == b"G10 L20 P1 Z1.5\n"
 
 
 def test_commissioning_settings() -> None:

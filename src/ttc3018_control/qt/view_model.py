@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import logging
 import time
 
@@ -22,10 +23,17 @@ from ..grbl import (
     Position,
 )
 from ..machine_state import MachineProfile
+from ..machine_config import DEFAULT_Z_TOUCH_PLATE_THICKNESS
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
 from ..step_prepare_settings import StepPrepareSettings
 from ..text_engraver import FONT_NAMES
+from ..live.frames import FrameHub
+from ..live.server import LiveWebServer
+from ..live_settings import LiveSettings, LiveSettingsStore
+from ..tailscale import TailscaleService, TailscaleStatus
+from .camera_service import CameraService
+from .live_bridge import RemoteCommandBridge
 from .task_runner import TaskResult, TaskRunner
 from .ui_preferences import UiPreferences, UiPreferencesStore
 
@@ -50,6 +58,8 @@ class ControllerViewModel(QObject):
     job_changed = Signal()
     issues_changed = Signal()
     profiles_changed = Signal()
+    live_changed = Signal()
+    simulation_changed = Signal()
 
     def __init__(self, application: ApplicationController | None = None, *, auto_connect: bool = False) -> None:
         super().__init__()
@@ -64,6 +74,7 @@ class ControllerViewModel(QObject):
         self.connection = None
         self._close_after_return_pending = False
         self._last_status_poll = 0.0
+        self._last_live_snapshot = 0.0
         self._unreferenced_jog_allowed = False
         self._pending_confirmation: tuple[str, object] | None = None
         self._confirmation_token = ""
@@ -78,6 +89,9 @@ class ControllerViewModel(QObject):
         self._spindle_text = "Off"
         self._feed_text = "0"
         self._pins_text = "—"
+        self._simulation_snapshot: dict[str, object] = {}
+        self._simulation_hazards: list[str] = []
+        self._simulation_stock_metrics: dict[str, object] = {}
         self._job_file_text = "No G-code loaded"
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
         self._preview_strokes: list[list[list[float]]] = []
@@ -123,6 +137,16 @@ class ControllerViewModel(QObject):
         self._guided_step = 0
         self._guided_preflight_confirmed = False
         self._log_lines: list[str] = []
+        self._live_settings_store = LiveSettingsStore(root / "config" / "live.json")
+        self._live_settings = self._live_settings_store.load()
+        self._live_frames = FrameHub()
+        self._camera_service = CameraService(self._live_frames, self)
+        self._remote_bridge = RemoteCommandBridge(self.application, audit=self._audit_live)
+        self._live_server: LiveWebServer | None = None
+        self._tailscale = TailscaleService()
+        self._tailscale_status = TailscaleStatus()
+        self._tailscale_task_token = 0
+        self._live_snapshot = self.application.live_status_snapshot()
         self._logger = logging.getLogger("pine.transport")
         self.transport = self.application.settings.preferred_transport
         self.port = self.application.settings.usb_port
@@ -130,6 +154,10 @@ class ControllerViewModel(QObject):
         self.wifi_port = self.application.settings.wifi_port
         self._refresh_ports()
         self.step_import_completed.connect(self._finish_step_import)
+        self._camera_service.state_changed.connect(lambda _state: self._refresh_live_state())
+        self._camera_frame_data = ""
+        self._camera_service.frame_data_changed.connect(self._on_camera_frame)
+        self._camera_service.camera_list_changed.connect(lambda: self.live_changed.emit())
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
@@ -553,9 +581,84 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def machine_capabilities(self) -> str:
         definition = self.application.machine_definition
-        enabled = [probe.kind.value.replace("_", " ") for probe in definition.probes if probe.enabled]
-        switches = [axis for axis, item in definition.axes.items() if item.switch_mode.value != "none"]
-        return "Optional hardware: " + (", ".join([*(f"{axis} homing" for axis in switches), *enabled]) if switches or enabled else "none")
+        enabled = ["movable Z touch plate / puck" for probe in definition.probes
+                   if probe.kind.value == "movable_z_plate" and probe.enabled]
+        return "Optional hardware: " + (", ".join(enabled) if enabled else "none")
+
+    @Property(bool, notify=state_changed)
+    def z_touch_plate_enabled(self) -> bool:
+        return self.application.z_touch_plate_definition is not None
+
+    @Property(str, notify=state_changed)
+    def z_touch_plate_status(self) -> str:
+        return self.application.z_touch_plate_status.replace("_", " ")
+
+    @Property(str, notify=state_changed)
+    def z_touch_plate_status_text(self) -> str:
+        return {
+            "disabled": "Disabled",
+            "needs_input_test": "Input test required",
+            "needs_commissioning": "Input verified — 3 supervised probe samples required",
+            "stale": "Configuration changed — repeat verification",
+            "probing": "Probe cycle running",
+            "remove_plate": "Remove the plate and clip",
+            "commissioning": "Supervised probe sample running",
+            "ready": "Ready",
+        }.get(self.application.z_touch_plate_status, self.application.z_touch_plate_status.replace("_", " ").title())
+
+    @Property(str, notify=state_changed)
+    def z_touch_plate_input_message(self) -> str:
+        return self.application.z_touch_plate_input_message
+
+    @Property(str, notify=state_changed)
+    def z_touch_plate_input_state(self) -> str:
+        return self.application.z_touch_plate_input_state
+
+    @Property(int, notify=state_changed)
+    def z_touch_plate_sample_count(self) -> int:
+        return self.application.z_touch_plate_sample_count
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_thickness(self) -> float:
+        definition = next((probe for probe in self.application.machine_definition.probes
+                           if probe.kind.value == "movable_z_plate"), None)
+        return (definition.plate_thickness if definition and definition.plate_thickness > 0
+                else DEFAULT_Z_TOUCH_PLATE_THICKNESS)
+
+    def _z_plate_value(self, name: str, fallback: float = 0.0) -> float:
+        definition = next((probe for probe in self.application.machine_definition.probes
+                           if probe.kind.value == "movable_z_plate"), None)
+        return float(getattr(definition, name, fallback)) if definition else fallback
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_fast_feed(self) -> float:
+        return self._z_plate_value("fast_feed", 100.0)
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_slow_feed(self) -> float:
+        return self._z_plate_value("slow_feed", 25.0)
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_max_search(self) -> float:
+        return self._z_plate_value("max_search", 5.0)
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_retract(self) -> float:
+        return self._z_plate_value("retract", 2.0)
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_safe_retract(self) -> float:
+        return self._z_plate_value("safe_retract", 2.0)
+
+    @Property(float, notify=state_changed)
+    def z_touch_plate_tolerance(self) -> float:
+        return self._z_plate_value("tolerance", 0.05)
+
+    @Property(bool, notify=state_changed)
+    def z_touch_plate_active_low(self) -> bool:
+        definition = next((probe for probe in self.application.machine_definition.probes
+                           if probe.kind.value == "movable_z_plate"), None)
+        return bool(definition and definition.active_low)
 
     @Property(str, notify=state_changed)
     def homing_state(self) -> str:
@@ -606,6 +709,41 @@ class ControllerViewModel(QObject):
     @Property(bool, notify=state_changed)
     def connected(self) -> bool:
         return self.application.connected
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_active(self) -> bool:
+        return self.application.simulation_active
+
+    @Property(str, notify=simulation_changed)
+    def simulation_banner(self) -> str:
+        return "DIGITAL TWIN — NO PHYSICAL MACHINE" if self.simulation_active else ""
+
+    @Property(str, notify=simulation_changed)
+    def simulation_speed(self) -> str:
+        return {"realtime": "Realtime", "2x": "2×", "5x": "5×", "10x": "10×", "uncapped": "Uncapped"}.get(
+            self.application.simulation_settings.speed, "Realtime"
+        )
+
+    @Property(str, notify=simulation_changed)
+    def simulation_workpiece(self) -> str:
+        return "Collision-only STEP" if self.application.simulation_settings.workpiece.collision_only else "Pocket + retained island"
+
+    @Property(str, notify=simulation_changed)
+    def simulation_snapshot_json(self) -> str:
+        return json.dumps(self._simulation_snapshot, sort_keys=True, separators=(",", ":"))
+
+    @Property(str, notify=simulation_changed)
+    def simulation_stock_metrics_json(self) -> str:
+        return json.dumps(self._simulation_stock_metrics, sort_keys=True, separators=(",", ":"))
+
+    @Property("QStringList", notify=simulation_changed)
+    def simulation_hazards(self) -> list[str]:
+        return list(self._simulation_hazards)
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_supervisor_healthy(self) -> bool:
+        runtime = self.application.simulation_runtime
+        return bool(self.simulation_active and runtime is not None and runtime.supervisor is not None and runtime.supervisor.is_alive())
 
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
@@ -843,6 +981,9 @@ class ControllerViewModel(QObject):
                 return
             outcome = self.application.begin_wifi_setup(payload[0], payload[1], payload[2], time.monotonic())
             self._set_notice(outcome.message)
+        elif operation == "z_probe":
+            outcome = self.application.probe_work_z()
+            self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
@@ -974,6 +1115,33 @@ class ControllerViewModel(QObject):
 
     @Slot(object)
     def _finish_background_task(self, result: TaskResult) -> None:
+        if result.token == self._tailscale_task_token:
+            self._tailscale_task_token = 0
+            if result.error is not None:
+                self._tailscale_status = TailscaleStatus("Error", message=str(result.error))
+                if self._live_server:
+                    self._live_server.stop()
+                    self._live_server = None
+                self._set_notice(f"Pine Live could not be enabled — {result.error}")
+            else:
+                self._tailscale_status = result.value
+                if not isinstance(result.value, TailscaleStatus) or not result.value.ready:
+                    if self._live_server:
+                        self._live_server.stop()
+                        self._live_server = None
+                    self._set_notice(self._tailscale_status.message)
+                else:
+                    if self._live_server:
+                        self._live_server.public_url = result.value.serve_url
+                        self._live_server.allowed_origins = (result.value.serve_url.rstrip("/"),)
+                        self._live_server.secure_cookie = True
+                    self._live_settings.enabled = True
+                    self._live_settings.bind_host = "127.0.0.1"
+                    self._save_live_settings()
+                    self._camera_service.start()
+                    self._set_notice("Pine Live is available over your Tailscale network")
+            self._refresh_live_state()
+            return
         if result.token == self._preview_task_token:
             self._preview_task_token = 0
             if self._preview_task_generation != self._preview_generation:
@@ -1347,6 +1515,28 @@ class ControllerViewModel(QObject):
         self._emit_state()
 
     @Slot()
+    def connect_to_simulation(self) -> None:
+        if self.connected:
+            self.disconnect()
+            return
+        outcome = self.application.connect_simulation()
+        if not outcome.accepted:
+            self._set_notice(outcome.message)
+            return
+        self.transport = "Virtual Machine (Digital Twin)"
+        self._connection_text = outcome.message
+        self._set_notice("DIGITAL TWIN — no physical machine is connected")
+        self.simulation_changed.emit()
+        self._emit_state()
+
+    @Slot(str, str)
+    def configure_simulation(self, speed_label: str, workpiece_label: str) -> None:
+        speed = {"Realtime": "realtime", "2×": "2x", "5×": "5x", "10×": "10x", "Uncapped": "uncapped"}.get(speed_label, speed_label)
+        outcome = self.application.configure_simulation(speed, workpiece_label)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
     def home_machine(self) -> None:
         outcome = self.application.home_machine()
         self._set_notice(outcome.message)
@@ -1360,6 +1550,54 @@ class ControllerViewModel(QObject):
                                                      fixed_fixture=fixed_fixture)
         self._set_notice(outcome.message)
         self._emit_state()
+
+    @Slot(bool)
+    def save_z_touch_plate_capability(self, enabled: bool) -> None:
+        outcome = self.application.save_z_plate_capability(enabled)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(float, bool, float, float, float, float, float, float)
+    def save_z_touch_plate_settings(self, thickness: float, active_low: bool, fast_feed: float,
+                                    slow_feed: float, max_search: float, retract: float,
+                                    safe_retract: float, tolerance: float) -> None:
+        outcome = self.application.save_z_touch_plate_settings(
+            plate_thickness=thickness, active_low=active_low, fast_feed=fast_feed,
+            slow_feed=slow_feed, max_search=max_search, retract=retract,
+            safe_retract=safe_retract, tolerance=tolerance,
+        )
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def test_z_touch_plate_input(self) -> None:
+        outcome = self.application.start_z_touch_plate_input_test()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def manually_trigger_z_touch_plate(self) -> None:
+        """Start the no-motion test used to verify the physical probe signal."""
+        self.test_z_touch_plate_input()
+
+    @Slot()
+    def commissioning_z_touch_plate_sample(self) -> None:
+        outcome = self.application.start_z_touch_plate_commissioning_sample()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def acknowledge_z_touch_plate_removed(self) -> None:
+        outcome = self.application.acknowledge_z_touch_plate_removed()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def probe_work_z(self) -> None:
+        self._request_confirmation(
+            "z_probe", None, "Probe workpiece Z?",
+            "Confirm the rigid touch puck is flat on the workpiece, the clip is attached to the cutter, the spindle is off, and the puck will be removed after the probe. Pine will probe downward only within the configured search distance.",
+        )
 
     @Slot(str)
     def select_machine(self, label: str) -> None:
@@ -1527,6 +1765,9 @@ class ControllerViewModel(QObject):
         # polling before releasing the transport so no timer callback can race
         # the final socket/serial-handle cleanup.
         self._timer.stop()
+        self.disable_live_access()
+        self._camera_service.stop()
+        self._remote_bridge.close()
         self.application.close()
         self._close_after_return_pending = False
         self.status = None
@@ -1570,8 +1811,29 @@ class ControllerViewModel(QObject):
     def _poll(self) -> None:
         self._poll_wifi_result()
         self.application.poll_wifi_setup(time.monotonic())
+        now = time.monotonic()
+        if self._live_server and self._live_server.running and now - self._last_live_snapshot >= 1.0:
+            self._last_live_snapshot = now
+            self._emit_state()
         if not self.connected:
             return
+        runtime = self.application.simulation_runtime
+        if self.application.simulation_active and runtime is not None:
+            for item in runtime.poll():
+                if item.get("type") == "snapshot":
+                    self._simulation_snapshot = dict(item.get("snapshot", {}))
+                elif item.get("type") == "stock_metrics":
+                    self._simulation_stock_metrics = dict(item.get("metrics", {}))
+                elif item.get("type") == "intent":
+                    self._apply_simulation_intent(dict(item.get("intent", {})))
+                elif item.get("type") == "hazard":
+                    hazard = item.get("hazard", {})
+                    message = str(hazard.get("message", "Digital twin hazard"))
+                    self._simulation_hazards = [*self._simulation_hazards[-49:], message]
+                    self._set_notice(f"Digital twin safety supervisor: {message}")
+            self.simulation_changed.emit()
+            if not self.simulation_supervisor_healthy:
+                self._set_notice("Digital twin safety supervisor is unavailable; simulation is unsafe to continue")
         events = self.application.transport_events()
         try:
             while not events.empty():
@@ -1580,10 +1842,50 @@ class ControllerViewModel(QObject):
             if self.connected and now - self._last_status_poll >= 0.5:
                 self.application.request_status()
                 self._last_status_poll = now
+            watchdog_failure = self.application.check_job_watchdog()
+            if watchdog_failure is not None:
+                self._disconnected(
+                    "Controller stopped responding during the job. Motion and spindle state are uncertain; "
+                    "remove power if needed, then reconnect, re-establish reference, and reload the job. "
+                    f"Details: {watchdog_failure}"
+                )
+                return
             if self.application.job_active:
                 self._emit_state()
         except RuntimeError as exc:
             self._disconnected(str(exc))
+
+    def _apply_simulation_intent(self, intent: dict[str, object]) -> None:
+        """Map supervisor scenario intents through public application methods."""
+        name = str(intent.get("name", ""))
+        args = intent.get("arguments", {})
+        args = args if isinstance(args, dict) else {}
+        try:
+            if name == "establish_reference":
+                outcome = self.application.establish_reference()
+            elif name == "jog":
+                outcome = self.application.jog(str(args.get("axis", "X")), float(args.get("distance", 0)))
+            elif name == "set_work_zero":
+                outcome = self.application.set_work_zero(str(args.get("axes", "XYZ")))
+            elif name == "start_job":
+                outcome = self.application.start_job()
+            elif name == "pause_job":
+                outcome = self.application.pause_job()
+            elif name == "resume_job":
+                outcome = self.application.resume_job()
+            elif name == "abort_job":
+                self.application.abort_job("Supervisor scenario abort")
+                return
+            elif name == "disconnect":
+                self.disconnect()
+                return
+            else:
+                self._set_notice(f"Unknown digital-twin scenario intent: {name}")
+                return
+            if not outcome.accepted:
+                self._set_notice(f"Scenario intent {name} blocked — {outcome.message}")
+        except (RuntimeError, ValueError, TypeError) as exc:
+            self._set_notice(f"Scenario intent {name} failed — {exc}")
 
     def _poll_wifi_result(self) -> None:
         outcome = self.application.poll_wifi()
@@ -1629,7 +1931,10 @@ class ControllerViewModel(QObject):
 
     def _project_status(self, status: GrblStatus) -> None:
         self._state_text = status.state
-        self._connection_text = f"Connected — GRBL {status.state}"
+        self._connection_text = (
+            f"DIGITAL TWIN — NO PHYSICAL MACHINE · GRBL {status.state}"
+            if self.application.simulation_active else f"Connected — GRBL {status.state}"
+        )
         self._feed_text = f"{status.feed:g}" if status.feed is not None else "—"
         self._spindle_text = f"{status.spindle:g} RPM" if status.spindle is not None else "—"
         self._pins_text = status.pins or "None"
@@ -1838,6 +2143,10 @@ class ControllerViewModel(QObject):
         self._reference_text = "Position unknown"
         self._work_zero_text = "Not confirmed"
         self._spindle_text = "Off"
+        self._simulation_snapshot = {}
+        self._simulation_hazards = []
+        self._simulation_stock_metrics = {}
+        self.simulation_changed.emit()
         self._guided_preflight_confirmed = False
         self._issue = IssueSnapshot(
             severity="error",
@@ -1849,6 +2158,175 @@ class ControllerViewModel(QObject):
             actions=("Connect", "Open console"),
         )
         self._emit_state()
+
+    def _audit_live(self, message: str) -> None:
+        self._logger.info(message)
+        self._set_notice(message)
+
+    def _refresh_live_state(self) -> None:
+        remote_state = "available" if self.live_access_enabled else "off"
+        self._live_snapshot = self.application.live_status_snapshot(
+            camera_state=self._camera_service.state,
+            remote_state=remote_state,
+        )
+        self.live_changed.emit()
+
+    @Slot(str)
+    def _on_camera_frame(self, data: str) -> None:
+        self._camera_frame_data = data
+        self.live_changed.emit()
+
+    def _live_snapshot_for_web(self):
+        return self._live_snapshot
+
+    @Property("QStringList", notify=live_changed)
+    def live_cameras(self) -> list[str]:
+        return self._camera_service.device_names
+
+    @Property(QObject, constant=True)
+    def camera_sink(self) -> QObject:
+        return self._camera_service.sink
+
+    @Property(str, notify=live_changed)
+    def live_camera_frame(self) -> str:
+        return self._camera_frame_data
+
+    @Property(str, notify=live_changed)
+    def live_camera_state(self) -> str:
+        return self._camera_service.state
+
+    @Property(str, notify=live_changed)
+    def live_camera_name(self) -> str:
+        selected_id = self._live_settings.preferred_camera_id
+        device = next(
+            (item for item in self._camera_service.devices if bytes(item.id()).hex() == selected_id),
+            None,
+        )
+        return device.description() if device is not None else ""
+
+    @Property(bool, notify=live_changed)
+    def tailscale_installed(self) -> bool:
+        return self._tailscale.installed
+
+    @Property(str, constant=True)
+    def tailscale_download_url(self) -> str:
+        return "https://tailscale.com/download/windows"
+
+    @Property(bool, notify=live_changed)
+    def live_access_enabled(self) -> bool:
+        return bool(self._live_server and self._live_server.running and self._tailscale_status.ready)
+
+    @Property(str, notify=live_changed)
+    def live_access_state(self) -> str:
+        if self._tailscale_task_token:
+            return "Connecting…"
+        if self.live_access_enabled:
+            return "Tailscale ready"
+        return self._tailscale_status.state if self._tailscale_status.state != "Unavailable" else "Off"
+
+    @Property(str, notify=live_changed)
+    def live_url(self) -> str:
+        return self._live_server.url if self.live_access_enabled else ""
+
+    @Property(str, notify=live_changed)
+    def live_pairing_code(self) -> str:
+        return self._live_server.pairing.pairing_code if self.live_access_enabled and self._live_server else ""
+
+    @Property(str, notify=live_changed)
+    def live_qr_data(self) -> str:
+        if not self.live_url or not self.live_pairing_code:
+            return ""
+        try:
+            import base64
+            from io import BytesIO
+            import qrcode
+            image = qrcode.make(self.live_url + "#" + self.live_pairing_code)
+            output = BytesIO()
+            image.save(output, format="PNG")
+            return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+        except (ImportError, OSError):
+            return ""
+
+    @Property(int, notify=live_changed)
+    def live_viewer_count(self) -> int:
+        return self._live_server.viewer_count if self.live_access_enabled and self._live_server else 0
+
+    @Property(int, notify=live_changed)
+    def live_session_count(self) -> int:
+        return self._live_server.pairing.session_count if self.live_access_enabled and self._live_server else 0
+
+    @Slot()
+    def open_live_viewer(self) -> None:
+        self._camera_service.start()
+        self._refresh_live_state()
+
+    @Slot()
+    def stop_live_viewer(self) -> None:
+        if not self.live_access_enabled:
+            self._camera_service.stop()
+        self._refresh_live_state()
+
+    @Slot(str)
+    def select_live_camera(self, camera_name: str) -> None:
+        device = next((item for item in self._camera_service.devices if item.description() == camera_name), None)
+        if device is not None:
+            self._camera_service.select(bytes(device.id()).hex())
+            self._live_settings.preferred_camera_id = bytes(device.id()).hex()
+            self._save_live_settings()
+            self._refresh_live_state()
+
+    @Slot()
+    def enable_live_access(self) -> None:
+        if self.live_access_enabled or self._tailscale_task_token:
+            return
+        try:
+            self._live_server = LiveWebServer(
+                self._live_snapshot_for_web,
+                self._remote_bridge.submit,
+                frame_hub=self._live_frames,
+                host="127.0.0.1",
+                port=self._live_settings.port,
+            )
+            self._live_server.start()
+            self._tailscale_status = TailscaleStatus("Connecting…", message="Checking Tailscale and enabling secure remote access…")
+            local_port = self._live_server.address[1]
+            self._tailscale_task_token = self._task_runner.submit(
+                lambda: self._tailscale.enable(local_port=local_port, https_port=8443)
+            )
+            self._set_notice("Checking Tailscale and enabling secure remote access…")
+        except (OSError, ValueError) as exc:
+            self._live_server = None
+            self._set_notice(f"Pine Live could not start — {exc}")
+        self._refresh_live_state()
+
+    @Slot()
+    def disable_live_access(self) -> None:
+        try:
+            if self._tailscale_status.target:
+                self._tailscale.disable(https_port=8443)
+        except Exception as exc:
+            self._logger.warning("Tailscale Serve cleanup failed: %s", exc)
+            self._set_notice(f"Tailscale cleanup needs attention — {exc}")
+        if self._live_server:
+            self._live_server.stop()
+            self._live_server = None
+        self._live_settings.enabled = False
+        self._tailscale_status = TailscaleStatus()
+        self._save_live_settings()
+        self._refresh_live_state()
+
+    @Slot()
+    def regenerate_live_pairing(self) -> None:
+        if self._live_server:
+            self._live_server.pairing.regenerate()
+            self._set_notice("Pine Live pairing code regenerated; previous devices were signed out")
+            self._refresh_live_state()
+
+    def _save_live_settings(self) -> None:
+        try:
+            self._live_settings_store.save(self._live_settings)
+        except (OSError, ValueError):
+            self._set_notice("Pine Live settings could not be saved")
 
     def _guided_ready(self) -> tuple[bool, str]:
         step = self._guided_step
@@ -1997,6 +2475,10 @@ class ControllerViewModel(QObject):
     def _emit_state(self) -> None:
         """Project state once, with narrow signals for high-frequency consumers."""
         self._sync_controller_operation()
+        self._live_snapshot = self.application.live_status_snapshot(
+            camera_state=self._camera_service.state,
+            remote_state="available" if self.live_access_enabled else "off",
+        )
         readiness = self._derive_readiness()
         issue = self._derive_issue()
         operation = self._active_operation

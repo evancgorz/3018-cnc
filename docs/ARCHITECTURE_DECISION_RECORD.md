@@ -70,6 +70,77 @@ If one trigger appears, define control leases, authentication, heartbeats,
 emergency-stop behavior, orphaned-job policy, and local IPC/network exposure
 before selecting a protocol.
 
+## Hardware-free digital twin
+
+Status: Accepted and implemented for development and regression testing
+
+The application exposes a `Virtual Machine (Digital Twin)` connection mode
+that intentionally traverses the ordinary `TcpGrblConnection` and GRBL event
+dispatch path. A spawn-safe, loopback-only backend owns the deterministic
+three-axis plant and virtual GRBL 1.1 protocol. A second, independently owned
+supervisor process consumes immutable telemetry, recomputes swept geometry and
+bounded stock hazards, emits operator intents, and can interlock the backend.
+Neither process can access COM ports, non-loopback sockets, or physical
+work-zero persistence.
+
+This split keeps controller/protocol regressions, UI state transitions,
+collision handling, and failure injection testable without a machine. Trace
+digests and JSON/Markdown evidence are deterministic. A future commissioning
+adapter may compare twin and physical captures under explicit operator
+authorization; it is not part of the normal simulation path and is never
+implicitly enabled.
+
+## Embedded LAN companion
+
+Status: Accepted for Pine Live
+
+Pine Live adds an optional, dependency-light HTTP companion in the same Pine
+process. The desktop `ApplicationController` remains the sole owner of the
+transport and CNC command ordering. The companion receives immutable,
+sanitized snapshots and bounded camera frames; it submits authenticated Pause,
+Resume, and confirmed Abort intents through a Qt queued bridge. An HTTP worker
+never calls GRBL, a transport, or a mutable application service directly.
+
+```text
+Qt camera / ApplicationController
+    -> immutable snapshot + latest JPEG frame hub
+        -> authenticated LAN HTTP/SSE/MJPEG adapter
+            -> phone browser
+phone command POST
+    -> authentication + stale-job checks
+        -> Qt main-thread command bridge
+            -> existing guarded controller action
+```
+
+The service is off by default, binds only to an explicitly selected loopback
+or private interface, and uses one-time pairing plus revocable in-memory
+sessions. It does not change Windows Firewall/router settings, enable UPnP,
+provide cloud relay, or advertise public port forwarding. A trusted VPN or
+overlay network is the supported route for off-site access. Video is
+situational awareness, never a safety interlock; the physical emergency stop
+remains authoritative.
+
+### Tailscale Serve remote transport
+
+Status: Implemented behind an explicit user action
+
+Pine Live now uses a loopback-only HTTP backend and an injected, Qt-independent
+Tailscale CLI adapter for the optional remote path. Pine owns only HTTPS port
+8443 and accepts a mapping only when status proves it targets Pine's current
+`127.0.0.1` port. The adapter uses bounded hidden subprocesses and never calls
+Funnel, global Serve reset, firewall/router APIs, or account credentials.
+
+The advertised URL comes from validated Tailscale node status rather than a
+guessed tailnet name. Remote browser origins and cookies are explicitly
+HTTPS-aware (`Secure; HttpOnly; SameSite=Strict`), while pairing, CSRF, stale
+job, exactly-once, and Qt-main-thread checks remain unchanged. If Tailscale is
+not installed or a foreign Serve mapping occupies port 8443, Pine fails closed
+with an actionable status and leaves the local backend unavailable.
+
+Revisit a separate companion process only if measured GUI-crash isolation,
+headless operation, independent release cadence, or stronger privilege
+separation justifies the added IPC, lease, and orphaned-job complexity.
+
 ## Machine platform extension
 
 Machine configuration is now a versioned local catalog rather than one flat

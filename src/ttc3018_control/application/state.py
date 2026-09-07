@@ -12,6 +12,7 @@ from ..machine_state import MachineProfile
 class ConnectionMode(str, Enum):
     USB = "USB serial"
     WIFI = "Wi-Fi TCP"
+    SIMULATION = "Virtual Machine (Digital Twin)"
 
 
 @dataclass(frozen=True)

@@ -73,6 +73,24 @@ def _write_rectangular_boss(path: Path) -> None:
     writer.Write(str(path))
 
 
+def _write_extruded_concave_profile(path: Path) -> None:
+    """Write a hook-like profile whose rectangular side exceeds its face area."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+    from OCP.gp import gp_Pnt, gp_Vec
+
+    polygon = BRepBuilderAPI_MakePolygon()
+    for x, y in ((0, 0), (44, 0), (44, 10), (20, 10), (20, 35), (8, 35), (8, 18), (0, 18)):
+        polygon.Add(gp_Pnt(x, y, 0))
+    polygon.Close()
+    face = BRepBuilderAPI_MakeFace(polygon.Wire()).Face()
+    shape = BRepPrimAPI_MakePrism(face, gp_Vec(0, 0, 12.7)).Shape()
+    writer = STEPControl_Writer()
+    writer.Transfer(shape, STEPControl_AsIs)
+    writer.Write(str(path))
+
+
 def test_load_step_normalizes_highest_horizontal_face(tmp_path: Path) -> None:
     path = tmp_path / "plate.step"
     _write_box(path)
@@ -101,6 +119,27 @@ def test_load_step_can_select_each_orthogonal_face(tmp_path: Path) -> None:
     assert (front.width, front.height, front.thickness) == pytest.approx((40, 5, 25), abs=0.001)
     assert side.face_plane == "YZ"
     assert (side.width, side.height, side.thickness) == pytest.approx((25, 5, 40), abs=0.001)
+
+
+def test_auto_orientation_uses_extrusion_axis_for_concave_profile(tmp_path: Path) -> None:
+    path = tmp_path / "hook-like.step"
+    _write_extruded_concave_profile(path)
+
+    model = load_step_isolated(path)
+
+    assert model.face_plane == "XY"
+    assert (model.width, model.height, model.thickness) == pytest.approx((44, 35, 12.7), abs=0.001)
+    job = generate_step_gcode(
+        model,
+        mode="Automatic part",
+        stock_width=47.175,
+        stock_height=38.175,
+        stock_thickness=12.7,
+        tool_diameter=3.175,
+        tab_count=0,
+    )
+    assert job.stroke_count > 0
+    assert parse_gcode(job.gcode).bounds.minimum.z == pytest.approx(-12.9, abs=0.01)
 
 
 def test_load_step_isolated_round_trips_model(tmp_path: Path) -> None:

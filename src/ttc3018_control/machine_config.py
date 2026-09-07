@@ -40,6 +40,9 @@ class ProbeKind(StrEnum):
     FIXED_XYZ = "fixed_xyz"
 
 
+DEFAULT_Z_TOUCH_PLATE_THICKNESS = 19.37
+
+
 @dataclass(frozen=True)
 class AxisDefinition:
     positive_direction: int = 1
@@ -69,14 +72,22 @@ class ProbeDefinition:
     slow_feed: float = 25.0
     max_search: float = 5.0
     retract: float = 2.0
+    active_low: bool = False
+    safe_retract: float = 2.0
+    tolerance: float = 0.05
 
     def validate(self) -> None:
-        values = (self.tool_radius, self.plate_thickness, self.fast_feed, self.slow_feed, self.max_search, self.retract)
+        values = (self.tool_radius, self.plate_thickness, self.fast_feed, self.slow_feed,
+                  self.max_search, self.retract, self.safe_retract, self.tolerance)
         if not all(math.isfinite(value) for value in values):
             raise ValueError(f"{self.kind.value} probe values must be finite")
         if self.tool_radius < 0 or self.plate_thickness < 0:
             raise ValueError(f"{self.kind.value} probe geometry cannot be negative")
-        if self.enabled and (self.fast_feed <= 0 or self.slow_feed <= 0 or self.max_search <= 0 or self.retract <= 0):
+        if self.plate_thickness > 100:
+            raise ValueError(f"{self.kind.value} plate thickness must be at most 100 mm")
+        if self.tolerance <= 0 or self.tolerance > 10:
+            raise ValueError(f"{self.kind.value} repeatability tolerance must be between 0 and 10 mm")
+        if self.enabled and (self.fast_feed <= 0 or self.slow_feed <= 0 or self.max_search <= 0 or self.retract <= 0 or self.safe_retract <= 0):
             raise ValueError(f"{self.kind.value} enabled probe requires positive motion settings")
 
 
@@ -171,4 +182,3 @@ class MachineDefinition:
             data = {area: data.get(area) for area in areas}
         encoded = json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
-

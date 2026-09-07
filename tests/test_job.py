@@ -76,6 +76,25 @@ def test_external_controller_failure_clears_buffered_job() -> None:
     assert "Alarm" in job.error
 
 
+def test_reconcile_controller_idle_recovers_lost_final_ack() -> None:
+    job = JobStreamer(lambda _command: None)
+    job.start(("G0 X1", "G0 X2"))
+
+    assert job.reconcile_controller_idle()
+    assert job.state == "complete"
+    assert job.completed == 2
+    assert not job.awaiting_ack
+
+
+def test_reconcile_controller_idle_refuses_unsent_commands() -> None:
+    job = JobStreamer(lambda _command: None, buffer_capacity=6)
+    job.start(("G0 X1", "G0 X2"))
+
+    assert job.next_index == 1
+    assert not job.reconcile_controller_idle()
+    assert job.state == "running"
+
+
 def test_rejects_a_line_larger_than_the_grbl_rx_buffer() -> None:
     job = JobStreamer(lambda _command: None, buffer_capacity=8)
 

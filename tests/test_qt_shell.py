@@ -18,6 +18,7 @@ from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel, load_step_isolated
+from ttc3018_control.z_touch_plate import ZTouchPlateRecord
 from PySide6.QtCore import QUrl
 
 
@@ -46,7 +47,37 @@ def test_qt_shell_loads(qapp) -> None:
     roots = engine.rootObjects()
     assert len(roots) == 1
     assert roots[0].property("title") == "Pine"
+    assert not roots[0].icon().isNull()
     assert view_model.connection_text == "Disconnected"
+
+
+def test_build_engine_accepts_preconstructed_controller_for_isolated_validation(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path, usb_factory=lambda: (_ for _ in ()).throw(AssertionError("USB")),
+                                        wifi_factory=lambda: (_ for _ in ()).throw(AssertionError("Wi-Fi")))
+    engine, view_model = build_engine(application=controller, auto_connect=False)
+    assert view_model.application is controller
+    assert engine.rootObjects()[0].property("title") == "Pine"
+
+
+def test_simulation_gui_launcher_sentinels_and_manifest_are_isolated(tmp_path) -> None:
+    from scripts.run_simulation_gui_validation import _write_manifest, _write_sentinel_config
+    from ttc3018_control.application.controller import ApplicationController
+    import hashlib
+    import json
+
+    sentinels = _write_sentinel_config(tmp_path)
+    assert sentinels
+    assert not any(Path(filename).name == "simulation.json" for filename in sentinels)
+    for filename, digest in sentinels.items():
+        assert hashlib.sha256(Path(filename).read_bytes()).hexdigest() == digest
+    manifest = {"main_pid": 123, "temp_root": str(tmp_path), "session_marker": "marker",
+                "log_path": str(tmp_path / "logs" / "pine.log"),
+                "physical_config_sentinels": sentinels, "owned_child_pids": [], "loopback_endpoint": None}
+    path = tmp_path / "manifest.json"
+    _write_manifest(path, manifest)
+    assert json.loads(path.read_text(encoding="utf-8")) == manifest
+    isolated = ApplicationController(tmp_path, usb_factory=lambda: None, wifi_factory=lambda: None)
+    assert (isolated.profile.travel_x, isolated.profile.travel_y, isolated.profile.travel_z) == (290, 170, 40)
 
 
 def test_pine_brand_assets_and_launch_surfaces_are_packaged() -> None:
@@ -59,6 +90,8 @@ def test_pine_brand_assets_and_launch_surfaces_are_packaged() -> None:
     bootstrap = (root / "src" / "ttc3018_control" / "qt" / "main.py").read_text(encoding="utf-8")
     setup = (root / "setup.ps1").read_text(encoding="utf-8")
     assert 'app.setApplicationDisplayName("Pine")' in bootstrap
+    assert 'SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_USER_MODEL_ID)' in bootstrap
+    assert 'engine.rootObjects()[0].setIcon(QIcon(str(PINE_ICON)))' in bootstrap
     assert "QSplashScreen" in bootstrap
     assert "RotatingFileHandler" in bootstrap
     assert '"Pine.lnk"' in setup
@@ -192,6 +225,8 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     assert 'id: textDialog' not in qml
     assert 'id: plaqueDialog' not in qml
     assert '"Guided Setup"]' not in qml
+    assert 'PineLiveCard { Layout.fillWidth: true; palette: window.palette }' in qml
+    assert 'text: "Machine settings…"' in qml
     assert "window.usableContentHeight - height" in qml
     assert 'set_physical_preflight_confirmed(checked)' in qml
     assert 'index === 3 ?' not in qml
@@ -199,6 +234,65 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     assert 'SectionTitle { text: "Live preview"' in engraving_dialog
     assert 'ToolpathCanvas { Layout.fillWidth: true; Layout.fillHeight: true' in engraving_dialog
     assert 'source: "../assets/pine-mark.svg"' in qml
+
+
+def test_machine_setup_hardware_page_scrolls_within_the_dialog() -> None:
+    qml = (
+        Path(__file__).parents[1]
+        / "src"
+        / "ttc3018_control"
+        / "qt"
+        / "qml"
+        / "MachineSetupDialog.qml"
+    ).read_text(encoding="utf-8")
+
+    hardware_page = qml.split("id: hardwareScroll", 1)[1].split('text: "Current configuration"', 1)[0]
+    assert "Layout.fillHeight: true" in hardware_page
+    assert "clip: true" in hardware_page
+    assert "contentWidth: availableWidth" in hardware_page
+    assert "width: hardwareScroll.availableWidth" in hardware_page
+    assert 'text: "Save touch plate settings"' in hardware_page
+    assert "property bool zPlateActiveLow: false" in qml
+    assert "onToggled: dialog.zPlateActiveLow = checked" in hardware_page
+    assert 'text: "Invert probe input polarity in GRBL ($6)"' in hardware_page
+    assert "display only" not in hardware_page
+
+
+def test_z_probe_input_uses_a_guided_no_motion_wizard() -> None:
+    root = Path(__file__).parents[1]
+    main_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    wizard_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "ZProbeWizard.qml").read_text(encoding="utf-8")
+
+    assert "ZProbeWizard {" in main_qml
+    assert 'text: "Test input…"' in main_qml
+    assert "onClicked: zProbeWizard.open()" in main_qml
+    assert "onOpenZProbeWizard" in main_qml
+    assert 'title: "Z-probe input wizard"' in wizard_qml
+    assert "This wizard only watches the electrical probe input" in wizard_qml
+    assert "Step 1 — Leave the probe open" in wizard_qml
+    assert "Step 2 — Touch and hold" in wizard_qml
+    assert "Step 3 — Separate the contacts" in wizard_qml
+    assert "Three supervised probe samples are still required" in wizard_qml
+    assert "onContinueToCommissioning" in main_qml
+    commissioning_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "CommissioningDialog.qml").read_text(encoding="utf-8")
+    assert "Samples completed:" in commissioning_qml
+    assert "Run supervised sample " in commissioning_qml
+    assert "no values need to be copied or entered manually" in commissioning_qml
+    assert 'placeholderText: "Sample 1"' not in commissioning_qml
+
+
+def test_z_probe_status_distinguishes_input_verification_from_samples(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    assert controller.save_z_plate_capability(True).accepted
+
+    assert view_model.z_touch_plate_status_text == "Input test required"
+    controller._z_touch_plate_record = ZTouchPlateRecord(
+        controller.machine_id or "", (), controller.z_touch_plate_definition.tolerance,
+        controller.z_touch_plate_fingerprint, input_tested=True,
+    )
+
+    assert view_model.z_touch_plate_status_text == "Input verified — 3 supervised probe samples required"
 
 
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:

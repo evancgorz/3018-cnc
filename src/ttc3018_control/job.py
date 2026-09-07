@@ -105,6 +105,24 @@ class JobStreamer:
         self.outstanding_lengths.clear()
         self.error = reason
 
+    def reconcile_controller_idle(self) -> bool:
+        """Complete sent commands after GRBL proves its queues are empty.
+
+        Callers must only use this after an authoritative Idle report also
+        proves the receive buffer is empty. It recovers a final textual ``ok``
+        lost by a serial bridge, but cannot complete commands not yet sent.
+        """
+        if (
+            self.state != "running"
+            or self.next_index < self.total
+            or not self.outstanding_lengths
+        ):
+            return False
+        self.acknowledged_count += len(self.outstanding_lengths)
+        self.outstanding_lengths.clear()
+        self.state = "complete"
+        return True
+
     def _fill_buffer(self) -> None:
         if self.state != "running":
             return

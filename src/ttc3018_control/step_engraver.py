@@ -277,7 +277,7 @@ def generate_step_gcode(
     elif mode == "Profile cutout":
         profile_paths = _schedule_profile_paths(profile_paths)
         strokes = [stroke for stroke, _is_outer in profile_paths]
-    elif mode != "Planar surface":
+    elif mode not in {"Planar surface", "Pocket", "Slot"}:
         strokes = _schedule_strokes(strokes)
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
     verification = None
@@ -532,44 +532,84 @@ def _generate_automatic_part(
         tab_height=tab_height,
         _profile_outer_only=primary_mode is not None,
     )
-    primary = None
-    if primary_mode is not None:
-        primary = generate_step_gcode(
-            model,
-            mode=primary_mode,
-            orientation=orientation,
-            stock_width=stock_width,
-            stock_height=stock_height,
-            zero_location=zero_location,
-            tool_diameter=tool_diameter,
-            depth=depth,
-            passes=passes,
-            max_stepdown=max_stepdown,
-            safe_z=safe_z,
-            cut_feed=cut_feed,
-            plunge_feed=plunge_feed,
-            spindle_rpm=None,
-            stock_thickness=resolved_thickness,
-            breakthrough=breakthrough,
-            tab_count=tab_count,
-            tab_width=tab_width,
-            tab_height=tab_height,
-            _placement_offset=(profile.placement_offset_x, profile.placement_offset_y),
-        )
+    primary_jobs: list[tuple[str, StepMachining]] = []
+    if model.features:
+        primary_jobs.append((
+            "features",
+            generate_step_gcode(
+                model,
+                mode="Detected feature",
+                orientation=orientation,
+                stock_width=stock_width,
+                stock_height=stock_height,
+                zero_location=zero_location,
+                tool_diameter=tool_diameter,
+                depth=depth,
+                passes=passes,
+                max_stepdown=max_stepdown,
+                safe_z=safe_z,
+                cut_feed=cut_feed,
+                plunge_feed=plunge_feed,
+                spindle_rpm=None,
+                stock_thickness=resolved_thickness,
+                breakthrough=breakthrough,
+                tab_count=tab_count,
+                tab_width=tab_width,
+                tab_height=tab_height,
+                _placement_offset=(profile.placement_offset_x, profile.placement_offset_y),
+            ),
+        ))
+    if any(patch.tilted for patch in model.surface_patches):
+        primary_jobs.append((
+            "surface",
+            generate_step_gcode(
+                model,
+                mode="Planar surface",
+                orientation=orientation,
+                stock_width=stock_width,
+                stock_height=stock_height,
+                zero_location=zero_location,
+                tool_diameter=tool_diameter,
+                depth=depth,
+                passes=passes,
+                max_stepdown=max_stepdown,
+                safe_z=safe_z,
+                cut_feed=cut_feed,
+                plunge_feed=plunge_feed,
+                spindle_rpm=None,
+                stock_thickness=resolved_thickness,
+                breakthrough=breakthrough,
+                tab_count=tab_count,
+                tab_width=tab_width,
+                tab_height=tab_height,
+                _placement_offset=(profile.placement_offset_x, profile.placement_offset_y),
+            ),
+        ))
 
-    primary_operations = primary.operations if primary is not None else ()
-    primary_ids = tuple(operation.operation_id for operation in primary_operations)
+    primary_ids: list[str] = []
+    primary_operations: list[StepOperation] = []
+    prefix_operations = len(primary_jobs) > 1
+    for prefix, job in primary_jobs:
+        for operation in job.operations:
+            operation_id = f"{prefix}-{operation.operation_id}" if prefix_operations else operation.operation_id
+            depends_on = tuple(
+                f"{prefix}-{dependency}" if prefix_operations else dependency
+                for dependency in operation.depends_on
+            )
+            renamed = replace(operation, operation_id=operation_id, depends_on=depends_on)
+            primary_operations.append(renamed)
+            primary_ids.append(operation_id)
+    # The profile component is generated with only its outer path. Its
+    # internal-through metadata must not be advertised as an emitted operation.
     profile_operations = tuple(
-        replace(
-            operation,
-            depends_on=tuple(dict.fromkeys(primary_ids + operation.depends_on)),
-        )
+        replace(operation, depends_on=tuple(dict.fromkeys(primary_ids)))
         for operation in profile.operations
+        if operation.operation_id == "outer-profile"
     )
-    operations = primary_operations + profile_operations
+    operations = tuple(primary_operations) + profile_operations
     validate_operation_plan(operations)
 
-    component_jobs = tuple(job for job in (primary, profile) if job is not None)
+    component_jobs = tuple(job for _prefix, job in primary_jobs) + (profile,)
     strokes = tuple(stroke for job in component_jobs for stroke in job.strokes)
     commands = [
         "; Generated by Pine automatic STEP 2.5D machining",
@@ -614,18 +654,28 @@ def _generate_automatic_part(
         tab_count=tab_count,
         tab_width=tab_width,
         tab_height=tab_height,
-        feature_summary=primary.feature_summary if primary is not None else "",
+        feature_summary="; ".join(
+            job.feature_summary for prefix, job in primary_jobs
+            if prefix == "features" and job.feature_summary
+        ),
         placement_offset_x=profile.placement_offset_x,
         placement_offset_y=profile.placement_offset_y,
-        surface_paths=primary.surface_paths if primary is not None else (),
+        surface_paths=tuple(
+            path for prefix, job in primary_jobs if prefix == "surface" for path in job.surface_paths
+        ),
         cutting_distance=cutting_distance,
         rapid_xy_distance=rapid_xy_distance,
         retract_count=retract_count,
-        verification=primary.verification if primary is not None else None,
+        verification=next(
+            (job.verification for prefix, job in primary_jobs if prefix == "features" and job.verification is not None),
+            next((job.verification for prefix, job in primary_jobs if prefix == "surface"), None),
+        ),
         operations=operations,
-        simulation=primary.simulation if primary is not None else None,
-        feature_simulations=primary.feature_simulations if primary is not None else (),
-        surface_simulation=primary.surface_simulation if primary is not None else None,
+        simulation=next((job.simulation for _prefix, job in primary_jobs if job.simulation is not None), None),
+        feature_simulations=tuple(
+            simulation for prefix, job in primary_jobs if prefix == "features" for simulation in job.feature_simulations
+        ),
+        surface_simulation=next((job.surface_simulation for prefix, job in primary_jobs if prefix == "surface"), None),
         profile_simulation=profile.profile_simulation,
         max_stepdown=max_stepdown,
         estimated_minutes=sum(job.estimated_minutes for job in component_jobs),
@@ -641,7 +691,10 @@ def _step_gcode_body(gcode: str) -> list[str]:
         raise ValueError("Generated STEP component has no absolute-feed preamble") from exc
     if lines[-4:] != [lines[-4], "G0 X0 Y0", "M5", "M2"] or not lines[-4].startswith("G0 Z"):
         raise ValueError("Generated STEP component has an unexpected completion trailer")
-    return lines[start:-4]
+    # Automatic plans emit one authoritative, cross-family operation header.
+    # Component headers use local IDs and would otherwise make the final file
+    # look like it contains duplicate operations.
+    return [line for line in lines[start:-4] if not line.startswith("; Operation ")]
 
 
 def _validate_settings(
@@ -878,21 +931,11 @@ def _schedule_depth_groups(
     reduces rapids without reordering operations.
     """
     result: list[tuple[Stroke, float]] = []
-    current = (0.0, 0.0)
     for group_strokes, depth in groups:
-        remaining = list(group_strokes)
-        while remaining:
-            choices = [
-                (_best_stroke_orientation(stroke, current), index)
-                for index, stroke in enumerate(remaining)
-            ]
-            oriented, index = min(
-                choices,
-                key=lambda item: (math.dist(current, item[0][0]), item[1]),
-            )
-            result.append((oriented, depth))
-            current = oriented[-1]
-            remaining.pop(index)
+        # Feature planners deliberately place wall-defining contours before
+        # clearing paths. Preserve that semantic order here; nearest-neighbor
+        # reordering can otherwise make a pocket begin with interior fragments.
+        result.extend((stroke, depth) for stroke in group_strokes)
     return result
 
 
@@ -1025,10 +1068,24 @@ def _detected_feature_groups(
     radius = tool_diameter / 2
     parents = model.resolved_loop_parents
     recess_groups: dict[float, list[tuple[object, object]]] = {}
+    recess_depths = {
+        feature.loop_index: round(
+            _feature_target_depth(feature, stock_thickness, breakthrough), 7
+        )
+        for feature in model.features
+        if feature.kind == "Recess"
+    }
     for feature in model.features:
         if feature.kind != "Recess":
             continue
         feature_depth = _feature_target_depth(feature, stock_thickness, breakthrough)
+        parent = parents[feature.loop_index]
+        # A same-depth child boundary describes an island retained inside its
+        # parent's recess; it is not a second removal region. Treating it as
+        # an independent pocket fills the island back into the union and can
+        # produce a verified simulation gouge.
+        if parent is not None and recess_depths.get(parent) == round(feature_depth, 7):
+            continue
         feature_region = Polygon(
             (point.x, point.y) for point in loops[feature.loop_index].points
         )
@@ -1351,9 +1408,14 @@ def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]
     current = region.buffer(-radius, join_style=2)
     if current.is_empty:
         return []
+    perimeters = _pocket_perimeter_strokes(region, current, radius)
+    # A narrow hole or slot may be completely swept by its compensated wall
+    # contour. Prefer that clean outline over fragmented raster clearing.
+    if perimeters and _pocket_candidate_is_covered(region, perimeters, radius):
+        return perimeters
     stepover = max(0.25, tool_diameter * 0.7)
     candidates = (
-        _connected_scanline_strokes(current, stepover),
+        perimeters + _connected_scanline_strokes(current, stepover),
         _offset_pocket_strokes(current, stepover),
     )
     valid = [
@@ -1362,6 +1424,50 @@ def _pocket_strokes(region, radius: float, tool_diameter: float) -> list[Stroke]
         if candidate and _pocket_candidate_is_covered(region, candidate, radius)
     ]
     return min(valid, key=_pocket_path_cost) if valid else []
+
+
+def _pocket_perimeter_strokes(region, reachable, radius: float) -> list[Stroke]:
+    """Return wall contours first, smoothing genuinely circular boundaries."""
+    polygons = (
+        [region]
+        if isinstance(region, Polygon)
+        else list(region.geoms)
+        if isinstance(region, MultiPolygon)
+        else []
+    )
+    reachable_polygons = (
+        [reachable]
+        if isinstance(reachable, Polygon)
+        else list(reachable.geoms)
+        if isinstance(reachable, MultiPolygon)
+        else []
+    )
+    strokes: list[Stroke] = []
+    for polygon in polygons:
+        circularity = 4 * math.pi * polygon.area / max(polygon.length * polygon.length, 1e-9)
+        if not polygon.interiors and circularity >= 0.9:
+            center = polygon.centroid
+            contour_radius = math.sqrt(polygon.area / math.pi) - radius
+            if contour_radius > 0.05:
+                strokes.append(tuple(
+                    (
+                        center.x + contour_radius * math.cos(index * math.tau / 72),
+                        center.y + contour_radius * math.sin(index * math.tau / 72),
+                    )
+                    for index in range(73)
+                ))
+                continue
+        matching = [
+            candidate
+            for candidate in reachable_polygons
+            if polygon.covers(candidate.representative_point())
+        ]
+        strokes.extend(
+            stroke
+            for candidate in matching
+            for stroke in _strokes_from_geometry(candidate.boundary)
+        )
+    return strokes or _strokes_from_geometry(reachable.boundary)
 
 
 def _pocket_candidate_is_covered(region, strokes: Iterable[Stroke], radius: float) -> bool:

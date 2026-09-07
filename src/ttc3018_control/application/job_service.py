@@ -25,6 +25,7 @@ class JobService:
     # planner supplied while retaining ample bridge and status-report headroom.
     MAX_STREAM_WINDOW = 512
     REQUIRED_SPINDLE_STOP_ACKS = 2
+    CONTROLLER_SILENCE_TIMEOUT = 3.0
 
     def __init__(
         self,
@@ -53,9 +54,21 @@ class JobService:
         self._clock = clock or time.monotonic
         self._timing_started_at: float | None = None
         self._elapsed_seconds = 0.0
+        self._last_controller_activity: float | None = None
+        self._controller_state: str | None = None
+        self._drain_paused = False
 
     @property
     def state(self) -> str:
+        return self.streamer.state
+
+    @property
+    def display_state(self) -> str:
+        """Expose controller-drain state without claiming motion is complete."""
+        if self._drain_paused:
+            return "paused"
+        if self._completion_waiting_for_idle and self.streamer.state == "complete":
+            return "draining"
         return self.streamer.state
 
     @property
@@ -148,12 +161,25 @@ class JobService:
         self._spindle_stop_pending = False
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
+        self._drain_paused = False
         self._elapsed_seconds = 0.0
         self._timing_started_at = self._clock()
+        self._last_controller_activity = self._clock()
         self._changed()
         return ActionOutcome(True, "Engraving job started")
 
     def pause(self) -> ActionOutcome:
+        if self._completion_waiting_for_idle and self.streamer.state == "complete":
+            if self._controller_state not in {"Run", "Jog"}:
+                return ActionOutcome(False, "Pause failed — controller is not running")
+            try:
+                self._send_realtime(REALTIME_HOLD)
+            except RuntimeError as exc:
+                return ActionOutcome(False, f"Pause failed — {exc}")
+            self._drain_paused = True
+            self._freeze_timing()
+            self._changed()
+            return ActionOutcome(True, "Job paused")
         try:
             self._send_realtime(REALTIME_HOLD)
             self.streamer.pause()
@@ -164,6 +190,17 @@ class JobService:
         return ActionOutcome(True, "Job paused")
 
     def resume(self) -> ActionOutcome:
+        if self._drain_paused:
+            if self._controller_state not in {"Hold", "Hold:0"}:
+                return ActionOutcome(False, "Resume failed — controller is not paused")
+            try:
+                self._send_realtime(REALTIME_RESUME)
+            except RuntimeError as exc:
+                return ActionOutcome(False, f"Resume failed — {exc}")
+            self._drain_paused = False
+            self._timing_started_at = self._clock()
+            self._changed()
+            return ActionOutcome(True, "Job resumed")
         try:
             self._send_realtime(REALTIME_RESUME)
             self.streamer.resume()
@@ -177,12 +214,14 @@ class JobService:
         self.streamer.abort(reason)
         self._freeze_timing()
         self._completion_waiting_for_idle = False
+        self._drain_paused = False
         self._spindle_stop_pending = False
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._changed()
 
     def handle_response(self, response: str) -> bool:
+        self.note_controller_activity()
         text = response.strip()
         lowered = text.lower()
         if self._spindle_stop_pending:
@@ -220,15 +259,35 @@ class JobService:
         return True
 
     def observe_status(self, status: GrblStatus) -> None:
+        self._controller_state = status.state
+        self.note_controller_activity()
         reported_capacity = self._rx_capacity_from_status(status)
         if reported_capacity is not None:
             self._reported_rx_capacity = max(self._reported_rx_capacity, reported_capacity)
-        if self.active and status.state in {"Alarm", "Door", "Sleep"}:
+        # A final acknowledgement only means the line was accepted.  During
+        # the controller-drain window the streamer may already report
+        # ``complete`` while the physical/twin controller is still running;
+        # an Alarm in that window remains a job failure, just as it would
+        # during ordinary streaming.
+        if (self.active or self._completion_waiting_for_idle) and status.state in {"Alarm", "Door", "Sleep"}:
             reason = f"controller entered {status.state} during the job"
             self.streamer.fail(reason)
             self._fail_closed(reason)
             self._changed()
             return
+        # Realtime status can overtake queued G-code, so Idle by itself is not
+        # enough. Idle plus a fully free RX window proves GRBL consumed every
+        # transmitted line and lets us recover a bridge-dropped final `ok`.
+        if (
+            status.can_jog
+            and self._status_proves_empty_rx(status)
+            and self.streamer.reconcile_controller_idle()
+        ):
+            self._completion_waiting_for_idle = True
+            self._on_notice(
+                "GRBL finished motion with a missing final acknowledgement; "
+                "empty controller queues confirmed"
+            )
         if self._completion_waiting_for_idle and status.can_jog:
             self._freeze_timing()
             self._completion_waiting_for_idle = False
@@ -260,12 +319,37 @@ class JobService:
             self._restart_requires_reload = True
         self._freeze_timing()
         self._completion_waiting_for_idle = False
+        self._drain_paused = False
         self._spindle_stop_pending = False
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
         self.streamer.buffer_capacity = self.DEFAULT_RX_CAPACITY
+        self._last_controller_activity = None
+        self._controller_state = None
         self._changed()
+
+    def note_controller_activity(self) -> None:
+        """Record any controller response while a job lifecycle is active."""
+        if self.active:
+            self._last_controller_activity = self._clock()
+
+    def check_controller_watchdog(self) -> str | None:
+        """Fail closed when an active controller stops answering entirely."""
+        if not self.active or self._last_controller_activity is None:
+            return None
+        silent_for = self._clock() - self._last_controller_activity
+        if silent_for < self.CONTROLLER_SILENCE_TIMEOUT:
+            return None
+        reason = (
+            f"controller produced no responses for {silent_for:.1f} seconds during the job; "
+            "connection or controller power may have been lost"
+        )
+        self.streamer.fail(reason)
+        self._fail_closed(reason)
+        self._last_controller_activity = None
+        self._changed()
+        return reason
 
     @classmethod
     def _rx_capacity_from_status(cls, status: GrblStatus) -> int | None:
@@ -290,6 +374,20 @@ class JobService:
         if usable < cls.DEFAULT_RX_CAPACITY or usable > cls.MAX_REPORTED_RX_CAPACITY:
             return None
         return min(usable, cls.MAX_STREAM_WINDOW)
+
+    def _status_proves_empty_rx(self, status: GrblStatus) -> bool:
+        """Return whether Bf proves no transmitted job bytes remain queued."""
+        value = status.fields.get("Bf")
+        if value is None:
+            return False
+        parts = value.split(",", 1)
+        if len(parts) != 2:
+            return False
+        try:
+            planner_free, rx_free = (int(part) for part in parts)
+        except ValueError:
+            return False
+        return planner_free > 0 and rx_free >= self.MAX_STREAM_WINDOW
 
     def _changed(self) -> None:
         self._on_change()

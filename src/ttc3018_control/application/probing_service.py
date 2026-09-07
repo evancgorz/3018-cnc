@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import math
 from typing import Callable
 
 from ..controller_adapters import ControllerAdapter
@@ -24,6 +25,7 @@ class ProbeState(StrEnum):
     WAIT_RELEASE = "wait_release"
     SLOW = "slow_probe"
     APPLY_OFFSET = "apply_offset"
+    CONFIRM_OFFSET = "confirm_offset"
     SAFE_RETRACT = "safe_retract"
     COMPLETE = "complete"
     FAILED = "failed"
@@ -41,6 +43,10 @@ class ProbePlan:
     retract_feed: float
     wcs_slot: int | None = None
     final_work_offset: Position | None = None
+    offset_axis: str | None = None
+    offset_value: float | None = None
+    purpose: str = "generic"
+    transaction_id: str = ""
 
     def validate(self) -> None:
         if self.axis.upper() not in {"X", "Y", "Z"}:
@@ -53,6 +59,15 @@ class ProbePlan:
             raise ValueError("Probe feeds must be positive")
         if self.final_work_offset is not None and self.wcs_slot is None:
             raise ValueError("A final work offset requires a WCS slot")
+        if self.offset_axis is not None:
+            if self.wcs_slot is None or self.offset_value is None:
+                raise ValueError("An axis work offset requires a WCS slot and value")
+            if self.offset_axis.upper() not in {"X", "Y", "Z"}:
+                raise ValueError("Work offset axis must be X, Y, or Z")
+            if not math.isfinite(self.offset_value):
+                raise ValueError("Work offset value must be finite")
+        if self.offset_axis is not None and self.final_work_offset is not None:
+            raise ValueError("Choose a full or axis-only work offset")
 
 
 class ProbingService:
@@ -74,6 +89,8 @@ class ProbingService:
         self.slow_report: Position | None = None
         self._ack_pending = False
         self._probe_report_seen = False
+        self._offset_status_seen = False
+        self.expected_offset_z: float | None = None
 
     @property
     def active(self) -> bool:
@@ -125,28 +142,41 @@ class ProbingService:
             self._probe_report_seen = True
             if self.state is ProbeState.FAST:
                 self.fast_report = position
-                self.state = ProbeState.RETRACT
-                self._ack_pending = False
-                self._send_retract()
                 return True
             if self.state is ProbeState.SLOW:
                 self.slow_report = position
-                self.state = ProbeState.APPLY_OFFSET if self.plan and self.plan.final_work_offset else ProbeState.SAFE_RETRACT
-                self._ack_pending = False
-                if self.state is ProbeState.APPLY_OFFSET:
-                    self._send_offset()
-                else:
-                    self._send_safe_retract()
                 return True
             return False
         if lowered == "ok":
             if not self._ack_pending:
                 return True
             self._ack_pending = False
-            if self.state is ProbeState.RETRACT:
+            if self.state is ProbeState.FAST:
+                if not self._probe_report_seen:
+                    self._fail("Fast probe completed without a fresh successful report.")
+                else:
+                    self.state = ProbeState.RETRACT
+                    self._send_retract()
+            elif self.state is ProbeState.RETRACT:
                 self.state = ProbeState.WAIT_RELEASE
+            elif self.state is ProbeState.SLOW:
+                if not self._probe_report_seen:
+                    self._fail("Slow probe completed without a fresh successful report.")
+                else:
+                    self.state = ProbeState.APPLY_OFFSET if self.plan and (self.plan.final_work_offset or self.plan.offset_axis) else ProbeState.SAFE_RETRACT
+                    if self.state is ProbeState.APPLY_OFFSET:
+                        self._send_offset()
+                    else:
+                        self._send_safe_retract()
             elif self.state is ProbeState.APPLY_OFFSET:
-                self._send_safe_retract()
+                if self.plan and self.plan.offset_axis is not None:
+                    self.state = ProbeState.CONFIRM_OFFSET
+                    self._offset_status_seen = False
+                    self._on_notice("Work offset acknowledged; waiting for a fresh GRBL work-offset report.")
+                else:
+                    self._send_safe_retract()
+            elif self.state is ProbeState.CONFIRM_OFFSET:
+                return True
             elif self.state is ProbeState.SAFE_RETRACT:
                 self.state = ProbeState.COMPLETE
                 self._on_notice("Probe completed and the machine is at safe Z.")
@@ -169,6 +199,18 @@ class ProbingService:
                 self.state = ProbeState.SLOW
                 self._ack_pending = True
                 return True
+        elif self.state is ProbeState.CONFIRM_OFFSET:
+            if status.state in {"Alarm", "Door"}:
+                self._fail(f"Probe offset failed — GRBL reported {status.state}.")
+                return True
+            if status.work_offset is None:
+                return False
+            self._offset_status_seen = True
+            if self.expected_offset_z is not None and abs(status.work_offset.z - self.expected_offset_z) > 0.001:
+                self._fail("Probe offset confirmation did not match the fresh GRBL work offset.")
+                return True
+            self._send_safe_retract()
+            return True
         return False
 
     def cancel(self) -> None:
@@ -184,6 +226,8 @@ class ProbingService:
         self.slow_report = None
         self._ack_pending = False
         self._probe_report_seen = False
+        self._offset_status_seen = False
+        self.expected_offset_z = None
 
     def _send_retract(self) -> None:
         assert self.plan is not None
@@ -194,9 +238,18 @@ class ProbingService:
             self._fail(f"Probe retract was not sent — {exc}")
 
     def _send_offset(self) -> None:
-        assert self.plan is not None and self.plan.wcs_slot is not None and self.plan.final_work_offset is not None
+        assert self.plan is not None and self.plan.wcs_slot is not None
         try:
-            self._send_line(self.adapter.work_offset_command(self.plan.wcs_slot, self.plan.final_work_offset))
+            if self.plan.offset_axis is not None:
+                assert self.plan.offset_value is not None
+                if self.plan.offset_axis.upper() == "Z" and self.slow_report is not None:
+                    self.expected_offset_z = self.slow_report.z - self.plan.offset_value
+                self._send_line(self.adapter.work_offset_axis_command(
+                    self.plan.wcs_slot, self.plan.offset_axis, self.plan.offset_value
+                ))
+            else:
+                assert self.plan.final_work_offset is not None
+                self._send_line(self.adapter.work_offset_command(self.plan.wcs_slot, self.plan.final_work_offset))
             self._ack_pending = True
         except (RuntimeError, ValueError) as exc:
             self._fail(f"Probe work offset was not sent — {exc}")

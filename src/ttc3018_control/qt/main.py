@@ -19,7 +19,21 @@ from .view_model import ControllerViewModel
 
 QML_ROOT = Path(__file__).with_name("qml")
 ASSET_ROOT = Path(__file__).with_name("assets")
+PINE_ICON = ASSET_ROOT / "pine.ico"
+WINDOWS_APP_USER_MODEL_ID = "Pine.CNCStudio"
 _STYLE_INITIALIZED = False
+
+
+def _configure_windows_identity() -> None:
+    """Give unpackaged Pine launches their own Windows taskbar identity."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_USER_MODEL_ID)
+    except (AttributeError, OSError):
+        logging.getLogger("pine.qt").warning("Unable to set the Windows application identity")
 
 
 def _configure_logging(root: Path) -> logging.Logger:
@@ -51,7 +65,8 @@ def _configure_logging(root: Path) -> logging.Logger:
     return logger
 
 
-def build_engine(*, visible: bool = True, auto_connect: bool = False) -> tuple[QQmlApplicationEngine, ControllerViewModel]:
+def build_engine(*, visible: bool = True, auto_connect: bool = False,
+                 application: ApplicationController | None = None) -> tuple[QQmlApplicationEngine, ControllerViewModel]:
     """Load the Qt shell without starting the Qt event loop; useful for checks."""
     global _STYLE_INITIALIZED
     if not _STYLE_INITIALIZED:
@@ -63,8 +78,8 @@ def build_engine(*, visible: bool = True, auto_connect: bool = False) -> tuple[Q
     engine = QQmlApplicationEngine()
     logger = logging.getLogger("pine.qt")
     engine.warnings.connect(lambda warnings: [logger.warning(warning.toString()) for warning in warnings])
-    application = ApplicationController(Path.cwd())
-    view_model = ControllerViewModel(application, auto_connect=auto_connect)
+    controller = application or ApplicationController(Path.cwd())
+    view_model = ControllerViewModel(controller, auto_connect=auto_connect)
     # The context property does not transfer Python ownership; retain it with
     # the engine for the full QML lifecycle.
     engine._ttc3018_view_model = view_model  # type: ignore[attr-defined]
@@ -74,6 +89,7 @@ def build_engine(*, visible: bool = True, auto_connect: bool = False) -> tuple[Q
     engine.load(QUrl.fromLocalFile(str(QML_ROOT / "Main.qml")))
     if not engine.rootObjects():
         raise RuntimeError("Unable to load Pine Qt shell")
+    engine.rootObjects()[0].setIcon(QIcon(str(PINE_ICON)))
     return engine, view_model
 
 
@@ -81,11 +97,13 @@ def main() -> None:
     logger = _configure_logging(Path.cwd())
     if "--check" in sys.argv:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_windows_identity()
     app = QApplication(sys.argv)
     app.setApplicationName("Pine")
     app.setApplicationDisplayName("Pine")
     app.setOrganizationName("Pine CNC")
-    app.setWindowIcon(QIcon(str(ASSET_ROOT / "pine.ico")))
+    pine_icon = QIcon(str(PINE_ICON))
+    app.setWindowIcon(pine_icon)
     if "--check" in sys.argv:
         engine, view_model = build_engine()
         print("Pine Qt shell check passed")

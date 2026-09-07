@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import queue
+import secrets
 import time
 from dataclasses import replace
 from typing import Callable, Iterable
@@ -12,12 +13,14 @@ from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
 from ..machine_catalog import MachineCatalog, MachineCatalogStore
-from ..machine_config import MachineDefinition, SwitchMode
+from ..machine_config import DEFAULT_Z_TOUCH_PLATE_THICKNESS, MachineDefinition, ProbeDefinition, ProbeKind, SwitchMode
 from ..controller_adapters import Grbl11Adapter, GenericGrblAdapter
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
 from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
 from ..tcp_connection import TcpGrblConnection
+from ..simulation.runtime import SimulationRuntime
+from ..simulation.settings import SimulationSettings, SimulationSettingsStore
 from ..wifi_discovery import discover_grbl_hosts
 from .connection_service import ConnectionOutcome, ConnectionService
 from .events import ApplicationEvent, LogEvent, NoticeEvent
@@ -32,6 +35,7 @@ from .fixture_service import FixtureService
 from .ports import ConnectionSettingsStorePort, ProfileStorePort, StepPrepareSettingsStorePort, WorkZeroStorePort
 from .state import ApplicationState, ConnectionMode, JobSnapshot, ProgramSnapshot
 from .wifi_service import WifiProvisioningService
+from ..z_touch_plate import ZTouchPlateRecord, ZTouchPlateStore, ZTouchPlateWorkflow
 
 
 class ApplicationController:
@@ -53,19 +57,27 @@ class ApplicationController:
         wifi_factory: Callable[[], object] | None = None,
         discover_hosts: Callable[[int], Iterable[str]] | None = None,
         usb_ports: Callable[[], list[tuple[str, str]]] | None = None,
+        simulation_factory: Callable[[], object] | None = None,
     ) -> None:
         self.machine_catalog_store = MachineCatalogStore(
             root / "config" / "machines.json", root / "config" / "machine-profile.json"
         )
+        self._root = Path(root)
         self.machine_catalog: MachineCatalog | None = None
         self._machine_definition: MachineDefinition | None = None
         self.machine_id: str | None = None
         self.profile_store = profile_store or ProfileStore(root / "config" / "machine-profile.json")
         self.connection_store = connection_store or ConnectionSettingsStore(root / "config" / "connection.json")
         self.work_zero_store = work_zero_store or WorkZeroStore(root / "config" / "work-zero.json")
+        self.z_touch_plate_store = ZTouchPlateStore(root / "config" / "z-touch-plates.json")
         self.step_prepare_store = step_prepare_store or StepPrepareSettingsStore(
             root / "config" / "step-prepare.json"
         )
+        self.simulation_settings_store = SimulationSettingsStore(root / "config" / "simulation.json")
+        try:
+            self.simulation_settings = self.simulation_settings_store.load()
+        except (OSError, ValueError, TypeError):
+            self.simulation_settings = SimulationSettings()
         if profile_store is None:
             try:
                 self.machine_catalog = self.machine_catalog_store.load()
@@ -92,6 +104,10 @@ class ApplicationController:
         except (OSError, ValueError, TypeError):
             saved_work_zero = None
         try:
+            z_touch_plate_record = self.z_touch_plate_store.load(self.machine_id)
+        except (OSError, ValueError, TypeError):
+            z_touch_plate_record = None
+        try:
             step_prepare_settings = self.step_prepare_store.load()
         except (OSError, ValueError, TypeError):
             step_prepare_settings = StepPrepareSettings()
@@ -100,18 +116,38 @@ class ApplicationController:
         self.adapter = Grbl11Adapter() if self.machine_definition.controller.value == "grbl_1_1" else GenericGrblAdapter()
         self.settings = settings
         self._saved_work_zero = saved_work_zero
+        self._physical_saved_work_zero = saved_work_zero
+        self._simulation_saved_work_zero: SavedWorkZero | None = None
+        self._simulation_physical_saved_work_zero: SavedWorkZero | None = None
+        self._z_touch_plate_record = z_touch_plate_record
+        self._z_touch_plate = ZTouchPlateWorkflow()
+        self._z_probe_pending = False
+        self._z_probe_offset_confirmed = False
+        self._z_commissioning_pending = False
+        self._z_plate_removal_required = False
         self.step_prepare_settings = step_prepare_settings
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
+        self._work_zero_request_pending_ack = False
+        self._work_zero_expected_offset: Position | None = None
+        self._work_zero_expected_axes = ""
         self._events: queue.Queue[ApplicationEvent] = queue.Queue()
         self._on_notice = on_notice
         self._on_change = on_change or (lambda: None)
         self._preserve_reference_on_next_reset = False
+        self._job_nonce = ""
+        self._live_sequence = 0
         self._usb_ports = usb_ports or available_ports
         self.connection_service = ConnectionService(
             usb_factory or GrblConnection,
             wifi_factory or TcpGrblConnection,
             discover_hosts or discover_grbl_hosts,
+            simulation_factory or (lambda: SimulationRuntime(
+                profile=self.simulation_settings.profile,
+                workpiece=self.simulation_settings.workpiece,
+                speed=self.simulation_settings.speed,
+            )),
+            TcpGrblConnection,
         )
         self.wifi_setup = WifiProvisioningService(self.connection_service.send_line, self._publish_notice)
         self.generation_service = GenerationService()
@@ -186,6 +222,14 @@ class ApplicationController:
         return self.connection_service.connected
 
     @property
+    def simulation_active(self) -> bool:
+        return bool(self.connected and self.connection_service.mode is ConnectionMode.SIMULATION)
+
+    @property
+    def simulation_runtime(self):
+        return self.connection_service.simulation_runtime
+
+    @property
     def state(self) -> ApplicationState:
         status = self.status
         machine_position = self.session.machine_position
@@ -204,7 +248,7 @@ class ApplicationController:
             )
         streamer = self.job.streamer
         return ApplicationState(
-            connection_mode=ConnectionMode.WIFI if self.connection_service.mode is ConnectionMode.WIFI else ConnectionMode.USB,
+            connection_mode=self.connection_service.mode,
             connected=self.connected,
             status=status,
             machine_position=machine_position,
@@ -214,10 +258,28 @@ class ApplicationController:
             work_zero_confirmed=self.work_zero_confirmed,
             profile=self.profile,
             program=program_snapshot,
-            job=JobSnapshot(streamer.state, streamer.completed, streamer.total, streamer.error),
+            job=JobSnapshot(self.job.display_state, streamer.completed, streamer.total, streamer.error),
             machine_id=self.machine_id or "",
             machine_name=self.machine_definition.name,
         )
+
+    @property
+    def job_nonce(self) -> str:
+        """Opaque identity for the currently running loaded program."""
+        return self._job_nonce if self.job_active else ""
+
+    def live_status_snapshot(self, *, camera_state: str = "off", remote_state: str = "off"):
+        """Return a sanitized snapshot for optional monitoring adapters."""
+        from ..live.models import LiveStatusSnapshot
+
+        self._live_sequence += 1
+        snapshot = LiveStatusSnapshot.from_application(
+            self,
+            sequence=self._live_sequence,
+            camera_state=camera_state,
+            remote_state=remote_state,
+        )
+        return snapshot.__class__(**{**snapshot.as_json(), "job_nonce": self.job_nonce})
 
     @property
     def profile(self) -> MachineProfile:
@@ -255,6 +317,53 @@ class ApplicationController:
         return self.session.work_offset
 
     @property
+    def z_touch_plate_definition(self) -> ProbeDefinition | None:
+        return next((probe for probe in self.machine_definition.probes
+                     if probe.kind is ProbeKind.MOVABLE_Z_PLATE and probe.enabled), None)
+
+    @property
+    def z_touch_plate_record(self) -> ZTouchPlateRecord | None:
+        return self._z_touch_plate_record
+
+    @property
+    def z_touch_plate_fingerprint(self) -> str:
+        return self.machine_definition.fingerprint(
+            "machine_id", "controller", "travel_x", "travel_y", "travel_z", "safe_z", "probes"
+        )
+
+    @property
+    def z_touch_plate_status(self) -> str:
+        definition = self.z_touch_plate_definition
+        if definition is None:
+            return "disabled"
+        record = self._z_touch_plate_record
+        if record is None or not record.input_tested:
+            return "needs_input_test"
+        if record.fingerprint != self.z_touch_plate_fingerprint:
+            return "stale"
+        if self._z_probe_pending:
+            return "probing"
+        if self._z_plate_removal_required:
+            return "remove_plate"
+        if self._z_commissioning_pending:
+            return "commissioning"
+        if not record.commissioned:
+            return "needs_commissioning"
+        return "ready"
+
+    @property
+    def z_touch_plate_input_message(self) -> str:
+        return self._z_touch_plate.input_result.message
+
+    @property
+    def z_touch_plate_input_state(self) -> str:
+        return self._z_touch_plate.input_result.state
+
+    @property
+    def z_touch_plate_sample_count(self) -> int:
+        return len(self._z_touch_plate.samples)
+
+    @property
     def motion_busy(self) -> bool:
         return self.motion.busy
 
@@ -268,7 +377,7 @@ class ApplicationController:
 
     @property
     def job_state(self) -> str:
-        return self.job.state
+        return self.job.display_state
 
     @property
     def job_progress(self) -> float:
@@ -321,6 +430,7 @@ class ApplicationController:
             and not self.motion_busy
             and not self.job_active
             and not self.job.restart_requires_reload
+            and not self._z_plate_removal_required
             and self.program
             and self.preflight()[0]
         )
@@ -335,11 +445,81 @@ class ApplicationController:
     def begin_wifi(self, host: str, port: int) -> ConnectionOutcome:
         return self.connection_service.begin_wifi(host, port)
 
+    def connect_simulation(self) -> ConnectionOutcome:
+        outcome = self.connection_service.connect_simulation()
+        if outcome.accepted:
+            self._simulation_physical_saved_work_zero = self._saved_work_zero
+            self._simulation_saved_work_zero = None
+            self._saved_work_zero = None
+            self.session.work_zero_confirmed = False
+            self.session.work_offset = None
+        return outcome
+
+    def configure_simulation(self, speed: str, workpiece_label: str = "Pocket + retained island") -> ConnectionOutcome:
+        """Persist simulation-only controls before a twin session starts."""
+        if self.simulation_active:
+            return ConnectionOutcome(False, "Disconnect the digital twin before changing its settings")
+        labels = {
+            "Pocket + retained island": ("examples/showcase-pocket-island.step", False),
+            "Collision-only STEP": ("examples/showcase-mounting-plate.step", True),
+        }
+        if speed not in {"realtime", "2x", "5x", "10x", "uncapped"}:
+            return ConnectionOutcome(False, "Unknown digital-twin speed")
+        path, collision_only = labels.get(workpiece_label, ("", False))
+        candidate = self._root / path if path else None
+        existing = self.simulation_settings.workpiece
+        workpiece = existing
+        if candidate is not None and candidate.exists():
+            workpiece = replace(existing, path=str(candidate), collision_only=collision_only)
+        self.simulation_settings = replace(self.simulation_settings, speed=speed, workpiece=workpiece)
+        try:
+            self.simulation_settings_store.save(self.simulation_settings)
+        except (OSError, ValueError, TypeError) as exc:
+            return ConnectionOutcome(False, f"Digital-twin settings could not be saved: {exc}")
+        return ConnectionOutcome(True, "Digital-twin settings saved")
+
+    def save_simulation_settings(self, settings: SimulationSettings) -> ActionOutcome:
+        if self.simulation_active:
+            return ActionOutcome(False, "Digital-twin settings cannot change during a session")
+        try:
+            self.simulation_settings_store.save(settings)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Digital-twin settings rejected — {exc}")
+        self.simulation_settings = settings
+        return ActionOutcome(True, "Digital-twin settings saved")
+
     def poll_wifi(self) -> ConnectionOutcome | None:
         return self.connection_service.poll_wifi()
 
     def transport_events(self):
         return self.connection_service.events()
+
+    def poll_simulation(self) -> tuple[dict, ...]:
+        """Poll the owned twin through the same boundary used by the UI.
+
+        Keeping this small adapter on the Qt-independent controller lets
+        headless acceptance scenarios exercise the real loopback transport,
+        backend, and supervisor without reaching into a plant or process.
+        """
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ()
+        return runtime.poll()
+
+    def export_simulation_trace(self, path) -> None:
+        """Export canonical evidence from the active digital-twin runtime."""
+        runtime = self.simulation_runtime
+        if runtime is None:
+            raise RuntimeError("Digital twin is not active")
+        runtime.trace.export_json(path)
+        runtime.trace.export_markdown(path.with_suffix(".md"), title="Digital twin lifecycle evidence")
+
+    def record_simulation_event(self, kind: str, payload: dict | None = None, *, time_ns: int = 0) -> None:
+        """Add an application-boundary event to the twin's canonical trace."""
+        runtime = self.simulation_runtime
+        if runtime is None:
+            raise RuntimeError("Digital twin is not active")
+        runtime.trace.record(time_ns, kind, payload or {}, source="application")
 
     def usb_ports(self) -> list[tuple[str, str]]:
         """Return currently enumerated USB serial endpoints for the adapter."""
@@ -354,15 +534,21 @@ class ApplicationController:
         return self.job.program
 
     def load_program(self, path: Path):
-        return self.job.load_program(path)
+        program = self.job.load_program(path)
+        self._job_nonce = secrets.token_urlsafe(24)
+        return program
 
     def load_generated(self, gcode: str, filename: str):
-        return self.job.load_generated(gcode, filename)
+        program = self.job.load_generated(gcode, filename)
+        self._job_nonce = secrets.token_urlsafe(24)
+        return program
 
     def preflight(self) -> tuple[bool, str]:
         return self.job.preflight()
 
     def start_job(self) -> ActionOutcome:
+        if self._z_plate_removal_required:
+            return ActionOutcome(False, "Remove the Z touch plate and clip, then acknowledge their removal before starting a job.")
         if self.job.restart_requires_reload:
             return ActionOutcome(
                 False,
@@ -391,8 +577,12 @@ class ApplicationController:
             pass
         self._preserve_reference_on_next_reset = reset_sent
         self.job.abort(reason)
+        self._job_nonce = ""
         self.motion.reset()
         self.manual_pending_acks = 0
+        self._work_zero_request_pending_ack = False
+        self._work_zero_expected_offset = None
+        self._work_zero_expected_axes = ""
 
     def _motion_operation_allowed(self) -> ActionOutcome:
         if not self.connected:
@@ -424,6 +614,9 @@ class ApplicationController:
     def poll_wifi_setup(self, now: float) -> None:
         self.wifi_setup.poll(now)
 
+    def check_job_watchdog(self) -> str | None:
+        return self.job.check_controller_watchdog()
+
     def generate_text(self, *args, **kwargs):
         return self.generation_service.text(*args, **kwargs)
 
@@ -437,10 +630,14 @@ class ApplicationController:
         return self.generation_service.import_step(path, plane)
 
     def save_wifi_settings(self, host: str, port: int) -> None:
+        if self.simulation_active:
+            raise RuntimeError("Physical connection settings are disabled in the digital twin")
         self.settings = ConnectionSettings(host, port, "Wi-Fi TCP", self.settings.usb_port)
         self.connection_store.save(self.settings)
 
     def save_usb_settings(self, port: str) -> None:
+        if self.simulation_active:
+            raise RuntimeError("Physical connection settings are disabled in the digital twin")
         self.settings = ConnectionSettings(
             self.settings.wifi_host,
             self.settings.wifi_port,
@@ -450,6 +647,8 @@ class ApplicationController:
         self.connection_store.save(self.settings)
 
     def save_profile(self, profile: MachineProfile) -> None:
+        if self.simulation_active:
+            raise RuntimeError("Machine profile changes are disabled while the digital twin is connected")
         profile.validate()
         self.profile_store.save(profile)
         self.session.profile = profile
@@ -475,14 +674,21 @@ class ApplicationController:
             self.fixtures = FixtureService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
             self.session.invalidate_reference("Machine profile changed")
             self._saved_work_zero = self.work_zero_store.load(self.machine_id)
+            self._z_touch_plate_record = self.z_touch_plate_store.load(self.machine_id)
+            self._z_touch_plate = ZTouchPlateWorkflow()
         except (OSError, ValueError, TypeError) as exc:
             return ActionOutcome(False, f"Machine selection failed — {exc}")
         return ActionOutcome(True, f"Selected machine {self._machine_definition.name}.")
 
     def save_capabilities(self, *, limit_switches: bool, z_plate: bool, tool_setter: bool,
                           movable_xyz: bool, fixed_fixture: bool) -> ActionOutcome:
-        if self.connected or self.motion_busy or self.job_active:
-            return ActionOutcome(False, "Machine capabilities can only be changed while disconnected and idle.")
+        if self.simulation_active:
+            return ActionOutcome(False, "Hardware capability changes are disabled in the digital twin")
+        if (self.motion_busy or self.job_active or self.manual_pending_acks
+                or self.probing.active or self.homing.active):
+            return ActionOutcome(False, "Machine capabilities require no active machine operation.")
+        if self.connected and (self.status is None or not self.status.can_jog):
+            return ActionOutcome(False, "GRBL must be Idle before changing machine capabilities.")
         if self.machine_catalog is None or self._machine_definition is None:
             return ActionOutcome(False, "Machine catalog is unavailable for this controller instance.")
         axes = self._machine_definition.axes
@@ -510,6 +716,83 @@ class ApplicationController:
         self.session.invalidate_reference("Machine capabilities changed; recommission and re-establish reference")
         return ActionOutcome(True, "Machine capabilities saved; commissioning evidence and session reference require review.")
 
+    def save_z_plate_capability(self, enabled: bool) -> ActionOutcome:
+        """Save the currently supported capability without touching hidden ones."""
+        if self.simulation_active:
+            return ActionOutcome(False, "Hardware capability changes are disabled in the digital twin")
+        if (self.motion_busy or self.job_active or self.manual_pending_acks
+                or self.probing.active or self.homing.active):
+            return ActionOutcome(False, "Machine capabilities require no active machine operation.")
+        if self.connected and (self.status is None or not self.status.can_jog):
+            return ActionOutcome(False, "GRBL must be Idle before changing machine capabilities.")
+        if self.machine_catalog is None or self._machine_definition is None:
+            return ActionOutcome(False, "Machine catalog is unavailable for this controller instance.")
+        existing = list(self._machine_definition.probes)
+        found = False
+        updated_probes: list[ProbeDefinition] = []
+        for probe in existing:
+            if probe.kind is ProbeKind.MOVABLE_Z_PLATE:
+                updated_probes.append(replace(probe, enabled=enabled))
+                found = True
+            else:
+                updated_probes.append(probe)
+        if enabled and not found:
+            updated_probes.append(ProbeDefinition(
+                ProbeKind.MOVABLE_Z_PLATE, enabled=True,
+                plate_thickness=DEFAULT_Z_TOUCH_PLATE_THICKNESS,
+            ))
+        updated = replace(self._machine_definition, probes=tuple(updated_probes))
+        try:
+            updated.validate()
+            self.machine_catalog = self.machine_catalog_store.upsert(self.machine_catalog, updated)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Z touch plate configuration rejected — {exc}")
+        self._machine_definition = updated
+        return ActionOutcome(True, "Z touch plate capability saved. Configure and test it before probing.")
+
+    def save_z_touch_plate_settings(self, *, plate_thickness: float, active_low: bool,
+                                    fast_feed: float, slow_feed: float, max_search: float,
+                                    retract: float, safe_retract: float, tolerance: float) -> ActionOutcome:
+        if self.simulation_active:
+            return ActionOutcome(False, "Probe configuration changes are disabled in the digital twin")
+        definition = self.z_touch_plate_definition
+        if definition is None:
+            return ActionOutcome(False, "Enable the movable Z touch plate first.")
+        if self.motion_busy or self.job_active or self.manual_pending_acks:
+            return ActionOutcome(False, "Z touch plate settings require no active machine operation.")
+        if self.connected and (self.status is None or not self.status.can_jog):
+            return ActionOutcome(False, "GRBL must be Idle before changing probe polarity.")
+        try:
+            updated_probe = replace(
+                definition, plate_thickness=float(plate_thickness), active_low=bool(active_low),
+                fast_feed=float(fast_feed), slow_feed=float(slow_feed), max_search=float(max_search),
+                retract=float(retract), safe_retract=float(safe_retract), tolerance=float(tolerance),
+            )
+            updated_probe.validate()
+            updated = replace(self._machine_definition, probes=tuple(
+                updated_probe if probe.kind is ProbeKind.MOVABLE_Z_PLATE else probe
+                for probe in self._machine_definition.probes
+            ))
+            updated.validate()
+            assert self.machine_catalog is not None
+            self.machine_catalog = self.machine_catalog_store.upsert(self.machine_catalog, updated)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Z touch plate settings rejected — {exc}")
+        self._machine_definition = updated
+        if not self.connected:
+            return ActionOutcome(
+                True,
+                "Z touch plate settings saved. Connect while Idle and save again to apply GRBL $6.",
+            )
+        try:
+            self.send_manual(self.adapter.setting_command(6, 1 if active_low else 0))
+        except (RuntimeError, ValueError) as exc:
+            return ActionOutcome(False, f"Settings saved, but GRBL $6 was not applied — {exc}")
+        return ActionOutcome(
+            True,
+            f"Z touch plate settings saved; GRBL $6 set to {1 if active_low else 0}. Retest the input before probing.",
+        )
+
     def home_machine(self) -> ActionOutcome:
         status = self.status
         spindle_off = status is None or status.spindle in (None, 0)
@@ -520,6 +803,105 @@ class ApplicationController:
         spindle_off = status is None or status.spindle in (None, 0)
         return self.probing.start(plan, connected=self.connected, spindle_off=spindle_off)
 
+    def start_z_touch_plate_input_test(self) -> ActionOutcome:
+        if not self.z_touch_plate_definition:
+            return ActionOutcome(False, "Enable the movable Z touch plate first.")
+        if not self.connected or self.status is None or not self.status.can_jog:
+            return ActionOutcome(False, "Connect to GRBL and wait for Idle before testing the Z touch plate input.")
+        if self.job_active or self.motion_busy or self.manual_pending_acks:
+            return ActionOutcome(False, "The Z touch plate input test requires no other machine operation.")
+        self._z_touch_plate.start_input_test(self.status.pins)
+        return ActionOutcome(True, self._z_touch_plate.input_result.message)
+
+    def start_z_touch_plate_commissioning_sample(self) -> ActionOutcome:
+        definition = self.z_touch_plate_definition
+        if definition is None:
+            return ActionOutcome(False, "Enable the movable Z touch plate first.")
+        if not self._z_touch_plate.input_tested and not (self._z_touch_plate_record and self._z_touch_plate_record.input_tested):
+            return ActionOutcome(False, "Pass the no-motion Z touch plate input test first.")
+        if self.status is None or not self.status.can_jog or self.status.spindle not in (None, 0):
+            return ActionOutcome(False, "GRBL must be Idle with the spindle off before commissioning.")
+        if self.probing.active or self.motion_busy or self.job_active or self.manual_pending_acks:
+            return ActionOutcome(False, "Another machine operation is active.")
+        if self.status.pins and "P" in self.status.pins.upper():
+            return ActionOutcome(False, "The touch plate input must be open before probing.")
+        if not self.reference_trusted:
+            return ActionOutcome(False, "Establish a trusted machine reference before commissioning.")
+        for distance in (-definition.max_search, definition.retract, definition.safe_retract):
+            check = self.session.check_jog("Z", distance)
+            if not check.accepted:
+                return ActionOutcome(False, f"Commissioning probe is outside the virtual envelope — {check.message}")
+        slow_distance = -min(definition.max_search, max(0.5, definition.max_search / 5))
+        outcome = self.probing.start(ProbePlan(
+            "Z", -definition.max_search, slow_distance, definition.retract, definition.safe_retract,
+            definition.fast_feed, definition.slow_feed, definition.fast_feed,
+            purpose="commissioning", transaction_id=secrets.token_urlsafe(12),
+        ), connected=self.connected, spindle_off=True)
+        if outcome.accepted:
+            self._z_commissioning_pending = True
+        return outcome
+
+    def acknowledge_z_touch_plate_removed(self) -> ActionOutcome:
+        if not self._z_plate_removal_required:
+            return ActionOutcome(False, "No touch plate removal acknowledgement is pending.")
+        self._z_plate_removal_required = False
+        return ActionOutcome(True, "Touch plate and clip removal acknowledged; the machine is ready for the next job.")
+
+    def save_z_touch_plate_commissioning(self, samples: tuple[float, ...]) -> ActionOutcome:
+        definition = self.z_touch_plate_definition
+        if definition is None:
+            return ActionOutcome(False, "Enable the movable Z touch plate first.")
+        if not self._z_touch_plate.input_tested and not (self._z_touch_plate_record and self._z_touch_plate_record.input_tested):
+            return ActionOutcome(False, "Pass the no-motion Z touch plate input test first.")
+        try:
+            record = ZTouchPlateRecord.commissioned_record(
+                self.machine_id or "", tuple(float(value) for value in samples), definition.tolerance,
+                self.z_touch_plate_fingerprint,
+            )
+            record.validate()
+            self.z_touch_plate_store.save(record)
+        except (OSError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Z touch plate commissioning rejected — {exc}")
+        self._z_touch_plate_record = record
+        return ActionOutcome(True, "Z touch plate commissioning saved; workpiece probing is ready.")
+
+    def probe_work_z(self) -> ActionOutcome:
+        definition = self.z_touch_plate_definition
+        record = self._z_touch_plate_record
+        if definition is None:
+            return ActionOutcome(False, "Enable the movable Z touch plate first.")
+        if self.z_touch_plate_status != "ready":
+            return ActionOutcome(False, f"Z touch plate is {self.z_touch_plate_status.replace('_', ' ')}.")
+        if not self.session.work_zero_confirmed:
+            return ActionOutcome(False, "Set and confirm the X/Y work zero before probing work Z.")
+        if self.status is None or not self.status.can_jog:
+            return ActionOutcome(False, "GRBL must be Idle before probing work Z.")
+        if self.status.spindle not in (None, 0):
+            return ActionOutcome(False, "Turn the spindle off before probing work Z.")
+        if self.probing.active or self.motion_busy or self.job_active or self.manual_pending_acks:
+            return ActionOutcome(False, "Another machine operation is active.")
+        if self.status.pins and "P" in self.status.pins.upper():
+            return ActionOutcome(False, "The touch plate input must be open before probing.")
+        current = self.session.machine_position
+        if current is None or not self.reference_trusted:
+            return ActionOutcome(False, "Establish a trusted machine reference before probing work Z.")
+        for distance in (-definition.max_search, definition.retract, definition.safe_retract):
+            check = self.session.check_jog("Z", distance)
+            if not check.accepted:
+                return ActionOutcome(False, f"Z probe is outside the virtual envelope — {check.message}")
+        slow_distance = -min(definition.max_search, max(0.5, definition.max_search / 5))
+        plan = ProbePlan(
+            "Z", -definition.max_search, slow_distance, definition.retract, definition.safe_retract,
+            definition.fast_feed, definition.slow_feed, definition.fast_feed,
+            wcs_slot=1, offset_axis="Z", offset_value=definition.plate_thickness,
+            purpose="work_z", transaction_id=secrets.token_urlsafe(12),
+        )
+        outcome = self.probing.start(plan, connected=self.connected, spindle_off=True)
+        if outcome.accepted:
+            self._z_probe_pending = True
+            self._z_probe_offset_confirmed = False
+        return outcome
+
     def save_step_prepare_settings(self, settings: StepPrepareSettings) -> None:
         settings.validate()
         self.step_prepare_store.save(settings)
@@ -529,19 +911,32 @@ class ApplicationController:
         self.session.invalidate_reference(reason)
 
     def disconnect(self, reason: str | None = None) -> ConnectionOutcome:
+        was_simulation = self.simulation_active
         self.wifi_setup.cancel()
         outcome = self.connection_service.disconnect()
         self.motion.reset()
         self.job.reset()
         self.homing.reset(outcome.message)
         self.probing.reset()
+        self._z_probe_pending = False
+        self._z_probe_offset_confirmed = False
+        self._z_commissioning_pending = False
+        self._z_plate_removal_required = False
         self.tool_setting.reset()
         self.fixtures.reset()
         self.manual_pending_acks = 0
+        self._work_zero_request_pending_ack = False
+        self._work_zero_expected_offset = None
+        self._work_zero_expected_axes = ""
         self._preserve_reference_on_next_reset = False
         self.status = None
+        self._job_nonce = ""
         self.session.clear_status()
         self.session.invalidate_reference(reason or outcome.message)
+        if was_simulation:
+            self._saved_work_zero = self._simulation_physical_saved_work_zero
+            self._simulation_saved_work_zero = None
+            self._simulation_physical_saved_work_zero = None
         return outcome
 
     def establish_reference(self) -> ActionOutcome:
@@ -597,12 +992,27 @@ class ApplicationController:
             return ActionOutcome(False, "Work-zero command ignored — another machine operation is active")
         if not self.session.can_move:
             return ActionOutcome(False, "Work-zero command ignored — GRBL is not Idle")
+        normalized = "".join(axis for axis in "XYZ" if axis in axes.upper())
+        machine_position = self.session.machine_position
+        previous_offset = self.session.work_offset
         outcome = self.session.request_work_zero_confirmation(axes)
         if not outcome.accepted:
             return outcome
         try:
+            if machine_position is not None:
+                base_offset = previous_offset or Position(0.0, 0.0, 0.0)
+                expected = [base_offset.x, base_offset.y, base_offset.z]
+                for index, axis in enumerate("XYZ"):
+                    if axis in normalized:
+                        expected[index] = getattr(machine_position, axis.lower())
+                self._work_zero_expected_offset = Position(*expected)
+                self._work_zero_expected_axes = normalized
+            self._work_zero_request_pending_ack = True
             self.send_manual(make_work_zero(axes))
         except (RuntimeError, ValueError) as exc:
+            self._work_zero_request_pending_ack = False
+            self._work_zero_expected_offset = None
+            self._work_zero_expected_axes = ""
             self.session.invalidate_work_zero()
             return ActionOutcome(False, f"Work zero not sent — {exc}")
         self._clear_saved_work_zero()
@@ -653,15 +1063,24 @@ class ApplicationController:
         return ActionOutcome(True, "Resume requested")
 
     def close(self) -> None:
+        was_simulation = self.simulation_active
         self.wifi_setup.cancel()
         outcome = self.connection_service.close()
         self.motion.reset()
         self.job.reset()
         self.manual_pending_acks = 0
+        self._work_zero_request_pending_ack = False
+        self._work_zero_expected_offset = None
+        self._work_zero_expected_axes = ""
         self._preserve_reference_on_next_reset = False
         self.status = None
+        self._job_nonce = ""
         self.session.clear_status()
         self.session.invalidate_reference(outcome.message)
+        if was_simulation:
+            self._saved_work_zero = self._simulation_physical_saved_work_zero
+            self._simulation_saved_work_zero = None
+            self._simulation_physical_saved_work_zero = None
 
     def send_manual(self, command: bytes) -> None:
         self.connection_service.send_line(command)
@@ -677,9 +1096,42 @@ class ApplicationController:
     def apply_status(self, status: GrblStatus) -> None:
         self.status = status
         awaiting_confirmation = self.session.awaiting_work_zero_report
-        self.session.update_status(status)
+        expected = self._work_zero_expected_offset
+        expected_axes = self._work_zero_expected_axes
+        restored_work_zero = expected is None and self.session.awaiting_work_zero_report
+        matching_work_zero = (
+            expected is not None
+            and bool(expected_axes)
+            and status.work_offset is not None
+            and all(
+                abs(getattr(status.work_offset, axis.lower()) - getattr(expected, axis.lower())) <= 0.001
+                for axis in expected_axes
+            )
+        )
+        fresh_work_zero = restored_work_zero or matching_work_zero
+        self.session.update_status(status, confirm_pending_work_zero=fresh_work_zero)
+        if fresh_work_zero and self.session.work_zero_confirmed:
+            self._work_zero_expected_offset = None
+            self._work_zero_expected_axes = ""
+        input_result = self._z_touch_plate.observe_pins(status.pins)
+        if input_result.passed and self.z_touch_plate_definition is not None:
+            current = self._z_touch_plate_record
+            if current is None or not current.input_tested or current.fingerprint != self.z_touch_plate_fingerprint:
+                definition = self.z_touch_plate_definition
+                updated_record = ZTouchPlateRecord(
+                    self.machine_id or "", current.samples if current else (), definition.tolerance,
+                    self.z_touch_plate_fingerprint, True, current.timestamp if current else "",
+                )
+                try:
+                    self.z_touch_plate_store.save(updated_record)
+                    self._z_touch_plate_record = updated_record
+                except (OSError, ValueError, TypeError):
+                    self._publish_notice("Z touch plate input passed, but the result could not be saved.")
+        probing_state_before = self.probing.state
         self.homing.observe_status(status, self.machine_definition)
         self.probing.observe_status(status)
+        if self._z_probe_pending and probing_state_before.value == "confirm_offset" and self.probing.state.value == "safe_retract":
+            self._z_probe_offset_confirmed = True
         self.fixtures.observe_status(status)
         if status.work_offset is not None:
             if awaiting_confirmation and self.session.work_zero_confirmed:
@@ -699,6 +1151,10 @@ class ApplicationController:
 
     def _save_work_zero(self, offset: Position) -> None:
         saved = SavedWorkZero.from_position(offset)
+        if self.simulation_active:
+            self._simulation_saved_work_zero = saved
+            self._saved_work_zero = saved
+            return
         try:
             self.work_zero_store.save(saved, self.machine_id)
         except OSError:
@@ -708,6 +1164,9 @@ class ApplicationController:
 
     def _clear_saved_work_zero(self) -> None:
         self._saved_work_zero = None
+        if self.simulation_active:
+            self._simulation_saved_work_zero = None
+            return
         try:
             self.work_zero_store.clear(self.machine_id)
         except OSError:
@@ -720,6 +1179,39 @@ class ApplicationController:
         if self.homing.handle_response(text):
             return True
         if self.probing.handle_response(text):
+            if self._z_probe_pending and self.probing.state.value == "complete":
+                if self._z_probe_offset_confirmed and self.session.work_offset is not None:
+                    self._save_work_zero(self.session.work_offset)
+                    self._z_probe_pending = False
+                    self._z_probe_offset_confirmed = False
+                    self._z_plate_removal_required = True
+                    self._publish_notice("Work Z0 confirmed from the touch plate; remove the plate and clip before machining.")
+            elif self._z_probe_pending and self.probing.state.value == "failed":
+                self._z_probe_pending = False
+                self._z_probe_offset_confirmed = False
+            elif self._z_commissioning_pending and self.probing.state.value == "complete":
+                if self.probing.slow_report is not None:
+                    self._z_touch_plate.add_sample(self.probing.slow_report.z)
+                self._z_commissioning_pending = False
+                if len(self._z_touch_plate.samples) == 3:
+                    definition = self.z_touch_plate_definition
+                    if definition is not None:
+                        try:
+                            record = ZTouchPlateRecord.commissioned_record(
+                                self.machine_id or "", tuple(self._z_touch_plate.samples), definition.tolerance,
+                                self.z_touch_plate_fingerprint, input_tested=True,
+                            )
+                            record.validate()
+                            self.z_touch_plate_store.save(record)
+                            self._z_touch_plate_record = record
+                            self._publish_notice("Z touch plate commissioning passed and was saved.")
+                        except (OSError, ValueError, TypeError) as exc:
+                            self._z_touch_plate.samples.clear()
+                            self._publish_notice(f"Z touch plate commissioning failed — {exc}")
+                else:
+                    self._publish_notice(f"Z touch plate sample {len(self._z_touch_plate.samples)} of 3 recorded.")
+            elif self._z_commissioning_pending and self.probing.state.value == "failed":
+                self._z_commissioning_pending = False
             return True
         if self.tool_setting.handle_response(text):
             return True
@@ -727,6 +1219,12 @@ class ApplicationController:
             return True
         if self.manual_pending_acks and (lowered == "ok" or lowered.startswith("error:") or lowered.startswith("alarm:")):
             self.manual_pending_acks -= 1
+            if self._work_zero_request_pending_ack:
+                self._work_zero_request_pending_ack = False
+                if lowered != "ok":
+                    self._work_zero_expected_offset = None
+                    self._work_zero_expected_axes = ""
+                    self.session.invalidate_work_zero()
             return True
         return self.job.handle_response(text)
 
@@ -741,9 +1239,17 @@ class ApplicationController:
         else:
             self.homing.reset("GRBL reset")
         self.probing.reset()
+        self._z_probe_pending = False
+        self._z_probe_offset_confirmed = False
+        self._z_commissioning_pending = False
+        self._z_plate_removal_required = False
         self.tool_setting.reset()
         self.fixtures.reset()
+        self._work_zero_request_pending_ack = False
+        self._work_zero_expected_offset = None
+        self._work_zero_expected_axes = ""
         self.status = None
+        self._job_nonce = ""
         self.session.clear_status(retain_work_zero=preserve_reference)
         if not preserve_reference:
             self.session.invalidate_reference("GRBL reset")

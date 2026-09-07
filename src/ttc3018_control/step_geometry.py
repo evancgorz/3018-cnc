@@ -21,7 +21,7 @@ class StepImportError(ValueError):
 
 
 STEP_PLANES = (
-    "Auto (largest planar face)",
+    "Auto (best 2.5D orientation)",
     "XY (top/bottom)",
     "XZ (front/back)",
     "YZ (left/right)",
@@ -409,13 +409,38 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
     if not candidates:
         raise StepImportError("No closed orthogonal planar face was found; tilted or open geometry is not supported")
 
+    box = modules["Bnd_Box"]()
+    modules["BRepBndLib"].Add_s(shape, box)
+    bounds = box.Get()
     selected = candidates
     if plane != STEP_PLANES[0]:
         requested_axis = plane[:2]
         selected = [candidate for candidate in candidates if candidate[1] == requested_axis]
         if not selected:
             raise StepImportError(f"No closed {requested_axis} planar face was found in this STEP file")
-    chosen = max(selected, key=lambda candidate: candidate[0])
+        chosen = _highest_largest_face(selected)
+    else:
+        # A common extruded 2.5D part can have a long rectangular side whose
+        # area is slightly larger than the actual profile (hooks and brackets
+        # are typical examples).  Largest-face selection then points the tool
+        # through the length of the part and can turn a perfectly machinable
+        # profile into an apparently over-depth model.  The shortest model
+        # dimension is the best deterministic extrusion/tool-axis signal;
+        # face area remains the tie-breaker for near-equal dimensions.
+        axis_thickness = {
+            axis: _plane_thickness(bounds, axis)
+            for axis in {candidate[1] for candidate in selected}
+        }
+        minimum_thickness = min(axis_thickness.values())
+        tolerance = max(1e-6, minimum_thickness * 1e-4)
+        preferred_axes = {
+            axis
+            for axis, thickness in axis_thickness.items()
+            if thickness <= minimum_thickness + tolerance
+        }
+        chosen = _highest_largest_face(
+            [candidate for candidate in selected if candidate[1] in preferred_axes]
+        )
     _face_area, selected_axis, _chosen_loops, normal, face_coordinate = chosen
     axis_index = {"YZ": 0, "XZ": 1, "XY": 2}[selected_axis]
     chosen_sign = 1 if normal[axis_index] >= 0 else -1
@@ -440,9 +465,6 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         PlanarLoop(tuple(Point2D(point.x - min_x, point.y - min_y) for point in loop.points))
         for loop in loops
     )
-    box = modules["Bnd_Box"]()
-    modules["BRepBndLib"].Add_s(shape, box)
-    bounds = box.Get()
     thickness = _plane_thickness(bounds, selected_axis)
     loop_parents = loop_containment_parents(normalized)
     machine_bottom = _machine_axis_min(bounds, selected_axis)
@@ -474,6 +496,18 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         surface_patches,
         loop_parents,
     )
+
+
+def _highest_largest_face(candidates):
+    """Prefer the upper face when opposite extrusion faces have equal area."""
+    largest_area = max(candidate[0] for candidate in candidates)
+    area_tolerance = max(1e-7, largest_area * 1e-7)
+    largest = [
+        candidate
+        for candidate in candidates
+        if candidate[0] >= largest_area - area_tolerance
+    ]
+    return max(largest, key=lambda candidate: candidate[4])
 
 
 def _merge_coplanar_loops(
