@@ -357,3 +357,75 @@ Focused evidence:
 
 No GUI was relaunched during this correction, no hardware/USB/COM/non-loopback
 endpoint was accessed, and no commit or push was made pending Sol review.
+
+## P0 final tagged GUI acceptance — 2026-09-07 (partial; evidence gap)
+
+Fresh isolated validator against pushed commit `953b6b2`:
+
+- Marker: `pine-twin-gui-c3519a5c93b1`
+- Manifest: `C:\\Users\\EVANGO~1\\AppData\\Local\\Temp\\pine-twin-gui-c3519a5c93b1-8nopa319\\gui-validation-manifest.json`
+- Main PID: `14792`; owned child PIDs: `15776`, `3692`
+- Loopback endpoint: `127.0.0.1:50105`
+
+Public UI gates observed:
+
+- Virtual Machine (Digital Twin), 10x, and `Collision-only STEP` were selected;
+  the public Guided STEP flow imported `examples/showcase-mounting-plate.step`,
+  generated/loaded the validated G-code, established a Trusted virtual machine
+  reference, moved to safe machine Z6, and confirmed work zero at Z0.
+- The public guarded start path visibly produced `Job stopped` / `ALARM:1` at
+  machine `X7.66 Y5.18 Z25.23` (work Z -0.77), with the main UI reporting the
+  failed alarm/interlock outcome.
+
+Evidence gap (not claimed as PASS):
+
+- The simulator window had been natively minimized to reach the Guided STEP
+  controls and could not be restored through the trusted UI surface after the
+  alarm. Consequently, the first-contact ring/crosshair and labeled hazard
+  kind/body/XYZ projection were not observed in this cycle.
+- The simulator-only `Export evidence…` control and native save dialog were not
+  reachable while that window was hidden; no GUI JSON/Markdown export is
+  claimed and no evidence files were written by the GUI.
+- The validator log records a `PermissionError [WinError 5]` while refreshing
+  its temporary manifest at `18:47:00`; this did not prevent the main UI from
+  reporting the alarm or the normal shutdown, but the manifest remains the
+  original ownership record.
+
+Exact cleanup/safety evidence:
+
+- The owned tagged instance was disconnected via the public UI and normally
+  closed. The trusted window inventory then contained no exact tagged window;
+  exact PIDs `14792`, `15776`, and `3692` were absent. The log records
+  `Simulation GUI validation physical factory calls: []`.
+- No hardware, USB/COM, physical Wi-Fi, non-loopback endpoint, unrelated Pine
+  window, runtime config, or repository evidence file was accessed or modified.
+
+Overall status: **PARTIAL**. Public setup, alarm/interlock outcome, exact
+cleanup, and no-physical-factory safety passed; first-contact visualization and
+GUI JSON/Markdown export remain unobserved in this tagged run. No additional
+source changes, commit, or push were made.
+
+## Sol review correction — simulator restoration affordance (2026-09-07)
+
+Implemented the bounded simulation-only restoration action requested after the
+partial GUI run:
+
+- Main connected UI now exposes `Show simulator` only when
+  `appViewModel.simulation_active` is true. The action sets the owned simulator
+  window visible, raises it, and requests activation; its function returns
+  without changing state while disconnected.
+- The existing simulator `onClosing` guard remains unchanged, including the
+  refusal to close while a simulated job is active.
+- Added a Qt/QML binding regression covering connected-only visibility, the
+  guarded action, visibility/raise/activation calls, and preservation of the
+  close guard.
+
+Focused evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py -k "simulation" -q`
+  → **4 passed, 25 deselected in 1.87s**.
+- No GUI was launched in this correction, and no hardware, physical transport,
+  non-loopback endpoint, or unrelated Pine instance was accessed.
+- No commit or push was made; source changes are limited to the requested QML
+  action and its focused test, with the existing generated/config files still
+  excluded.

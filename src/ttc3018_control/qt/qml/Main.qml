@@ -52,6 +52,13 @@ ApplicationWindow {
         workspace = 2
     }
 
+    function showSimulator() {
+        if (!(appViewModel && appViewModel.simulation_active)) return
+        simulationWindow.visible = true
+        simulationWindow.raise()
+        simulationWindow.requestActivate()
+    }
+
     onClosing: function(closeEvent) {
         if (exitBypass) {
             exitBypass = false
@@ -1184,6 +1191,7 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 Pill { label: appViewModel && appViewModel.simulation_active ? appViewModel.simulation_banner : (appViewModel ? appViewModel.connection_text : "Disconnected"); tone: appViewModel && appViewModel.simulation_active ? window.palette.accent : window.palette.warning }
                 Pill { label: appViewModel ? appViewModel.grbl_state : "Unknown"; tone: window.palette.muted }
+                SecondaryButton { visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"; onClicked: window.showSimulator() }
                 SecondaryButton { text: appViewModel && appViewModel.connected ? "Disconnect" : "Connect"; onClicked: appViewModel && appViewModel.connected ? appViewModel.disconnect() : connectionDialog.open() }
             }
 

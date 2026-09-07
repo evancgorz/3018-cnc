@@ -806,6 +806,22 @@ appropriate to that large baseline, and a confirmed push. If Computer Use is
 stopped again, preserve backend progress and report PARTIAL rather than
 claiming the GUI gate.
 
+## Sol review delta — simulator restoration affordance (2026-09-07)
+
+The final tagged GUI run proved the corrected public alarm path and exact
+cleanup, but the simulator had been minimized during setup and could not be
+restored through trusted UI automation. Since the simulator is a first-class
+digital-twin surface, add a small public `Show simulator`/`Show digital twin`
+action in the main simulation-connected UI that raises and activates the owned
+simulator window. Keep it simulation-only and forbid use while disconnected.
+Add a Qt/QML binding regression for visibility/availability and preserve the
+existing close guard. Then run one fresh tagged GUI pass: restore the simulator
+through this action, verify first-contact ring/crosshair and labeled hazard
+details, invoke `Export evidence…`, verify JSON+Markdown output and success
+feedback, disconnect, and exact cleanup. Do not claim PASS without those
+observations. No hardware, physical transport, non-loopback endpoint, or
+unrelated Pine instance is permitted.
+
 ## Sol review delta — headless-first collision stabilization (2026-09-07)
 
 Repeated P0 GUI attempts are suspended until the complete public-interface

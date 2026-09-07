@@ -106,6 +106,17 @@ def test_simulation_hazard_detail_projection_and_public_visualization_surface(qa
     assert "simulation_collision_message" in qml
 
 
+def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert "function showSimulator()" in qml
+    assert "if (!(appViewModel && appViewModel.simulation_active)) return" in qml
+    assert "simulationWindow.visible = true" in qml
+    assert "simulationWindow.raise()" in qml
+    assert "simulationWindow.requestActivate()" in qml
+    assert 'SecondaryButton { visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"; onClicked: window.showSimulator() }' in qml
+    assert 'if (appViewModel && appViewModel.job_active)' in qml
+
+
 def test_simulation_evidence_export_slot_reports_success_and_failure(qapp, tmp_path, monkeypatch) -> None:
     controller = ApplicationController(tmp_path)
     view_model = ControllerViewModel(controller)
