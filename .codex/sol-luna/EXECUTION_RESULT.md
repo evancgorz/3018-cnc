@@ -247,3 +247,41 @@ The generated evidence directory and temporary simulation configuration are
 untracked and must be excluded from any later package commit. No GUI, USB/COM,
 hardware, non-loopback endpoint, runtime configuration, or physical A/B
 commissioning was used; the live GUI acceptance gate remains unresolved.
+
+## Sol review delta — P1 commit/push checkpoint (2026-09-07)
+
+Sol independently reviewed the P1 public-boundary harness and collision/
+backpressure corrections. The implementation uses the production
+`ApplicationController` → loopback `TcpGrblConnection` → spawned backend and
+independent supervisor boundaries; it does not reach into a plant or bypass
+the public controller API. Hazard episodes are latched by semantic kind/body
+identity, clear and re-arm on a genuine edge, and remain bounded. Runtime
+telemetry publication is capped and poll budgets are split so supervisor
+heartbeats and hazard responses cannot starve behind telemetry. Alarm reports
+during the final controller-drain phase now fail the job even when all streamed
+lines have already been acknowledged.
+
+Sol reran the authoritative gates: **98 passed** across the public scenario,
+spawn-worker, controller-branch, simulation-core, geometry/parity, and
+application/WCO contract groups. Luna's retained acceptance counts remain 26
+focused public/controller tests, 45 WCO/application tests, and 85 simulation
+tests, with the deterministic public lifecycle passing twice. Results include
+startup hazards `0`, exactly one `spindle_off_entry` incident, final job state
+`failed`, WCO Z `30.0`, JSON+Markdown export, physical factory calls `0`, and
+exact backend/supervisor cleanup.
+
+Commit/push checkpoint:
+
+- Commit `69bdfc3` — `Build hardware-free digital twin and public lifecycle
+  harness`.
+- Pushed successfully to `origin/main`.
+- Generated evidence/config under `.codex/sol-luna/headless_acceptance_run/`,
+  local `config/`, and `%SystemDrive%/` were explicitly excluded. No hardware,
+  USB/COM, physical Wi-Fi, non-loopback endpoint, or physical A/B commissioning
+  was used.
+
+The P1 headless package is complete. P0 remains **PARTIAL** because the final
+post-fix GUI collision visualization, GUI export action, and final tagged GUI
+cleanup have not yet been observed. The next GUI run should be one concise
+acceptance check against this passing headless lifecycle, followed by its own
+reviewed commit/push.
