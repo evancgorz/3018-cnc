@@ -286,6 +286,24 @@ cleanup have not yet been observed. The next GUI run should be one concise
 acceptance check against this passing headless lifecycle, followed by its own
 reviewed commit/push.
 
+## Sol review delta — simulator restore checkpoint and interrupted final GUI (2026-09-07)
+
+- Restore affordance commit `a0702f0` was reviewed and pushed to `origin/main`;
+  its focused Qt gate passed (`4 passed, 25 deselected`).
+- A fresh tagged run `pine-twin-gui-c3519a5c93b1` independently proved the
+  corrected public alarm path and exact cleanup, but the simulator could not be
+  restored after minimization; no ring/details or GUI export claim was made.
+- The subsequent final launch was stopped by the user's physical Escape key
+  before UI control began. Exact tagged window `pine-twin-gui-142aa6aee490`
+  (PID `9236`, no twin children) was re-identified and closed; no unrelated
+  Pine window was touched. No hardware, USB/COM, non-loopback endpoint, or
+  physical A/B was used.
+
+P0 remains **PARTIAL**. The public collision/interlock/alarm and cleanup gates
+are proven; first-contact visualization and GUI evidence-export observation are
+pending one uninterrupted acceptance pass. Backend work may continue while
+that narrow GUI gate is pending.
+
 ## P0 fresh tagged GUI acceptance — 2026-09-07
 
 Fresh isolated validator:
