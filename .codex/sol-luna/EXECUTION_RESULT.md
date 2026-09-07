@@ -495,6 +495,38 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P1 GRBL/DLC32 protocol-fidelity expansion — 2026-09-07
+
+Implemented the bounded protocol-fidelity correction headlessly:
+
+- Ordinary commands are now fail-closed while the virtual controller is in an
+  alarm: only explicit `$X`, `$H`, or realtime soft reset can clear the alarm;
+  motion is never queued behind an uncleared limit alarm. Soft reset also
+  restores the default modal state while retaining FIFO/deferred-line cleanup.
+  Homing clears the alarm state consistently.
+- Added deterministic protocol regressions for fragmented partial lines with
+  interleaved realtime `?`/`!`, exact status/ack ordering, alarm unlock and
+  modal reset behavior. Existing parser/controller coverage continues to cover
+  comments, malformed/nonfinite words, system queries/settings/WCS/TLO/probe
+  reports, modal/linear/arc/helical/jog paths, spindle ramping, planner/RX
+  `Bf`, and deterministic ack fault hooks.
+- Preserved command acceptance versus plant completion, bounded planner
+  admission, realtime responsiveness, and existing loopback-only transport
+  boundaries.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_controller_branches.py
+  tests/test_simulation_core.py -q` → **35 passed in 3.48s** (final rerun after
+  system-command comment normalization).
+- `.venv\Scripts\python.exe -m pytest <PowerShell-expanded test_simulation_*.py>
+  tests/test_application_contracts.py tests/test_job.py -q`
+  → **156 passed in 54.12s**.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded.
+
 ## P1 collision and coordinate-frame hardening — 2026-09-07
 
 Implemented the scheduled headless collision/frame package without GUI or

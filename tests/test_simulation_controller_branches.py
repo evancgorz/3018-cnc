@@ -41,6 +41,35 @@ def test_input_types_overflow_and_all_realtime_bytes():
     assert "Grbl 1.1h ['$' for help]" in controller.drain()
 
 
+def test_fragmented_line_and_realtime_interleave_preserve_order_and_status():
+    controller = make_controller()
+    controller.receive(b"G1 X")
+    assert controller.drain() == ()
+    controller.receive(b"?!")
+    realtime = controller.drain()
+    assert realtime[0].startswith("<Idle")
+    assert controller.plant.hold_requested
+    controller.receive(b"1 F60 ; trailing comment\n")
+    assert controller.drain() == ("ok",)
+    assert len(controller.plant.queue) == 1
+
+
+def test_alarm_requires_unlock_and_soft_reset_restores_modal_state():
+    controller = make_controller()
+    controller.plant.position[0] = controller.plant.profile.travel_x + 1
+    controller.plant._check_limits()
+    assert controller.alarm and controller.plant.state == "Alarm"
+    assert controller.drain() == ("ALARM:1",)
+    assert send(controller, "G1 X1 F60") == ("ALARM:1",)
+    assert not controller.plant.busy
+    assert send(controller, "$X ; unlock comment") == ("ok",)
+    assert controller.plant.state == "Idle" and not controller.alarm
+    assert send(controller, "G91") == ("ok",)
+    controller.receive(b"\x18")
+    assert controller.drain() == ("Grbl 1.1h ['$' for help]",)
+    assert send(controller, "$G")[0].startswith("[GC:G21 G0")
+
+
 def test_system_queries_settings_and_system_errors():
     controller = make_controller()
     assert controller.boot()[0].startswith("Grbl")

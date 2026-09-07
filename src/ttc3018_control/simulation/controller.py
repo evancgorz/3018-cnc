@@ -130,11 +130,23 @@ class VirtualGrblController:
             self._delayed_ack_until.clear()
             self.plant.reset()
             self.alarm = False
+            self._modal = _Modal()
             self._emit("Grbl 1.1h ['$' for help]")
 
     def _normal(self, line: str) -> None:
         self._line_sequence += 1
         sequence = self._line_sequence
+        # GRBL accepts only explicit unlock/homing paths while alarmed;
+        # ordinary motion must not be queued behind an uncleared alarm.
+        alarm_command = line
+        if line.startswith("$"):
+            try:
+                alarm_command = parse_line(line).raw
+            except ProtocolError:
+                alarm_command = ""
+        if self.alarm and alarm_command not in {"$X", "$H"}:
+            self._emit("ALARM:1")
+            return
         if self._deferred_lines or self._planner_full_for(line):
             self._deferred_lines.append((sequence, line))
             return
@@ -149,6 +161,9 @@ class VirtualGrblController:
         duplicate_ack = self._fault_active("duplicate_ack", sequence)
         try:
             if line.startswith("$"):
+                # System commands share the parser's comment/case handling
+                # with motion commands before dedicated dispatch.
+                line = parse_line(line).raw
                 self._system(line)
             elif line.startswith("[ESP"):
                 self._emit("ok")
@@ -242,6 +257,7 @@ class VirtualGrblController:
         if line == "$H":
             self.plant.position[:] = [0.0, 0.0, 0.0]
             self.plant.state = "Idle"
+            self.alarm = False
             return
         match = re.fullmatch(r"\$(\d+)\s*=\s*(-?(?:\d+(?:\.\d*)?|\.\d+))", line)
         if match is None:

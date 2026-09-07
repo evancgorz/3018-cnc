@@ -900,3 +900,28 @@ by the affected simulation, public-scenario, application, and spawn-worker
 groups. Record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
+
+## Sol program delta — GRBL/DLC32 protocol-fidelity expansion (2026-09-07)
+
+The next backend-first P1 package is protocol fidelity. Luna must audit the
+virtual controller and parser against the commands Pine actually emits and
+the DLC32-compatible wire contract, then close deterministic gaps without
+reusing Pine's outbound builders or bypassing the ordinary TCP reader. Cover
+fragmented/partial lines, comments and malformed/nonfinite words, realtime
+bytes interleaved with normal input, startup/reset/alarm/unlock transitions,
+system queries/settings/WCS/TLO/probe reports, modal changes, linear/arc/
+helical/jog motion, spindle ramping, planner/RX `Bf` accounting, and ordered
+acknowledgement/error behavior. Preserve the distinction between command
+acceptance and motion completion, FIFO planner admission under backpressure,
+and deterministic fault hooks for delayed/missing/duplicate/error ack,
+malformed status, reset, frozen state, and fragmented transport.
+
+Add protocol-level and spawned loopback regressions that assert exact line
+framing/order, realtime responsiveness, status consistency (`MPos`, `WPos`,
+`WCO`, `FS`, `Pn`, `Bf`), probe success/failure ordering, modal/WCO/TLO
+round-trips, planner capacity bounds, and fail-closed behavior for invalid or
+unsupported input. Run focused parser/controller tests, then affected
+simulation/application/spawn/public suites. Record exact evidence, review
+staged scope, and commit/push this package as its own checkpoint. Keep all
+validation headless and simulation-only; do not launch GUI, access hardware,
+select USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
