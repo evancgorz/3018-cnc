@@ -285,3 +285,75 @@ post-fix GUI collision visualization, GUI export action, and final tagged GUI
 cleanup have not yet been observed. The next GUI run should be one concise
 acceptance check against this passing headless lifecycle, followed by its own
 reviewed commit/push.
+
+## P0 fresh tagged GUI acceptance — 2026-09-07
+
+Fresh isolated validator:
+
+- Marker: `pine-twin-gui-70089fdbe4be`
+- Manifest: `C:\\Users\\EVANGO~1\\AppData\\Local\\Temp\\pine-twin-gui-70089fdbe4be-3hek7zug\\gui-validation-manifest.json`
+- Main PID: `5792`; owned backend/supervisor PIDs: `13836`, `3784`
+- Loopback endpoint: `127.0.0.1:63159`
+
+Public UI evidence observed:
+
+- Virtual Machine (Digital Twin) selected; physical transport fields were not
+  used; persistent `DIGITAL TWIN — NO PHYSICAL MACHINE` banner shown.
+- 10x and `Collision-only STEP` selected. The public Guided STEP flow imported
+  `examples/showcase-mounting-plate.step`, generated and loaded
+  `generated-step.gcode`, and showed the validated 290 x 170 x 40 mm profile.
+- Machine reference became Trusted. Work zero was re-established at virtual
+  machine Z6, yielding machine Z6/work Z0 and an in-envelope transformed job.
+- Guided Run reached the public start confirmation, then visibly stopped with
+  `Job stopped` / `ALARM:1` at machine `X8.46 Y5.72 Z25.24` (work Z -0.77),
+  providing the alarm/interlock outcome for the collision-only path.
+
+Limitations and cleanup:
+
+- The simulator preview window was hidden after its earlier native minimize
+  interaction, so first-contact visualization was not observed in this cycle.
+- The current public QML surface exposes no trace/evidence export action (only
+  validated G-code save); therefore GUI JSON/Markdown evidence export is not
+  claimed. The headless public-boundary export remains the only export evidence.
+- The exact tagged instance was disconnected through the UI and closed through
+  the normal window close. Manifest ownership was rechecked; PIDs 5792, 13836,
+  and 3784 were absent afterward. The log records physical factory calls `[]`.
+  No hardware, USB/COM, non-loopback endpoint, or unrelated Pine window was
+  accessed.
+- The log contains two pre-existing QML warnings at `Main.qml:901`; no runtime
+  error was introduced by this GUI cycle.
+
+Overall P0 GUI status remains **PARTIAL**, not PASS: alarm/interlock and exact
+cleanup passed, but first-contact visualization and GUI evidence export remain
+unmet. No source/test files were changed and no commit/push was made.
+
+## Sol review correction — simulation evidence and hazard UI surface (2026-09-07)
+
+Implemented the bounded frontend correction after the tagged GUI run exposed
+two missing public controls. The simulation-only simulator window now:
+
+- Projects the active hazard kind, message, body pair, severity-safe XYZ point,
+  and a clear `FIRST CONTACT — INTERLOCK ACTIVE` state from runtime hazard
+  events; hazard clear edges remove the active projection.
+- Draws a red first-contact ring/crosshair and `FIRST CONTACT` label at the
+  authoritative machine XY point without driving simulation state.
+- Exposes `Export evidence…` only while the digital twin is active. The native
+  save dialog hands a selected path to `ControllerViewModel`, which records an
+  application event and calls the existing `ApplicationController` JSON plus
+  Markdown trace export boundary. Success and failure feedback are shown in
+  the simulator and toast channel; physical transports are not involved.
+
+Focused evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py -q` → **28
+  passed in 13.77s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_application_contracts.py tests/test_simulation_public_scenarios.py
+  -q` → **73 passed in 33.34s**.
+- `git diff --check` passed. The diff is limited to
+  `qt/view_model.py`, `qt/qml/Main.qml`, `tests/test_qt_shell.py`, and this
+  result record. Existing generated evidence/config/unrelated files remain
+  untracked and excluded.
+
+No GUI was relaunched during this correction, no hardware/USB/COM/non-loopback
+endpoint was accessed, and no commit or push was made pending Sol review.

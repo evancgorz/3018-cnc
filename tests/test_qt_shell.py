@@ -80,6 +80,62 @@ def test_simulation_gui_launcher_sentinels_and_manifest_are_isolated(tmp_path) -
     assert (isolated.profile.travel_x, isolated.profile.travel_y, isolated.profile.travel_z) == (290, 170, 40)
 
 
+def test_simulation_hazard_detail_projection_and_public_visualization_surface(qapp, tmp_path) -> None:
+    view_model = ControllerViewModel(ApplicationController(tmp_path))
+    assert not view_model.simulation_hazard_active
+    assert not view_model.simulation_collision_active
+    view_model._simulation_active_hazard = {
+        "kind": "tool_fixture",
+        "message": "Tool entered fixture",
+        "body_a": "tool",
+        "body_b": "fixture",
+        "position": (1.234, 2.345, 3.456),
+    }
+
+    assert view_model.simulation_hazard_active
+    assert view_model.simulation_collision_active
+    assert view_model.simulation_collision_state == "FIRST CONTACT — INTERLOCK ACTIVE"
+    assert view_model.simulation_collision_kind == "tool_fixture"
+    assert view_model.simulation_collision_body == "tool versus fixture"
+    assert view_model.simulation_collision_point == "X1.23  Y2.35  Z3.46"
+    assert (view_model.simulation_collision_x, view_model.simulation_collision_y, view_model.simulation_collision_z) == (1.234, 2.345, 3.456)
+
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert 'text: "Export evidence…"' in qml
+    assert 'fillText("FIRST CONTACT"' in qml
+    assert "simulation_collision_message" in qml
+
+
+def test_simulation_evidence_export_slot_reports_success_and_failure(qapp, tmp_path, monkeypatch) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    monkeypatch.setattr(type(controller), "simulation_active", property(lambda _self: True))
+    monkeypatch.setattr(type(controller), "simulation_runtime", property(lambda _self: object()))
+    events: list[tuple[str, dict]] = []
+    exported: list[Path] = []
+    controller.record_simulation_event = lambda kind, payload=None, **_kwargs: events.append((kind, payload or {}))  # type: ignore[method-assign]
+
+    def export(path: Path) -> None:
+        exported.append(path)
+        path.write_text('{"schema_version": 1, "events": []}\n', encoding="utf-8")
+        path.with_suffix(".md").write_text("# evidence\n", encoding="utf-8")
+
+    controller.export_simulation_trace = export  # type: ignore[method-assign]
+    notices: list[str] = []
+    view_model.toast_requested.connect(notices.append)
+    view_model.export_simulation_evidence(QUrl.fromLocalFile(str(tmp_path / "evidence.trace")))
+    assert exported == [tmp_path / "evidence.json"]
+    assert events == [("evidence_export_requested", {"path": "evidence.json"})]
+    assert (tmp_path / "evidence.md").exists()
+    assert "Evidence exported" in view_model.simulation_export_status
+    assert notices and notices[-1] == view_model.simulation_export_status
+
+    controller.export_simulation_trace = lambda _path: (_ for _ in ()).throw(OSError("read-only"))  # type: ignore[method-assign]
+    view_model.export_simulation_evidence(QUrl.fromLocalFile(str(tmp_path / "failed.json")))
+    assert "Evidence export failed" in view_model.simulation_export_status
+    assert notices[-1] == view_model.simulation_export_status
+
+
 def test_pine_brand_assets_and_launch_surfaces_are_packaged() -> None:
     root = Path(__file__).parents[1]
     assets = root / "src" / "ttc3018_control" / "qt" / "assets"

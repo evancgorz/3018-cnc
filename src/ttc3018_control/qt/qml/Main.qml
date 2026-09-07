@@ -298,6 +298,13 @@ ApplicationWindow {
                             const ty = height - 42 - Math.max(0, Math.min(170, py)) / 170 * (height - 110)
                             ctx.strokeStyle = "#40C4D9"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tx, 52); ctx.lineTo(tx, ty); ctx.stroke()
                             ctx.fillStyle = "#ED5B5B"; ctx.beginPath(); ctx.arc(tx, ty - Math.max(0, Math.min(40, pz)) * 1.4, 7, 0, Math.PI * 2); ctx.fill()
+                            if (appViewModel && appViewModel.simulation_collision_active) {
+                                const hx = 50 + Math.max(0, Math.min(290, appViewModel.simulation_collision_x)) / 290 * (width - 100)
+                                const hy = height - 42 - Math.max(0, Math.min(170, appViewModel.simulation_collision_y)) / 170 * (height - 110)
+                                ctx.strokeStyle = "#FF5A5A"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(hx, hy, 18, 0, Math.PI * 2); ctx.stroke()
+                                ctx.beginPath(); ctx.moveTo(hx - 25, hy); ctx.lineTo(hx + 25, hy); ctx.moveTo(hx, hy - 25); ctx.lineTo(hx, hy + 25); ctx.stroke()
+                                ctx.fillStyle = "#FF5A5A"; ctx.font = "bold 13px sans-serif"; ctx.fillText("FIRST CONTACT", hx + 24, hy - 20)
+                            }
                         }
                     }
                     Connections { target: appViewModel; function onSimulation_changed() { simulationCanvas.requestPaint() } function onState_changed() { simulationCanvas.requestPaint() } }
@@ -308,8 +315,15 @@ ApplicationWindow {
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
+                        Label { text: "Safety state: " + (appViewModel ? appViewModel.simulation_collision_state : "Clear"); color: appViewModel && appViewModel.simulation_hazard_active ? window.palette.danger : window.palette.success; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
+                        Label { text: "Kind: " + (appViewModel ? appViewModel.simulation_collision_kind : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }
+                        Label { text: "Bodies: " + (appViewModel ? appViewModel.simulation_collision_body : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }
+                        Label { text: "Point: " + (appViewModel ? appViewModel.simulation_collision_point : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; font.family: "Cascadia Mono"; wrapMode: Text.Wrap }
+                        Label { text: appViewModel ? appViewModel.simulation_collision_message : ""; color: window.palette.danger; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Hazards"; color: window.palette.text; font.weight: Font.DemiBold }
                         ListView { Layout.fillWidth: true; Layout.fillHeight: true; model: appViewModel ? appViewModel.simulation_hazards : []; delegate: Label { width: parent.width; text: "• " + modelData; color: window.palette.danger; wrapMode: Text.Wrap } }
+                        Label { text: appViewModel ? appViewModel.simulation_export_status : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        SecondaryButton { Layout.fillWidth: true; text: "Export evidence…"; enabled: appViewModel && appViewModel.simulation_export_available; onClicked: simulationEvidenceDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Disconnect digital twin"; enabled: appViewModel && appViewModel.simulation_active; onClicked: appViewModel.disconnect() }
                     }
                 }
@@ -982,6 +996,14 @@ ApplicationWindow {
         fileMode: PlatformDialogs.FileDialog.SaveFile
         nameFilters: ["G-code files (*.gcode *.nc)", "All files (*.*)"]
         onAccepted: appViewModel.save_gcode_file(selectedFile)
+    }
+
+    PlatformDialogs.FileDialog {
+        id: simulationEvidenceDialog
+        title: "Export digital-twin evidence"
+        fileMode: PlatformDialogs.FileDialog.SaveFile
+        nameFilters: ["JSON evidence (*.json)", "All files (*.*)"]
+        onAccepted: appViewModel.export_simulation_evidence(selectedFile)
     }
 
     PlatformDialogs.FileDialog {

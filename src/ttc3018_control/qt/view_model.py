@@ -92,6 +92,8 @@ class ControllerViewModel(QObject):
         self._simulation_snapshot: dict[str, object] = {}
         self._simulation_hazards: list[str] = []
         self._simulation_stock_metrics: dict[str, object] = {}
+        self._simulation_active_hazard: dict[str, object] = {}
+        self._simulation_export_status = "No simulation evidence exported"
         self._job_file_text = "No G-code loaded"
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
         self._preview_strokes: list[list[list[float]]] = []
@@ -744,6 +746,80 @@ class ControllerViewModel(QObject):
     def simulation_supervisor_healthy(self) -> bool:
         runtime = self.application.simulation_runtime
         return bool(self.simulation_active and runtime is not None and runtime.supervisor is not None and runtime.supervisor.is_alive())
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_export_available(self) -> bool:
+        """Whether the public simulation-only evidence action may be used."""
+        return bool(self.simulation_active and self.application.simulation_runtime is not None)
+
+    @Property(str, notify=simulation_changed)
+    def simulation_export_status(self) -> str:
+        return self._simulation_export_status
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_hazard_active(self) -> bool:
+        return bool(self._simulation_active_hazard)
+
+    @Property(str, notify=simulation_changed)
+    def simulation_collision_state(self) -> str:
+        if not self.simulation_hazard_active:
+            return "Clear"
+        if self.simulation_collision_active:
+            return "FIRST CONTACT — INTERLOCK ACTIVE"
+        return "SAFETY HAZARD — INTERLOCK ACTIVE"
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_collision_active(self) -> bool:
+        return str(self._simulation_hazard_value("kind", "")) not in {"", "protocol", "supervisor_unavailable"}
+
+    def _simulation_hazard_value(self, key: str, default: object = "") -> object:
+        return self._simulation_active_hazard.get(key, default)
+
+    @Property(str, notify=simulation_changed)
+    def simulation_collision_kind(self) -> str:
+        return str(self._simulation_hazard_value("kind", ""))
+
+    @Property(str, notify=simulation_changed)
+    def simulation_collision_message(self) -> str:
+        return str(self._simulation_hazard_value("message", ""))
+
+    @Property(str, notify=simulation_changed)
+    def simulation_collision_body(self) -> str:
+        body_a = str(self._simulation_hazard_value("body_a", ""))
+        body_b = str(self._simulation_hazard_value("body_b", ""))
+        return " versus ".join(value for value in (body_a, body_b) if value) or "—"
+
+    @Property(str, notify=simulation_changed)
+    def simulation_collision_point(self) -> str:
+        point = self._simulation_hazard_value("position", ())
+        if not isinstance(point, (list, tuple)) or len(point) != 3:
+            return "—"
+        try:
+            return "X{:.2f}  Y{:.2f}  Z{:.2f}".format(*(float(value) for value in point))
+        except (TypeError, ValueError):
+            return "—"
+
+    def _simulation_collision_coordinate(self, index: int) -> float:
+        point = self._simulation_hazard_value("position", ())
+        if not isinstance(point, (list, tuple)) or len(point) != 3:
+            return 0.0
+        try:
+            value = float(point[index])
+        except (TypeError, ValueError):
+            return 0.0
+        return value if value == value and abs(value) != float("inf") else 0.0
+
+    @Property(float, notify=simulation_changed)
+    def simulation_collision_x(self) -> float:
+        return self._simulation_collision_coordinate(0)
+
+    @Property(float, notify=simulation_changed)
+    def simulation_collision_y(self) -> float:
+        return self._simulation_collision_coordinate(1)
+
+    @Property(float, notify=simulation_changed)
+    def simulation_collision_z(self) -> float:
+        return self._simulation_collision_coordinate(2)
 
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
@@ -1536,6 +1612,33 @@ class ControllerViewModel(QObject):
         self._set_notice(outcome.message)
         self._emit_state()
 
+    @Slot(QUrl)
+    def export_simulation_evidence(self, selected_file: QUrl) -> None:
+        """Export JSON and Markdown evidence through the public twin boundary."""
+        path_text = selected_file.toLocalFile()
+        if not path_text:
+            return
+        if not self.simulation_export_available:
+            message = "Simulation evidence export unavailable — connect the digital twin first"
+            self._simulation_export_status = message
+            self._set_notice(message)
+            self.simulation_changed.emit()
+            return
+        path = Path(path_text)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        try:
+            self.application.record_simulation_event("evidence_export_requested", {"path": path.name})
+            self.application.export_simulation_trace(path)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._simulation_export_status = f"Evidence export failed — {exc}"
+            self._set_notice(self._simulation_export_status)
+            self.simulation_changed.emit()
+            return
+        self._simulation_export_status = f"Evidence exported: {path.name} + {path.with_suffix('.md').name}"
+        self._set_notice(self._simulation_export_status)
+        self.simulation_changed.emit()
+
     @Slot()
     def home_machine(self) -> None:
         outcome = self.application.home_machine()
@@ -1829,8 +1932,18 @@ class ControllerViewModel(QObject):
                 elif item.get("type") == "hazard":
                     hazard = item.get("hazard", {})
                     message = str(hazard.get("message", "Digital twin hazard"))
+                    self._simulation_active_hazard = {
+                        "kind": str(hazard.get("kind", "protocol")),
+                        "message": message,
+                        "body_a": str(hazard.get("body_a", "")),
+                        "body_b": str(hazard.get("body_b", "")),
+                        "position": tuple(hazard.get("position", (0.0, 0.0, 0.0))),
+                        "severity": str(hazard.get("severity", "alarm")),
+                    }
                     self._simulation_hazards = [*self._simulation_hazards[-49:], message]
                     self._set_notice(f"Digital twin safety supervisor: {message}")
+                elif item.get("type") == "hazard_clear":
+                    self._simulation_active_hazard = {}
             self.simulation_changed.emit()
             if not self.simulation_supervisor_healthy:
                 self._set_notice("Digital twin safety supervisor is unavailable; simulation is unsafe to continue")
@@ -2146,6 +2259,8 @@ class ControllerViewModel(QObject):
         self._simulation_snapshot = {}
         self._simulation_hazards = []
         self._simulation_stock_metrics = {}
+        self._simulation_active_hazard = {}
+        self._simulation_export_status = "No simulation evidence exported"
         self.simulation_changed.emit()
         self._guided_preflight_confirmed = False
         self._issue = IssueSnapshot(
