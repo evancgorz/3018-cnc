@@ -848,3 +848,32 @@ and an end-to-end regression for the full lifecycle. Run affected simulation
 and application suites. Commit and push this harness/stabilization as its own
 backlog item only after Sol review; then resume P0 with one fresh GUI acceptance
 pass and a separate commit/push for the completed acceptance item.
+
+## Sol program delta — independent virtual operator package (2026-09-07)
+
+Continue backend-first while the narrow P0 GUI visualization/export gate awaits
+one uninterrupted acceptance pass. Luna must implement the next coherent P1
+package: an independent virtual operator/safety actor that consumes immutable
+machine snapshots and user-intent events, independently recomputes travel,
+fixture, stock, holder, spindle, frame, and stalled-motion hazards, and emits
+typed hold/abort/interlock intents with reasons. It must not call production
+collision-result functions or share mutable oracle verdict state. Integrate it
+through the existing supervisor/runtime public boundary, preserve fail-closed
+behavior, and add deterministic tests for disagreement detection, intent
+ordering, stale snapshots, supervisor failure, and recovery authorization.
+
+Run focused supervisor/runtime/application tests, all simulation tests, and a
+deterministic multi-seed scenario corpus. Review staged scope, exclude generated
+evidence/config and `%SystemDrive%`, then commit and push this package as its
+own checkpoint only after Sol review. No GUI, hardware, physical transport,
+non-loopback endpoint, or physical A/B commissioning is needed for this item.
+
+Sol review requires one integration correction before this package can be
+committed: the supervisor API accepts an explicit `backend_hazards` verdict,
+but the spawned backend currently does not publish one, so disagreement
+detection is only unit-tested. Add a backend-owned independent hazard
+assessment to telemetry, with consistent machine/WCO transforms and no calls
+to the operator or shared mutable verdict state. Exercise explicit empty and
+non-empty disagreement through the production boundary and prove the resulting
+divergence/interlock does not deadlock. Re-run the operator, spawn, public,
+application, and simulation gates before Sol review and commit/push.

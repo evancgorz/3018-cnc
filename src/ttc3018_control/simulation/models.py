@@ -26,6 +26,7 @@ class HazardKind(StrEnum):
     SPINDLE_OFF_ENTRY = "spindle_off_entry"
     EXCESSIVE_DEPTH = "excessive_depth"
     RETAINED_GOUGE = "retained_gouge"
+    STALLED_MOTION = "stalled_motion"
     DIVERGENCE = "commanded_executed_divergence"
     SUPERVISOR_UNAVAILABLE = "supervisor_unavailable"
     PROTOCOL = "protocol"

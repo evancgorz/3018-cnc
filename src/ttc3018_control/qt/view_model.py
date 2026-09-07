@@ -1929,6 +1929,8 @@ class ControllerViewModel(QObject):
                     self._simulation_stock_metrics = dict(item.get("metrics", {}))
                 elif item.get("type") == "intent":
                     self._apply_simulation_intent(dict(item.get("intent", {})))
+                elif item.get("type") == "operator_intent":
+                    self._apply_operator_intent(dict(item.get("intent", {})))
                 elif item.get("type") == "hazard":
                     hazard = item.get("hazard", {})
                     message = str(hazard.get("message", "Digital twin hazard"))
@@ -2272,6 +2274,27 @@ class ControllerViewModel(QObject):
             work_zero_lost=True,
             actions=("Connect", "Open console"),
         )
+        self._emit_state()
+
+    def _apply_operator_intent(self, intent: dict[str, object]) -> None:
+        """Route independent safety actions through public controller methods."""
+        action = str(intent.get("action", ""))
+        reason = str(intent.get("reason", "Digital twin safety supervisor"))
+        try:
+            if action == "hold":
+                outcome = self.application.hold()
+                if not outcome.accepted:
+                    self._set_notice(f"Digital twin operator hold rejected — {outcome.message}")
+            elif action == "abort":
+                self.application.abort_job(f"Digital twin operator: {reason}")
+            elif action == "interlock":
+                self._set_notice(f"Digital twin operator interlock — {reason}")
+            elif action == "recovery_denied":
+                self._set_notice(f"Digital twin recovery denied — {reason}")
+            elif action == "recover":
+                self._set_notice(f"Digital twin recovery authorized — {reason}")
+        except RuntimeError as exc:
+            self._set_notice(f"Digital twin operator action failed — {exc}")
         self._emit_state()
 
     def _audit_live(self, message: str) -> None:

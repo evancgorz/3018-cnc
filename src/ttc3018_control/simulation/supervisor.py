@@ -6,37 +6,48 @@ import multiprocessing.connection
 import time
 from typing import Any
 
-from .collision import CollisionWorld
 from .models import Hazard, HazardKind, PlantSnapshot, SimulationProfile, SimulationWorkpiece
+from .operator import IndependentVirtualOperator
 from .stock import StockModel
 
 
-def _snapshot(data: dict[str, Any]) -> PlantSnapshot:
+def _snapshot(data: dict[str, Any], fallback_sequence: int = 0) -> PlantSnapshot:
     motion = data.get("motion")
     from .models import MotionSnapshot
+    sequence = int(data.get("sequence", 0))
+    if sequence <= fallback_sequence:
+        sequence = fallback_sequence + 1
     return PlantSnapshot(int(data["time_ns"]), str(data["state"]), tuple(data["machine_position"]),
                          tuple(data["work_offset"]), float(data["feed"]), float(data["spindle_target"]),
                          float(data["spindle_rpm"]), str(data.get("pins", "")),
-                         MotionSnapshot(**motion) if motion else None, int(data.get("sequence", 0)))
+                         MotionSnapshot(**motion) if motion else None, sequence)
+
+
+def _emit_assessment(outgoing, assessment) -> None:
+    for hazard in assessment.hazards:
+        outgoing.put({"type": "hazard", "hazard": hazard.to_dict()})
+    for key in assessment.cleared:
+        outgoing.put({"type": "hazard_clear", "key": key})
+    for intent in assessment.intents:
+        outgoing.put({"type": "operator_intent", "intent": intent.to_dict()})
 
 
 def supervisor_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
                     incoming, outgoing, profile_data: dict[str, Any], token: str,
                     workpiece_data: dict[str, Any] | None = None) -> None:
+    """Run the actor without importing application, transport, or backend code."""
     profile = SimulationProfile(**profile_data)
     profile.validate()
-    world = CollisionWorld(profile=profile)
-    stock = None
-    if workpiece_data:
-        workpiece = SimulationWorkpiece(**workpiece_data)
+    workpiece = SimulationWorkpiece(**workpiece_data) if workpiece_data else None
+    if workpiece is not None:
         workpiece.validate()
-        stock = StockModel(workpiece, profile)
+    operator = IndependentVirtualOperator(profile, workpiece=workpiece)
+    stock = StockModel(workpiece, profile) if workpiece is not None else None
     ready.send({"version": 1, "token": token, "role": "supervisor"})
-    previous: PlantSnapshot | None = None
-    active_hazards: set[tuple[str, str, str]] = set()
-    last_heartbeat = time.monotonic()
-    last_stock_metrics = 0.0
     pending_intents: list[dict[str, Any]] = []
+    last_heartbeat = time.monotonic()
+    last_sequence = 0
+    previous_snapshot: PlantSnapshot | None = None
     while True:
         if control.poll():
             message = control.recv()
@@ -52,57 +63,44 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
             if message.get("type") == "shutdown":
                 return
             if message.get("type") == "snapshot":
-                current = _snapshot(message["snapshot"])
-                if previous is not None and current.state in {"Run", "Jog", "Hold:0", "Hold"}:
-                    # Plant positions are machine coordinates, while the
-                    # imported workpiece is expressed in work coordinates.
-                    # Translate the stock envelope into the current machine
-                    # frame before collision checks; otherwise a non-zero
-                    # WCO makes every cutting move appear above the stock.
-                    hazards = world.check_transition(previous, current,
-                                                     rapid=bool(current.motion and current.motion.rapid),
-                                                     spindle_on=current.spindle_rpm > 1.0,
-                                                     stock=stock,
-                                                     stock_offset=current.work_offset)
-                    observed: set[tuple[str, str, str]] = set()
-                    for hazard in hazards:
-                        key = (hazard.kind.value, hazard.body_a, hazard.body_b)
-                        observed.add(key)
-                        if key not in active_hazards:
-                            outgoing.put({"type": "hazard", "hazard": hazard.to_dict()})
-                            active_hazards.add(key)
-                    for key in active_hazards - observed:
-                        outgoing.put({"type": "hazard_clear", "key": key})
-                    active_hazards.intersection_update(observed)
-                    if stock is not None and current.motion is not None and current.spindle_rpm > 1.0 and not current.motion.rapid:
-                        # StockModel stores remaining height above its local
-                        # bottom.  Convert the machine's positive-up GRBL Z
-                        # (stock top at work-Z 0) into that bounded height.
-                        thickness = stock.workpiece.stock_thickness
-                        px, py, pz = previous.machine_position
-                        cx, cy, cz = current.machine_position
-                        offset_x, offset_y, offset_z = current.work_offset
-                        bottom = stock.workpiece.origin_z + offset_z - thickness
-                        start = (px - stock.workpiece.origin_x - offset_x,
-                                 py - stock.workpiece.origin_y - offset_y,
-                                 max(0.0, min(thickness, pz - bottom)))
-                        end = (cx - stock.workpiece.origin_x - offset_x,
-                               cy - stock.workpiece.origin_y - offset_y,
-                               max(0.0, min(thickness, cz - bottom)))
-                        stock.remove_swept_segment(start, end, profile.tool_radius)
-                    now = time.monotonic()
-                    if stock is not None and now - last_stock_metrics >= 0.2:
-                        outgoing.put({"type": "stock_metrics", "metrics": stock.metrics().__dict__})
-                        last_stock_metrics = now
-                elif active_hazards:
-                    for key in active_hazards:
-                        outgoing.put({"type": "hazard_clear", "key": key})
-                    active_hazards.clear()
-                previous = current
+                current = _snapshot(message["snapshot"], last_sequence)
+                last_sequence = current.sequence
+                has_backend_verdict = "backend_hazards" in message
+                raw_expected = message.get("backend_hazards", ())
+                expected: list[Hazard] | None = [] if has_backend_verdict else None
+                for item in raw_expected or ():
+                    if not isinstance(item, dict) or item.get("kind") not in {kind.value for kind in HazardKind}:
+                        continue
+                    assert expected is not None
+                    expected.append(Hazard(HazardKind(item["kind"]), str(item.get("message", "")),
+                                           int(item.get("time_ns", current.time_ns)),
+                                           tuple(item.get("position", current.machine_position)),
+                                           str(item.get("body_a", "")), str(item.get("body_b", ""))))
+                previous = previous_snapshot
+                _emit_assessment(outgoing, operator.observe(current, expected_hazards=expected))
+                previous_snapshot = current
+                if stock is not None and previous is not None and current.motion is not None and current.spindle_rpm > 1.0 and not current.motion.rapid:
+                    thickness = stock.workpiece.stock_thickness
+                    px, py, pz = previous.machine_position
+                    cx, cy, cz = current.machine_position
+                    offset_x, offset_y, offset_z = current.work_offset
+                    bottom = stock.workpiece.origin_z + offset_z - thickness
+                    start = (px - stock.workpiece.origin_x - offset_x,
+                             py - stock.workpiece.origin_y - offset_y,
+                             max(0.0, min(thickness, pz - bottom)))
+                    end = (cx - stock.workpiece.origin_x - offset_x,
+                           cy - stock.workpiece.origin_y - offset_y,
+                           max(0.0, min(thickness, cz - bottom)))
+                    stock.remove_swept_segment(start, end, profile.tool_radius)
+                if stock is not None:
+                    outgoing.put({"type": "stock_metrics", "metrics": stock.metrics().__dict__})
             elif message.get("type") == "telemetry_overflow":
-                outgoing.put({"type": "hazard", "hazard": Hazard(HazardKind.SUPERVISOR_UNAVAILABLE, "Backend telemetry overflow", 0, (0, 0, 0), source="supervisor").to_dict()})
+                _emit_assessment(outgoing, operator.report_failure("Backend telemetry overflow"))
         if pending_intents:
-            outgoing.put({"type": "intent", "intent": pending_intents.pop(0)})
+            user_intent = pending_intents.pop(0)
+            for operator_intent in operator.consume_intent(user_intent):
+                outgoing.put({"type": "operator_intent", "intent": operator_intent.to_dict()})
+            outgoing.put({"type": "intent", "intent": user_intent})
         if time.monotonic() - last_heartbeat >= 0.5:
             outgoing.put({"type": "heartbeat", "time": time.monotonic()})
             last_heartbeat = time.monotonic()

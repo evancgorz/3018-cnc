@@ -11,9 +11,11 @@ import time
 from typing import Any
 
 from .controller import VirtualGrblController
+from .collision import CollisionWorld
 from .models import SimulationProfile
 from .models import SimulationWorkpiece
 from .plant import VirtualMachinePlant
+from .stock import StockModel
 
 
 def backend_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
@@ -23,11 +25,15 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
     profile.validate()
     plant = VirtualMachinePlant(profile)
     controller = VirtualGrblController(plant)
+    collision_world = CollisionWorld(profile=profile)
+    stock: StockModel | None = None
+    previous_snapshot = None
     if workpiece_data:
         # Validate the workpiece in the owned child so malformed settings fail
         # closed even when the parent process was bypassed.
         workpiece = SimulationWorkpiece(**workpiece_data)
         workpiece.validate()
+        stock = StockModel(workpiece, profile)
     speed_factor = {"realtime": 1.0, "2x": 2.0, "5x": 5.0, "10x": 10.0, "uncapped": 50.0}.get(speed)
     if speed_factor is None:
         raise ValueError(f"Unknown simulation speed: {speed}")
@@ -105,9 +111,40 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                 # bounded observation cadence prevents redundant snapshots
                 # from filling the owner and supervisor queues.
                 if now - last_telemetry >= 0.02:
-                    snapshot = controller.plant.snapshot().to_dict()
+                    current_snapshot = controller.plant.snapshot()
+                    snapshot = current_snapshot.to_dict()
+                    backend_hazards = ()
+                    if previous_snapshot is not None and current_snapshot.state in {"Run", "Jog", "Hold:0", "Hold"}:
+                        backend_hazards = collision_world.check_transition(
+                            previous_snapshot,
+                            current_snapshot,
+                            rapid=bool(current_snapshot.motion and current_snapshot.motion.rapid),
+                            spindle_on=current_snapshot.spindle_rpm > 1.0,
+                            stock=stock,
+                            stock_offset=current_snapshot.work_offset,
+                        )
+                        if (stock is not None and current_snapshot.motion is not None
+                                and current_snapshot.spindle_rpm > 1.0 and not current_snapshot.motion.rapid):
+                            thickness = stock.workpiece.stock_thickness
+                            px, py, pz = previous_snapshot.machine_position
+                            cx, cy, cz = current_snapshot.machine_position
+                            offset_x, offset_y, offset_z = current_snapshot.work_offset
+                            bottom = stock.workpiece.origin_z + offset_z - thickness
+                            start = (px - stock.workpiece.origin_x - offset_x,
+                                     py - stock.workpiece.origin_y - offset_y,
+                                     max(0.0, min(thickness, pz - bottom)))
+                            end = (cx - stock.workpiece.origin_x - offset_x,
+                                   cy - stock.workpiece.origin_y - offset_y,
+                                   max(0.0, min(thickness, cz - bottom)))
+                            stock.remove_swept_segment(start, end, profile.tool_radius)
+                    previous_snapshot = current_snapshot
+                    telemetry_item = {
+                        "type": "snapshot",
+                        "snapshot": snapshot,
+                        "backend_hazards": [hazard.to_dict() for hazard in backend_hazards],
+                    }
                     try:
-                        telemetry.put_nowait({"type": "snapshot", "snapshot": snapshot})
+                        telemetry.put_nowait(telemetry_item)
                     except queue.Full:
                         # Losing telemetry is a safety failure; tell the owner
                         # and keep the controller deterministic until shutdown.

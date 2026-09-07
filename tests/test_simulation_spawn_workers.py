@@ -117,6 +117,43 @@ def test_supervisor_worker_translates_workpiece_into_machine_frame_for_wco_colli
     assert "spindle_off_entry" in hazards
 
 
+def test_supervisor_worker_detects_explicit_backend_operator_disagreement_without_deadlock():
+    """An explicit backend empty verdict must not suppress the actor verdict."""
+    ready = FakeConnection()
+    control = FakeConnection()
+    incoming = queue.Queue()
+    outgoing = queue.Queue()
+    profile = SimulationProfile()
+    first = PlantSnapshot(1, "Idle", (1, 1, 3), (0, 0, 0), 0, 0, 0,
+                          sequence=1).to_dict()
+    second = PlantSnapshot(2, "Run", (profile.travel_x + 5, 1, 3), (0, 0, 0), 100, 0, 0,
+                           sequence=2).to_dict()
+    incoming.put({"type": "snapshot", "snapshot": first, "backend_hazards": []})
+    # Deliberately claim that the backend saw no hazard even though the
+    # independent actor must recompute a travel-limit hazard at this pose.
+    incoming.put({"type": "snapshot", "snapshot": second, "backend_hazards": []})
+    thread = threading.Thread(target=supervisor_main, args=(
+        ready, control, incoming, outgoing, profile.to_dict(), "disagreement-token"), daemon=True)
+    thread.start()
+    time.sleep(.15)
+    control.messages.put({"op": "stop"})
+    thread.join(2)
+    assert not thread.is_alive(), "disagreement handling must not deadlock the supervisor"
+    items = []
+    while True:
+        try:
+            items.append(outgoing.get_nowait())
+        except queue.Empty:
+            break
+    hazards = [item["hazard"] for item in items if item.get("type") == "hazard"]
+    assert any(item["kind"] == "travel_limit" for item in hazards)
+    assert any(item["kind"] == "commanded_executed_divergence" for item in hazards)
+    assert any(item.get("type") == "operator_intent"
+               and item["intent"]["action"] == "interlock"
+               and item["intent"]["hazard_kind"] == "commanded_executed_divergence"
+               for item in items)
+
+
 @pytest.mark.skipif(__import__("multiprocessing").get_start_method(allow_none=True) == "fork", reason="requires owned spawn workers")
 def test_real_backend_fragmentation_reconnect_interlock_and_orderly_stop():
     runtime = SimulationRuntime()
@@ -131,6 +168,17 @@ def test_real_backend_fragmentation_reconnect_interlock_and_orderly_stop():
             if b"ok" not in response:
                 response += client.recv(4096)
             assert b"ok" in response
+            backend_snapshot = None
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline and backend_snapshot is None:
+                for item in runtime.poll():
+                    if item.get("type") == "snapshot" and "backend_hazards" in item:
+                        backend_snapshot = item
+                        break
+                if backend_snapshot is None:
+                    time.sleep(.02)
+            assert backend_snapshot is not None
+            assert backend_snapshot["backend_hazards"] == []
             runtime._backend_control.send({"op": "interlock", "kind": "fixture"})
             assert b"ALARM:1" in client.recv(4096)
         # Backend accepts one reconnect after the first client closes.

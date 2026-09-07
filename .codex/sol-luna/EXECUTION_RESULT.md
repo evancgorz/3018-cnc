@@ -447,3 +447,91 @@ Focused evidence:
 - No commit or push was made; source changes are limited to the requested QML
   action and its focused test, with the existing generated/config files still
   excluded.
+
+## P1 independent virtual operator package — 2026-09-07
+
+Implemented the next headless-only supervisor package without launching GUI or
+accessing physical transports:
+
+- Added `simulation/operator.py` with immutable `OperatorFixture`,
+  `OperatorIntent`, and `OperatorAssessment` records plus an
+  `IndependentVirtualOperator` actor. It independently recomputes travel,
+  frame, bed, stock, fixture, holder, spindle-off, excessive-depth, and stalled
+  motion hazards from immutable snapshots and geometry proxies. It does not
+  import or call `CollisionWorld.check_transition`, backend/controller,
+  transport, Qt, or application code.
+- Migrated `simulation/supervisor.py` to the independent actor while retaining
+  the existing token/heartbeat/queue/process boundary and stock metrics. Actor
+  outputs are typed `operator_intent` messages; the ViewModel routes hold and
+  abort through public ApplicationController methods and reports interlock,
+  recovery, and denial outcomes without direct plant mutation.
+- Added explicit stale-snapshot and supervisor-failure fail-closed paths,
+  deterministic hazard-edge deduplication, backend-verdict disagreement
+  detection (including explicit empty verdicts), ordered hold/interlock/abort
+  intents, and explicit recovery authorization requiring a fresh safe sample.
+  Scenario/user intents are consumed by the independent actor in sequence
+  before the raw public intent is forwarded.
+- Added `HazardKind.STALLED_MOTION` and deterministic regressions for
+  independent disagreement detection, intent ordering, stale snapshots,
+  supervisor failure, recovery authorization, and the existing spawn/public
+  supervisor paths.
+
+Focused evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_operator.py
+  tests/test_simulation_spawn_workers.py tests/test_simulation_public_scenarios.py -q`
+  → **17 passed in 20.16s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_application_contracts.py
+  tests/test_job.py -q` → **52 passed in 0.66s**.
+- All simulation/STEP test modules were run together (99 collected) after the
+  actor migration; the run completed with no failure output. The targeted
+  actor/spawn/public rerun above completed with exit code 0 after the final
+  disagreement-semantics adjustment.
+- Deterministic multi-seed corpus over built-in seeds `[1, 2, 3, 4, 5]` passed:
+  `status`, `all_axis_motion`, `hold_resume`, `limit_alarm`, and `reset`, with
+  stable trace digests for each result.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded.
+
+## Sol review correction — backend-owned hazard telemetry boundary (2026-09-07)
+
+Implemented the bounded production-boundary correction without GUI or physical
+transport access:
+
+- `simulation/backend.py` now owns a `CollisionWorld`, an independent
+  `StockModel`, and the previous immutable plant snapshot. Every telemetry
+  snapshot includes an explicit `backend_hazards` list, including `[]` when no
+  backend hazard is present. Collision checks use the current machine WCO and
+  the backend's own stock state; stock removal is applied only in that backend
+  state after cutting observations.
+- `simulation/supervisor.py` parses and compares that explicit list—including
+  an explicit empty list—against the independent operator assessment. A
+  semantic mismatch emits `commanded_executed_divergence` and the typed
+  operator interlock path without waiting on or calling the backend oracle.
+- The independent operator now gates physical transition recomputation to
+  motion states and matches the backend's rapid horizontal/downward stock-entry
+  semantics, preventing false disagreement during Idle/Alarm and preserving
+  the existing WCO envelope behavior.
+- Added a deterministic supervisor-boundary regression that deliberately sends
+  an empty backend verdict for an out-of-travel Run snapshot and proves travel
+  hazard + divergence + typed interlock are emitted and the worker terminates
+  without deadlock. The real spawn-worker regression also verifies production
+  backend snapshots carry an explicit empty hazard list.
+
+Focused evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_operator.py
+  tests/test_simulation_spawn_workers.py tests/test_simulation_public_scenarios.py -q`
+  → **18 passed in 20.48s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_*.py
+  tests/test_step_simulation.py tests/test_application_contracts.py tests/test_job.py -q`
+  → **153 passed in 54.54s** (PowerShell-expanded simulation file set).
+- After hardening supervisor key-presence handling for explicit verdicts,
+  `.venv\Scripts\python.exe -m pytest tests/test_simulation_spawn_workers.py
+  -k "supervisor_worker" -q` → **3 passed, 7 deselected in 0.86s**.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded.
