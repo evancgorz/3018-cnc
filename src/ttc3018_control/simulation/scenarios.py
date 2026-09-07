@@ -59,29 +59,50 @@ def run_headless_scenario(scenario: Scenario, *, plant: VirtualMachinePlant | No
             if key not in hazard_keys:
                 hazard_keys.add(key)
                 hazards.append(item.to_dict())
+                trace.record(item.time_ns, "hazard", item.to_dict(), source=item.source)
     assertions: list[str] = []
     failures: list[str] = []
     trace.record(0, "scenario_start", {"name": scenario.name, "seed": scenario.seed})
-    controller.boot()
+    trace.record(plant.clock.time_ns, "response", {"lines": list(controller.boot())}, source="controller")
     previous_snapshot = plant.snapshot()
     for index, intent in enumerate(scenario.intents):
         trace.record(plant.clock.time_ns, "intent", {"name": intent.name, "arguments": intent.arguments})
+        command = None
         if intent.name == "status":
-            controller.receive(b"?")
+            command = b"?"
+            controller.receive(command)
         elif intent.name == "move":
             args = intent.arguments
-            controller.receive(f"G90 G21 G1 X{args.get('x', 0)} Y{args.get('y', 0)} Z{args.get('z', 0)} F600\n".encode())
-        elif intent.name == "hold": controller.receive(b"!")
-        elif intent.name == "resume": controller.receive(b"~")
-        elif intent.name == "reset": controller.receive(b"\x18")
-        elif intent.name == "malformed": controller.receive(b"G1 Xnope\n")
+            command = f"G90 G21 G1 X{args.get('x', 0)} Y{args.get('y', 0)} Z{args.get('z', 0)} F600\n".encode()
+            controller.receive(command)
+        elif intent.name == "hold": command = b"!"; controller.receive(command)
+        elif intent.name == "resume": command = b"~"; controller.receive(command)
+        elif intent.name == "reset": command = b"\x18"; controller.receive(command)
+        elif intent.name == "malformed": command = b"G1 Xnope\n"; controller.receive(command)
         else: failures.append(f"unknown intent {intent.name}")
-        controller.drain()
+        if command is not None:
+            trace.record(plant.clock.time_ns, "command", {"wire": command.decode("ascii", errors="replace")}, source="controller")
+        responses = controller.drain()
+        if responses:
+            trace.record(plant.clock.time_ns, "response", {"lines": list(responses)}, source="controller")
+        snapshot = plant.snapshot()
+        trace.record(snapshot.time_ns, "controller_state", {
+            "state": snapshot.state,
+            "machine_position": snapshot.machine_position,
+            "work_position": snapshot.work_position,
+            "work_offset": snapshot.work_offset,
+            "feed": snapshot.feed,
+            "spindle_target": snapshot.spindle_target,
+            "spindle_rpm": snapshot.spindle_rpm,
+            "planner_used": len(plant.queue) + (1 if plant.active is not None else 0),
+            "planner_capacity": plant.profile.planner_capacity,
+        }, source="controller")
         next_name = scenario.intents[index + 1].name if index + 1 < len(scenario.intents) else ""
         # Leave a move in flight for the safety/user intents that are meant to
         # interrupt it.  Other commands run to deterministic completion.
         if intent.name == "move" and next_name in {"hold", "reset"}:
             current_snapshot = plant.advance(100_000_000)
+            trace.record(current_snapshot.time_ns, "motion", {"snapshot": current_snapshot.to_dict()}, source="plant")
             record_hazards(collision_world.check_transition(
                 previous_snapshot, current_snapshot,
                 rapid=bool(current_snapshot.motion and current_snapshot.motion.rapid),
@@ -90,6 +111,7 @@ def run_headless_scenario(scenario: Scenario, *, plant: VirtualMachinePlant | No
             previous_snapshot = current_snapshot
         elif intent.name == "hold":
             current_snapshot = plant.advance(100_000_000)
+            trace.record(current_snapshot.time_ns, "motion", {"snapshot": current_snapshot.to_dict()}, source="plant")
             record_hazards(collision_world.check_transition(
                 previous_snapshot, current_snapshot,
                 rapid=bool(current_snapshot.motion and current_snapshot.motion.rapid),
@@ -101,6 +123,7 @@ def run_headless_scenario(scenario: Scenario, *, plant: VirtualMachinePlant | No
                 if not plant.busy:
                     break
                 current_snapshot = plant.advance(10_000_000)
+                trace.record(current_snapshot.time_ns, "motion", {"snapshot": current_snapshot.to_dict()}, source="plant")
                 record_hazards(collision_world.check_transition(
                     previous_snapshot, current_snapshot,
                     rapid=bool(current_snapshot.motion and current_snapshot.motion.rapid),
@@ -117,6 +140,11 @@ def run_headless_scenario(scenario: Scenario, *, plant: VirtualMachinePlant | No
     if scenario.name == "reset" and snapshot.machine_position == (20.0, 20.0, 5.0):
         failures.append("reset did not interrupt the in-flight move")
     assertions.append(f"final state {snapshot.state}")
+    trace.record(snapshot.time_ns, "final_state", {"state": snapshot.state,
+                 "position": snapshot.machine_position,
+                 "work_position": snapshot.work_position,
+                 "spindle_rpm": snapshot.spindle_rpm,
+                 "hazards": list(hazards)})
     trace.record(snapshot.time_ns, "scenario_end", {"state": snapshot.state, "position": snapshot.machine_position})
     return ScenarioResult(scenario.name, not failures, snapshot.machine_position, snapshot.state,
                           tuple(assertions), tuple(failures), trace.digest(),

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .scenarios import built_in_scenarios, run_headless_scenario
 from .stock import load_step_target
+from .trace import replay_scenario_trace
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -16,9 +17,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--all", action="store_true", help="run every built-in scenario")
     parser.add_argument("--scenario", action="append", default=[], help="run a named scenario")
     parser.add_argument("--output", type=Path, required=True, help="evidence output directory")
+    parser.add_argument("--replay", type=Path, help="replay a stored built-in scenario trace")
+    parser.add_argument("--replay-scenario", help="scenario name when the stored trace lacks scenario_start metadata")
     parser.add_argument("--workpiece", type=Path, default=Path("examples/showcase-pocket-island.step"),
                         help="STEP observation fixture to validate (default: pocket/island)")
     args = parser.parse_args(argv)
+    if args.replay is not None:
+        result = replay_scenario_trace(args.replay, scenario_name=args.replay_scenario)
+        args.output.mkdir(parents=True, exist_ok=True)
+        (args.output / "replay.json").write_text(json.dumps({"schema_version": 1, **result}, indent=2) + "\n", encoding="utf-8")
+        status = "PASS" if result["matched"] else "FAIL"
+        (args.output / "replay.md").write_text(
+            "# Digital twin replay\n\n"
+            f"Scenario: {result['scenario']}\n"
+            f"Seed: {result['seed']}\n"
+            f"Result: {status}\n"
+            f"First difference: {result['first_difference'] or 'none'}\n",
+            encoding="utf-8",
+        )
+        return 0 if result["matched"] else 1
     scenarios = built_in_scenarios()
     selected = scenarios if args.all or not args.scenario else tuple(item for item in scenarios if item.name in args.scenario)
     if not selected:

@@ -495,6 +495,49 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P2 deterministic evidence and replay completeness — 2026-09-07
+
+Implemented the headless evidence/replay package without GUI or physical
+transport access:
+
+- Trace events now retain semantic command/response, controller state/status,
+  planner capacity/use, motion, spindle, hazard, intent, and final-state data
+  at scenario boundaries; runtime traces additionally capture backend status
+  snapshots and supervisor heartbeat/hazard/stock/intent events.
+- Canonicalization is explicit and recursive. Only the declared noise fields
+  (`pid`, `port`, wall-clock/timestamp, absolute path, and session id) are
+  removed; command, response, modal, WCO, planner, motion, spindle, stock,
+  hazard, fault, intent, and final-state payloads remain semantic. Digest
+  output is stable across key order and tuple/list representation.
+- Trace loading now rejects unsupported schema, truncated/nonfinite JSON,
+  malformed event identity/time/source/payload, non-monotonic time, and
+  non-contiguous sequences. Runtime evidence is bounded to 16,384 events while
+  preserving valid contiguous evidence when the cap is reached.
+- Added `first_trace_difference` and `replay_scenario_trace`, which rerun a
+  stored built-in scenario under its deterministic seed and report matched
+  status, expected/actual digests, and the first semantic divergence. The
+  verification CLI now supports `--replay` and emits machine-readable and
+  Markdown replay reports.
+- Added deterministic tests for JSON/Markdown round-trip, canonical digest
+  stability, malformed/truncated/schema/payload rejection, first-difference
+  reporting, bounded evidence, all built-in scenario replays, and CLI replay.
+  Existing physical-parity authorization remains unchanged.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_evidence_branches.py
+  -q` → **8 passed in 5.90s** (including all replay/bounded/schema regressions).
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_evidence_branches.py
+  tests/test_simulation_geometry_and_parity.py tests/test_simulation_public_scenarios.py
+  tests/test_simulation_core.py -q` → **30 passed in 28.00s**.
+- `.venv\Scripts\python.exe -m pytest <PowerShell-expanded test_simulation_*.py>
+  tests/test_application_contracts.py tests/test_job.py -q`
+  → **160 passed in 58.55s**.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded.
+
 ## P1 GRBL/DLC32 protocol-fidelity expansion — 2026-09-07
 
 Implemented the bounded protocol-fidelity correction headlessly:

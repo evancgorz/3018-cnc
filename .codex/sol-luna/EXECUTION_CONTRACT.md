@@ -925,3 +925,26 @@ simulation/application/spawn/public suites. Record exact evidence, review
 staged scope, and commit/push this package as its own checkpoint. Keep all
 validation headless and simulation-only; do not launch GUI, access hardware,
 select USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
+
+## Sol program delta — deterministic evidence and replay (2026-09-07)
+
+The next backend-first P2 package is evidence/replay completeness. Luna must
+audit `TraceRecorder`, scenario results, and the verification CLI so a run
+captures the semantic command/response, modal, planner, status, motion,
+spindle, stock, hazard, supervisor-heartbeat, fault, intent, and final-state
+events needed to reproduce a failure. Keep canonicalization explicit and
+stable: normalize only declared environment noise, preserve ordering and
+payload meaning, validate schema/version/contiguous sequences on load, and
+make digest computation independent of wall-clock, PID, or loopback-port
+noise. Add a deterministic replay API/CLI that re-runs a stored scenario or
+trace under the same profile/seed and reports the first semantic divergence,
+not just a boolean.
+
+Add tests for round-trip JSON/Markdown evidence, malformed/truncated/schema
+rejection, canonical digest stability, first-difference reporting, replay of
+all built-in scenarios and seeded fault cases, and evidence boundedness during
+long runs. Preserve the existing no-hardware parity guard. Run focused
+trace/verify/scenario tests followed by affected simulation/application/public
+gates, record exact evidence, review staged scope, and commit/push this
+package as its own checkpoint. Do not launch GUI, access hardware, select
+USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.

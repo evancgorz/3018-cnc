@@ -52,7 +52,7 @@ class SimulationRuntime:
         # incident history and the backend interlock channel.
         self._active_hazard_keys: set[tuple[str, str, str]] = set()
         self._interlocked_hazards: set[tuple[str, str, str]] = set()
-        self.trace = TraceRecorder(source="runtime")
+        self.trace = TraceRecorder(source="runtime", max_events=16_384)
         self.session_token = secrets.token_urlsafe(18)
         self.started = False
         self._last_supervisor_heartbeat = 0.0
@@ -110,6 +110,12 @@ class SimulationRuntime:
             except queue.Empty: break
             forwarded.append(item)
             telemetry_events += 1
+            if item.get("type") == "snapshot":
+                snapshot_data = item.get("snapshot", {})
+                self.trace.record(int(snapshot_data.get("time_ns", 0)), "status", {
+                    "snapshot": snapshot_data,
+                    "backend_hazards": item.get("backend_hazards", []),
+                }, source="backend")
             if self._supervisor_in is not None:
                 try: self._supervisor_in.put_nowait(item)
                 except queue.Full:
@@ -124,6 +130,13 @@ class SimulationRuntime:
             except queue.Empty: break
             forwarded.append(item)
             supervisor_events += 1
+            item_type = item.get("type", "supervisor_event")
+            if item_type in {"heartbeat", "hazard", "hazard_clear", "stock_metrics", "operator_intent", "intent"}:
+                event_time = int(item.get("hazard", {}).get("time_ns", 0))
+                prior = self.trace.events
+                prior_time = prior[-1].time_ns if prior else 0
+                event_time = max(prior_time, event_time)
+                self.trace.record(event_time, item_type, dict(item), source="supervisor")
             if item.get("type") == "stock_metrics":
                 self.stock_metrics = dict(item.get("metrics", {}))
             if item.get("type") == "hazard":
