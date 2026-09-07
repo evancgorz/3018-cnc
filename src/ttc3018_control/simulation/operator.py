@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import math
 from typing import Any, Iterable
 
-from .geometry import AABB, MachineGeometryProfile, swept_bounds
+from .geometry import AABB, CoordinateFrame, MachineGeometryProfile, swept_bounds
 from .models import Hazard, HazardKind, PlantSnapshot, SimulationProfile, SimulationWorkpiece
 
 
@@ -22,11 +22,15 @@ class OperatorFixture:
 
     name: str
     bounds: AABB
+    frame: str = "machine"
 
     def __post_init__(self) -> None:
-        if not self.name:
-            raise ValueError("Operator fixture name must not be empty")
+        if not self.name or self.frame not in {"machine", "work"}:
+            raise ValueError("Operator fixture requires a name and machine/work frame")
         self.bounds.validate()
+
+    def machine_bounds(self, frame: CoordinateFrame) -> AABB:
+        return self.bounds if self.frame == "machine" else frame.work_bounds_to_machine(self.bounds)
 
 
 @dataclass(frozen=True)
@@ -212,6 +216,7 @@ class IndependentVirtualOperator:
         if previous is None:
             return ()
         hazards: list[Hazard] = []
+        frame = CoordinateFrame(tuple(current.work_offset))
         limits = (self.profile.travel_x, self.profile.travel_y, self.profile.travel_z)
         if any(value < -0.001 or value > limit + 0.001
                for value, limit in zip(current.machine_position, limits)):
@@ -219,19 +224,20 @@ class IndependentVirtualOperator:
         tool = swept_bounds(previous, current, "cutter", self.geometry, self.profile)
         holder = swept_bounds(previous, current, "tool-holder", self.geometry, self.profile)
         for body in self.geometry.bodies(current, self.profile):
-            if body.name in {"left-upright", "right-upright"} and holder.intersects(body.bounds):
+            if body.name in {"left-upright", "right-upright"} and holder.penetrates(body.bounds):
                 hazards.append(self._hazard(HazardKind.MACHINE_COLLISION,
                                             "Tool holder intersects fixed frame upright", current,
                                             "tool-holder", body.name))
         bed = AABB(-self.geometry.base_margin, -self.geometry.base_margin, -8.0,
                    self.profile.travel_x + self.geometry.base_margin,
                    self.profile.travel_y + self.geometry.base_margin, -0.1)
-        if tool.intersects(bed):
+        if tool.penetrates(bed):
             hazards.append(self._hazard(HazardKind.TOOL_BED, "Cutter intersects bed/spoilboard", current, "cutter", "bed"))
         for fixture in self.fixtures:
-            if tool.intersects(fixture.bounds):
+            fixture_bounds = fixture.machine_bounds(frame)
+            if tool.penetrates(fixture_bounds):
                 hazards.append(self._hazard(HazardKind.TOOL_FIXTURE, "Cutter intersects fixture", current, "cutter", fixture.name))
-            if holder.intersects(fixture.bounds):
+            if holder.penetrates(fixture_bounds):
                 hazards.append(self._hazard(HazardKind.HOLDER_FIXTURE, "Holder intersects fixture", current, "tool-holder", fixture.name))
         if self.workpiece is not None:
             hazards.extend(self._stock_hazards(previous, current, tool, holder))
@@ -247,12 +253,10 @@ class IndependentVirtualOperator:
                        tool: AABB, holder: AABB) -> list[Hazard]:
         stock = self.workpiece
         assert stock is not None
-        ox, oy, oz = current.work_offset
-        box = AABB(stock.origin_x + ox, stock.origin_y + oy,
-                   stock.origin_z + oz - stock.stock_thickness,
-                   stock.origin_x + ox + stock.stock_width,
-                   stock.origin_y + oy + stock.stock_height,
-                   stock.origin_z + oz)
+        box = CoordinateFrame(tuple(current.work_offset)).work_bounds_to_machine(AABB(
+            stock.origin_x, stock.origin_y, stock.origin_z - stock.stock_thickness,
+            stock.origin_x + stock.stock_width, stock.origin_y + stock.stock_height,
+            stock.origin_z))
         penetrates = (tool.max_x > box.min_x and tool.min_x < box.max_x
                       and tool.max_y > box.min_y and tool.min_y < box.max_y
                       and tool.min_z < box.max_z and tool.max_z > box.min_z)
@@ -269,6 +273,8 @@ class IndependentVirtualOperator:
             if tool.min_z < box.min_z:
                 hazards.append(self._hazard(HazardKind.EXCESSIVE_DEPTH,
                                             "Cutter exceeds stock bottom", current, "cutter", "stock"))
+        # Holder contact remains conservative even though cutter top-plane
+        # contact is not considered stock entry.
         if holder.intersects(box):
             hazards.append(self._hazard(HazardKind.HOLDER_STOCK, "Tool holder intersects stock", current,
                                         "tool-holder", "stock"))

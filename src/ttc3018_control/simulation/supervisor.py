@@ -17,10 +17,15 @@ def _snapshot(data: dict[str, Any], fallback_sequence: int = 0) -> PlantSnapshot
     sequence = int(data.get("sequence", 0))
     if sequence <= fallback_sequence:
         sequence = fallback_sequence + 1
+    if motion:
+        motion = dict(motion)
+        motion["start"] = tuple(motion.get("start", (0.0, 0.0, 0.0)))
+        motion["target"] = tuple(motion.get("target", (0.0, 0.0, 0.0)))
+        motion["path"] = tuple(tuple(point) for point in motion.get("path", ()))
+        motion = MotionSnapshot(**motion)
     return PlantSnapshot(int(data["time_ns"]), str(data["state"]), tuple(data["machine_position"]),
                          tuple(data["work_offset"]), float(data["feed"]), float(data["spindle_target"]),
-                         float(data["spindle_rpm"]), str(data.get("pins", "")),
-                         MotionSnapshot(**motion) if motion else None, sequence)
+                         float(data["spindle_rpm"]), str(data.get("pins", "")), motion, sequence)
 
 
 def _emit_assessment(outgoing, assessment) -> None:

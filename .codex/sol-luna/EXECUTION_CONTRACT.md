@@ -877,3 +877,26 @@ to the operator or shared mutable verdict state. Exercise explicit empty and
 non-empty disagreement through the production boundary and prove the resulting
 divergence/interlock does not deadlock. Re-run the operator, spawn, public,
 application, and simulation gates before Sol review and commit/push.
+
+## Sol program delta — collision and coordinate-frame hardening (2026-09-07)
+
+The next backend-first package is the scheduled P1 collision/frame hardening
+item. Luna must audit and correct the shared machine/work/WCO transform and
+the independent backend/operator swept-collision semantics without weakening
+coverage or adding GUI timing work. Use explicit immutable frame helpers so
+stock, fixtures, bed, tool, holder, and machine-frame proxies all agree on
+the positive-up GRBL convention and non-zero X/Y/Z work offsets. Cover fast
+linear and G17/helical arc sweeps, boundary contact versus penetration,
+rapid-stock entry, spindle-off entry, holder/fixture/bed contacts, excessive
+depth, retained-material gouge, and valid spinning-tool removal. Preserve
+authoritative travel limits and ensure a hazard cannot be hidden by a frame
+translation or by endpoint-only sampling.
+
+Add deterministic unit and production-boundary regressions for zero and
+non-zero WCO, shifted workpieces, every axis boundary, swept tunneling, arc
+interpolation, stationary/continuous contact latching, and backend/operator
+semantic parity. Run focused collision/geometry/stock/operator tests followed
+by the affected simulation, public-scenario, application, and spawn-worker
+groups. Record exact evidence, review staged scope, and commit/push this
+package as its own checkpoint. Do not launch GUI, access hardware, select
+USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.

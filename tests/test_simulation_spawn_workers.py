@@ -189,6 +189,37 @@ def test_real_backend_fragmentation_reconnect_interlock_and_orderly_stop():
         runtime.stop()
 
 
+@pytest.mark.skipif(__import__("multiprocessing").get_start_method(allow_none=True) == "fork", reason="requires owned spawn workers")
+def test_real_backend_and_operator_parity_on_wco_stock_entry():
+    """The spawned backend verdict and independent actor agree through WCO."""
+    workpiece = SimulationWorkpiece(stock_width=8, stock_height=8, stock_thickness=3)
+    runtime = SimulationRuntime(profile=SimulationProfile(initial_z=33), workpiece=workpiece, speed="5x")
+    host, port = runtime.start(timeout=8)
+    try:
+        with __import__("socket").create_connection((host, port), timeout=2) as client:
+            client.settimeout(2)
+            assert b"Grbl" in client.recv(4096)
+            # Establish a non-zero Z WCO so the workpiece remains above the
+            # machine's hard lower travel limit while work-Z enters stock.
+            client.sendall(b"G10 L20 Z0\nG0 Z3\nG1 Z-1 F600\n")
+            hazard_kinds = set()
+            divergence = False
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                for item in runtime.poll():
+                    if item.get("type") == "hazard":
+                        kind = item["hazard"]["kind"]
+                        hazard_kinds.add(kind)
+                        divergence |= kind == "commanded_executed_divergence"
+                if "spindle_off_entry" in hazard_kinds:
+                    break
+                time.sleep(.02)
+            assert "spindle_off_entry" in hazard_kinds
+            assert not divergence
+    finally:
+        runtime.stop()
+
+
 @pytest.mark.parametrize("mode", ["timeout", "mismatch"])
 def test_runtime_parent_handshake_failures_clean_owned_children(mode):
     runtime = SimulationRuntime()

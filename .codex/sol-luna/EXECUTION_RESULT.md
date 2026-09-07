@@ -495,6 +495,52 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P1 collision and coordinate-frame hardening — 2026-09-07
+
+Implemented the scheduled headless collision/frame package without GUI or
+physical transport access:
+
+- Added immutable `CoordinateFrame` helpers for validated machine↔work point
+  conversion and work-space AABB translation using the GRBL convention
+  `machine = work + WCO`. Workpiece stock and optional work-frame fixtures now
+  use the same translation in both `CollisionWorld` and the independent
+  operator; machine-frame bed, uprights, tool, and holder proxies remain in
+  machine coordinates.
+- Added strict `AABB.penetrates` semantics so cutter/bed/fixture and frame
+  checks distinguish face/edge/point contact from solid overlap. The
+  conservative holder/stock contact guard is intentionally identical in both
+  assessors. Existing travel limits remain authoritative and endpoint-only
+  checks were not substituted for sweeps.
+- Extended immutable `MotionSnapshot` telemetry with the executed polyline.
+  `swept_bounds` now samples only the executed portion of linear, G17, and
+  helical paths (including interior arc points), preventing high-speed or
+  endpoint-safe tunneling while avoiding future-path false alarms.
+- Added deterministic coverage for frame round-trips and shifted stock,
+  non-zero WCO production parity, all three axis limits, strict stock-top
+  contact versus penetration, arc first-contact sweeps, stationary contact
+  latching, rapid/spindle-off/excessive-depth/retained-gouge classifications,
+  and valid spinning-tool stock removal.
+- Added a spawned loopback production-boundary regression proving a shifted
+  workpiece with non-zero Z WCO yields the same spindle-off hazard from backend
+  and independent operator without divergence.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_geometry_and_parity.py
+  tests/test_simulation_plant_and_safety_branches.py
+  tests/test_simulation_controller_branches.py tests/test_simulation_operator.py -q`
+  → **55 passed in 3.43s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_spawn_workers.py
+  -k "real_backend_and_operator_parity_on_wco_stock_entry" -q`
+  → **1 passed, 10 deselected in 0.90s**.
+- `.venv\Scripts\python.exe -m pytest <PowerShell-expanded test_simulation_*.py>
+  tests/test_step_simulation.py tests/test_application_contracts.py tests/test_job.py -q`
+  → **163 passed in 56.86s**.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded.
+
 ## Sol review correction — backend-owned hazard telemetry boundary (2026-09-07)
 
 Implemented the bounded production-boundary correction without GUI or physical

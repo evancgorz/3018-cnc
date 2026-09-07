@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 from typing import Iterable
 
-from .geometry import AABB, MachineGeometryProfile, swept_bounds
+from .geometry import AABB, CoordinateFrame, MachineGeometryProfile, swept_bounds
 from .models import Hazard, HazardKind, PlantSnapshot, SimulationProfile
 from .stock import StockModel
 
@@ -15,6 +15,16 @@ from .stock import StockModel
 class Fixture:
     name: str
     bounds: AABB
+    frame: str = "machine"
+
+    def validate(self) -> None:
+        if not self.name or self.frame not in {"machine", "work"}:
+            raise ValueError("Fixture requires a name and machine/work frame")
+        self.bounds.validate()
+
+    def machine_bounds(self, frame: CoordinateFrame) -> AABB:
+        self.validate()
+        return self.bounds if self.frame == "machine" else frame.work_bounds_to_machine(self.bounds)
 
 
 class CollisionWorld:
@@ -29,7 +39,7 @@ class CollisionWorld:
                         self.profile.travel_y + self.geometry.base_margin, -0.1)
 
     def add_fixture(self, fixture: Fixture) -> None:
-        fixture.bounds.validate()
+        fixture.validate()
         self.fixtures.append(fixture)
 
     def check_transition(self, previous: PlantSnapshot, current: PlantSnapshot, *, rapid: bool,
@@ -37,6 +47,7 @@ class CollisionWorld:
                          target_cutting: bool = True,
                          stock_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> tuple[Hazard, ...]:
         hazards: list[Hazard] = []
+        frame = CoordinateFrame(tuple(stock_offset))
         x, y, z = current.machine_position
         limits = (self.profile.travel_x, self.profile.travel_y, self.profile.travel_z)
         if any(value < -0.001 or value > limit + 0.001 for value, limit in zip(current.machine_position, limits)):
@@ -51,29 +62,30 @@ class CollisionWorld:
         for body in self.geometry.bodies(current, self.profile):
             if body.name not in {"left-upright", "right-upright"}:
                 continue
-            if holder.intersects(body.bounds):
+            if holder.penetrates(body.bounds):
                 hazards.append(self._hazard(HazardKind.MACHINE_COLLISION,
                                             "Tool holder intersects fixed frame upright", current,
                                             "tool-holder", body.name))
-        if tool.intersects(self.bed):
+        if tool.penetrates(self.bed):
             hazards.append(self._hazard(HazardKind.TOOL_BED, "Cutter intersects bed/spoilboard", current, "cutter", "bed"))
         for fixture in self.fixtures:
-            if tool.intersects(fixture.bounds):
+            fixture_bounds = fixture.machine_bounds(frame)
+            if tool.penetrates(fixture_bounds):
                 hazards.append(self._hazard(HazardKind.TOOL_FIXTURE, "Cutter intersects fixture", current, "cutter", fixture.name))
-            if holder.intersects(fixture.bounds):
+            if holder.penetrates(fixture_bounds):
                 hazards.append(self._hazard(HazardKind.HOLDER_FIXTURE, "Holder intersects fixture", current, "tool-holder", fixture.name))
         if stock is not None:
             # The application uses GRBL's positive-up Z convention: stock top
             # is work-Z 0 and material extends down by its thickness.  Treat
             # mere contact with the top plane as safe; only penetration is a
             # stock entry.  This avoids a false alarm at the reference plane.
-            offset_x, offset_y, offset_z = stock_offset
-            stock_box = AABB(stock.workpiece.origin_x + offset_x,
-                             stock.workpiece.origin_y + offset_y,
-                             stock.workpiece.origin_z + offset_z - stock.workpiece.stock_thickness,
-                             stock.workpiece.origin_x + offset_x + stock.workpiece.stock_width,
-                             stock.workpiece.origin_y + offset_y + stock.workpiece.stock_height,
-                             stock.workpiece.origin_z + offset_z)
+            stock_box = frame.work_bounds_to_machine(AABB(
+                stock.workpiece.origin_x,
+                stock.workpiece.origin_y,
+                stock.workpiece.origin_z - stock.workpiece.stock_thickness,
+                stock.workpiece.origin_x + stock.workpiece.stock_width,
+                stock.workpiece.origin_y + stock.workpiece.stock_height,
+                stock.workpiece.origin_z))
             penetrates_stock = (tool.max_x > stock_box.min_x and tool.min_x < stock_box.max_x
                                 and tool.max_y > stock_box.min_y and tool.min_y < stock_box.max_y
                                 and tool.min_z < stock_box.max_z and tool.max_z > stock_box.min_z)
@@ -92,6 +104,9 @@ class CollisionWorld:
                     hazards.append(self._hazard(HazardKind.RETAINED_GOUGE, "Cutter enters retained material", current, "cutter", "stock"))
                 if tool.min_z < stock_box.min_z:
                     hazards.append(self._hazard(HazardKind.EXCESSIVE_DEPTH, "Cutter exceeds stock bottom", current, "cutter", "stock"))
+            # The holder's physical envelope is unsafe on stock contact even
+            # when the cutter's top-plane entry rule treats mere contact as
+            # safe; retain this conservative holder/stock guard.
             if holder.intersects(stock_box):
                 hazards.append(self._hazard(HazardKind.HOLDER_STOCK, "Tool holder intersects stock", current, "tool-holder", "stock"))
         return tuple(hazards)

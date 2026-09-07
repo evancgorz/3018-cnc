@@ -186,6 +186,7 @@ class VirtualMachinePlant:
             motion = MotionSnapshot(
                 block.block_id, block.start, block.target, block.rapid,
                 block.probing, block.feed, block.progress,
+                tuple(block.path),
             )
         return PlantSnapshot(
             self.clock.time_ns, self.state, self.machine_position,

@@ -122,6 +122,7 @@ class MotionSnapshot:
     probing: bool = False
     feed: float = 0.0
     progress: float = 1.0
+    path: tuple[tuple[float, float, float], ...] = ()
 
 
 @dataclass(frozen=True)
