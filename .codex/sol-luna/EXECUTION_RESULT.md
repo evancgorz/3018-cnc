@@ -572,6 +572,16 @@ Remote `main` was confirmed at `3dd4382`. The remaining overall status is
 **PARTIAL** only for the previously documented post-source-change GUI visual/
 export acceptance and the intentionally deferred physical commissioning.
 
+## Sol full-suite audit — 2026-09-07
+
+The complete hardware-free repository suite was rerun after H5:
+
+- `.venv\\Scripts\\python.exe -m pytest -q` → **499 passed in 137.32s**.
+
+This confirms the H5 changes preserve the original application, protocol,
+simulation, Qt-shell, and commissioning behavior. No physical transport or
+non-loopback endpoint was selected.
+
 ## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
 
 Implemented the bounded safety-input package headlessly and simulation-only.
