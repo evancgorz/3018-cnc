@@ -495,6 +495,40 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P3 synthetic A/B commissioning plan and fixtures — 2026-09-07
+
+Added a versioned, machine-readable synthetic twin/controller commissioning
+plan at `examples/commissioning_ab_plan.json` and the inert implementation in
+`simulation/commissioning.py`:
+
+- The bounded plan defines read-only status, tiny-jog, WCO, probe, spindle, and
+  explicitly optional cutting gates, with documented position/feed/spindle/
+  timing tolerances and declared ignored hardware noise only.
+- Supplied capture providers are compared in order while retaining tolerated
+  numeric/timing drift as evidence. Reports identify malformed data, missing or
+  extra events, outliers, semantic/WCO/probe differences, unexpected alarms,
+  ignored fields, abort reason, and first divergence.
+- Synthetic fixtures cover matched traces, tolerated drift, semantic mismatch,
+  unexpected alarm, missing response, and malformed captures. Reports and both
+  captures round-trip through replayable JSON/Markdown output with a stable
+  digest.
+- `PhysicalCaptureProvider` requires separate authorization plus an exact
+  endpoint, then remains deliberately non-executable. The preflight checklist
+  records emergency-stop, spindle-off, workholding, reference, endpoint, and
+  abort requirements without performing any physical action.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_commissioning.py
+  tests/test_simulation_geometry_and_parity.py -q`
+  → **31 passed in 4.54s**.
+- PowerShell-expanded `test_simulation_*.py` plus
+  `tests/test_application_contracts.py` → **175 passed in 71.33s**.
+
+No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
+Wi-Fi, LAN/non-loopback endpoint, runtime config, generated evidence, or
+physical commissioning was accessed or executed.
+
 ## P1 QML/frontend verification — 2026-09-07
 
 Implemented deterministic headless frontend verification through the public

@@ -901,6 +901,30 @@ groups. Record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
 
+## Sol program delta — synthetic A/B commissioning plan and fixtures (2026-09-07)
+
+The final scheduled package is a P3 synthetic twin-versus-controller A/B
+commissioning plan. Luna must keep physical access inert while adding a
+versioned, machine-readable commissioning script/fixture set that can run the
+same bounded read-only, tiny-jog, WCO, probe, spindle, and optional cutting
+gates against two explicitly supplied capture providers. Normalize only
+declared firmware/hardware noise, preserve ordering and semantic differences,
+apply documented position/feed/spindle/timing tolerances, and report every
+ignored field, missing/extra response, outlier, and first divergence. The
+physical provider must require separate explicit authorization and an exact
+endpoint; no default or discovery path may touch USB/COM/LAN hardware.
+
+Add synthetic twin and fake-controller fixtures covering matched traces,
+tolerated numeric/timing drift, semantic mismatch, malformed captures,
+unexpected alarm, WCO mismatch, missing response, and abort criteria. Provide
+replayable JSON/Markdown reports and a preflight checklist that makes physical
+emergency-stop, spindle-off, workholding, and trusted-reference requirements
+explicit without executing them. Run focused parity/fixture tests followed by
+affected simulation/application gates, record exact evidence, review staged
+scope, and commit/push this package separately. Do not launch GUI or access
+hardware, USB/COM/Wi-Fi, non-loopback endpoints, or stage generated/config/
+evidence artifacts.
+
 ## Sol program delta — long-duration randomized/property testing (2026-09-07)
 
 The next backend-first P2 package is long-duration randomized/property

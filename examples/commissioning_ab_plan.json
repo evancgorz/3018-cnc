@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "pine-twin-controller-ab-v1",
+  "tolerances": {
+    "position_mm": 0.05,
+    "feed_mm_min": 2.0,
+    "spindle_rpm": 100.0,
+    "timing_seconds": 0.5
+  },
+  "ignored_fields": ["hardware_id", "pid", "port", "wall_time"],
+  "abort_categories": ["malformed", "missing", "extra", "semantic", "outlier", "unexpected_alarm"],
+  "gates": [
+    {"name": "read_only_status", "mode": "read_only", "commands": ["?", "$$", "$#"], "read_only": true, "max_events": 64},
+    {"name": "tiny_jog", "mode": "tiny_jog", "commands": ["$J=G91 G21 X1 F60"], "read_only": true, "max_events": 64},
+    {"name": "wco", "mode": "wco", "commands": ["G10 L20 P1 X0 Y0 Z0", "?"], "read_only": true, "max_events": 64},
+    {"name": "probe", "mode": "probe", "commands": ["$#", "?"], "read_only": true, "max_events": 64},
+    {"name": "spindle", "mode": "spindle", "commands": ["M3 S1000", "M5"], "read_only": true, "max_events": 64},
+    {"name": "optional_cutting", "mode": "optional_cutting", "commands": ["G1 X1 F60"], "read_only": false, "max_events": 64}
+  ]
+}
