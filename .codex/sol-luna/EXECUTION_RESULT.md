@@ -1228,6 +1228,31 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## P0 follow-up — valid simulator ScrollView width binding (2026-09-08)
+
+The first fresh validator after the P0 checkpoint exposed a real Qt runtime
+defect: `availableWidth` is not a property on this Qt Quick Controls
+`ScrollView`, producing `ReferenceError` at the simulator control column.
+Replaced that binding with the owned `simulatorControlsScroll.width` viewport
+for both `contentWidth` and the nested control column, and scoped the static
+regression to reject the invalid identifier in that simulator panel.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py -k
+  "simulator_safety_and_evidence or terminal_simulation_hazard or simulation"
+  -q` → **11 passed, 30 deselected in 1.72s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_application_contracts.py tests/test_simulation_public_scenarios.py
+  -q` → **86 passed in 33.79s**.
+- `python -m compileall -q src tests` and `git diff --check` → **passed**.
+- `.venv\\Scripts\\python.exe -m pytest -q` → **516 passed in 168.95s**.
+
+The exact tagged validator that exposed the defect was closed before editing;
+no hardware, physical transport, non-loopback endpoint, or unrelated Pine
+instance was accessed. A fresh native visual/export pass remains required for
+the previously documented first-contact pixel and OS save-dialog evidence.
+
 ## P0 native hazard/evidence gate — terminal retention and bounded simulator controls (2026-09-08)
 
 Implemented the bounded public-surface correction headlessly:

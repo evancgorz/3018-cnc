@@ -321,12 +321,14 @@ ApplicationWindow {
                     // default 980x680 simulator size.  The hazard history is
                     // deliberately bounded so it cannot consume this column.
                     ScrollView {
+                        id: simulatorControlsScroll
                         anchors.fill: parent
                         anchors.margins: 14
                         clip: true
-                        contentWidth: availableWidth
+                        // Keep the content tied to this owned viewport.
+                        contentWidth: simulatorControlsScroll.width
                         ScrollBar.vertical.policy: ScrollBar.AsNeeded
-                        ColumnLayout { width: availableWidth; spacing: 8
+                        ColumnLayout { width: simulatorControlsScroll.width; spacing: 8
                         Label { text: "Authoritative plant"; color: window.palette.text; font.weight: Font.DemiBold }
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }

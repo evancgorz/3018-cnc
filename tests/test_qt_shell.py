@@ -202,7 +202,11 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
 def test_simulator_safety_and_evidence_column_is_bounded_and_scrollable() -> None:
     qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
     assert "ScrollView" in qml
-    assert "contentWidth: availableWidth" in qml
+    assert "id: simulatorControlsScroll" in qml
+    assert "contentWidth: simulatorControlsScroll.width" in qml
+    assert "width: simulatorControlsScroll.width" in qml
+    simulator_panel = qml[qml.index("id: simulatorControlsScroll"):qml.index("    MachineSetupDialog", qml.index("id: simulatorControlsScroll"))]
+    assert "availableWidth" not in simulator_panel
     assert "ScrollBar.vertical.policy: ScrollBar.AsNeeded" in qml
     assert "Layout.preferredHeight: 120" in qml
     assert 'text: "Export evidence…"' in qml
