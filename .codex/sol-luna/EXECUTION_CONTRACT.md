@@ -1496,3 +1496,15 @@ not change layout behavior unless the test exposes a real defect; do not touch
 hardware, runtime/protected config, generated evidence, or unrelated files.
 Run the focused Qt test, compileall, and the full suite, then commit and push
 one checkpoint.
+
+## Sol follow-up delta — isolated native splash observation (2026-09-08)
+
+Use one temporary-root, uniquely tagged validator process with forbidden USB and
+Wi-Fi factories to observe the existing `QSplashScreen` transition. Keep the
+main QML window hidden until the normal reveal timer, capture the splash state
+if it is visible, then allow the workspace to reveal and close the exact owned
+process normally. Record marker, temporary root, timing/observation, cleanup,
+and physical-factory calls in `EXECUTION_RESULT.md`. Do not change splash or
+layout source, do not access hardware or production config, and leave the
+native 1180×720 resize limitation explicitly documented if no resize-capable
+surface is available.
