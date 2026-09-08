@@ -495,6 +495,51 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## H5 homing/E-stop/public auto-XYZ calibration — 2026-09-07
+
+Implemented the H5 production-boundary slice headlessly, without GUI or
+physical transport access:
+
+- Added optional machine-frame `ProbeCornerCircle` geometry to the virtual
+  plant/controller/backend. G38.2 X/Y now stops at the first swept circle
+  intersection and emits the existing ordered `ok` then `[PRB:...]` response;
+  Z surface probing, WCO, limits, and collision paths remain separate.
+- Added runtime/application public methods for simulation-only homing profile
+  and limit declarations, limit input injection, and conductive probe geometry
+  configuration. Physical/disconnected paths fail closed and never emit GPIO,
+  reset, USB, COM, Wi-Fi, or non-loopback actions. ViewModel/QML now project
+  limit status and auto-XYZ transaction state alongside existing E-stop gates.
+- Added `AutoXYZCalibrationService`, routed through ApplicationController
+  `send_manual`, transport response, and status boundaries. It requires a
+  current commissioning record and trusted Idle/spindle-off state, sequences
+  bounded four-direction XY searches plus Z touch, waits for Idle boundaries,
+  rejects no-contact/alarm/stale-WCO cases, requires a matching fresh WCO
+  report after G10, and only completes after the final safe retract.
+- Corrected the pre-existing calibration command plan to make modal distance
+  explicit across probe/reposition transitions. Final retract uses a
+  machine-safe delta after G10 rather than an unsafe absolute safe-Z target.
+
+Validation evidence:
+
+- `python -m compileall -q src/ttc3018_control` → passed.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h5.py -q`
+  → **4 passed in 2.80s**, including the real ApplicationController/TCP
+  loopback calibration and exact disconnect cleanup.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h5.py
+  tests/test_simulation_safety.py -q` → **15 passed in 2.79s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h5.py
+  tests/test_simulation_safety.py tests/test_simulation_core.py
+  tests/test_simulation_controller_branches.py tests/test_simulation_spawn_workers.py
+  tests/test_qt_shell.py tests/test_application_contracts.py
+  tests/test_homing_service.py tests/test_machine_config.py -q`
+  → **152 passed in 19.23s**.
+- `git diff --check` → passed.
+
+No GUI, hardware, USB/COM, physical Wi-Fi, non-loopback endpoint, generated
+evidence/config, `%SystemDrive%`, credentials, or unrelated files were staged.
+The authoritative contract remains unmodified and is excluded from the H5
+commit.
+
 ## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
 
 Implemented the bounded safety-input package headlessly and simulation-only.

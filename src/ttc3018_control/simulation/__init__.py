@@ -10,6 +10,7 @@ from .safety import (
     EStopLatch, CalibrationState, CalibrationPlateDefinition, CalibrationCommissioningRecord, PlateContact,
     CalibrationResult, fit_plate_circle, AutoXYZCalibrationWorkflow,
 )
+from .plant import ProbeCornerCircle
 
 __all__ = [
     "SimulationProfile", "PlantSnapshot", "Hazard", "HazardKind",
@@ -18,4 +19,5 @@ __all__ = [
     "HomingSensorBank", "EStopMode", "EStopDefinition", "EStopCommissioningRecord",
     "EStopLatch", "CalibrationState", "CalibrationPlateDefinition", "CalibrationCommissioningRecord", "PlateContact",
     "CalibrationResult", "fit_plate_circle", "AutoXYZCalibrationWorkflow",
+    "ProbeCornerCircle",
 ]

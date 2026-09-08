@@ -478,13 +478,13 @@ class AutoXYZCalibrationWorkflow:
         cx, cy = self.plate_center
         r = self.definition.radius - self.definition.search_margin
         self.commands.extend((f"G0 X{cx-r:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}",
-                              f"G38.2 X{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
-                              f"G0 X{cx:.3f} Y{cy+r:.3f} Z{self.definition.safe_z:.3f}",
-                              f"G38.2 Y-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
-                              f"G0 X{cx+r:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}",
-                              f"G38.2 X-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
-                              f"G0 X{cx:.3f} Y{cy-r:.3f} Z{self.definition.safe_z:.3f}",
-                              f"G38.2 Y{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}"))
+                              "G91", f"G38.2 X{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 G90 X{cx:.3f} Y{cy+r:.3f} Z{self.definition.safe_z:.3f}",
+                              "G91", f"G38.2 Y-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 G90 X{cx+r:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}",
+                              "G91", f"G38.2 X-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 G90 X{cx:.3f} Y{cy-r:.3f} Z{self.definition.safe_z:.3f}",
+                              "G91", f"G38.2 Y{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}"))
         self.state = CalibrationState.SEARCHING
         return True
 
@@ -502,23 +502,33 @@ class AutoXYZCalibrationWorkflow:
             cx, cy = self.result.center
             outside = max(self.definition.radius + self.definition.search_margin,
                           self.definition.radius + self.definition.tool_radius)
-            self.commands.extend(("G0 Z{:.3f}".format(self.definition.safe_z),
-                                  f"G0 X{cx+outside:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}"))
+            self.commands.extend(("G0 G90 Z{:.3f}".format(self.definition.safe_z),
+                                  f"G0 G90 X{cx+outside:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}"))
         return True
 
     def complete_z_touch(self, z: float, *, wco_fresh: bool, envelope: tuple[float, float, float]) -> bool:
-        if self.state is not CalibrationState.FITTED or self.result is None:
+        if self.state not in {CalibrationState.FITTED, CalibrationState.Z_TOUCH} or self.result is None:
             return self.fail("a valid circle fit is required before Z touch")
         if not wco_fresh or not math.isfinite(z) or z < 0 or z > envelope[2]:
             return self.fail("fresh WCO and in-envelope Z touch are required", CalibrationFailure.STALE_WCO if not wco_fresh else CalibrationFailure.ENVELOPE)
-        self.state = CalibrationState.Z_TOUCH
-        self.commands.extend((f"G38.2 Z-{self.definition.max_search_z:.3f} F{self.definition.slow_feed:.3f}",
-                              "G10 L20 P1 X0 Y0 Z0", f"G0 Z{self.definition.safe_z:.3f}"))
+        if self.state is CalibrationState.FITTED:
+            self.state = CalibrationState.Z_TOUCH
+            self.commands.extend(("G91", f"G38.2 Z-{self.definition.max_search_z:.3f} F{self.definition.slow_feed:.3f}",
+                                  "G10 L20 P1 X0 Y0 Z0", f"G0 G91 Z{self.definition.safe_z:.3f}"))
         self.result = CalibrationResult(self.result.center, self.result.residual, self.result.contacts,
                                         self.result.tool_radius_compensation, self.result.fitted_radius,
                                         self.result.compensated_radius,
                                         (self.result.center[0], self.result.center[1], z))
         self.state = CalibrationState.COMPLETE
+        return True
+
+    def begin_z_touch(self) -> bool:
+        """Queue the ordinary-protocol Z-touch tail after XY contacts."""
+        if self.state is not CalibrationState.FITTED or self.result is None:
+            return self.fail("a valid circle fit is required before Z touch")
+        self.state = CalibrationState.Z_TOUCH
+        self.commands.extend(("G91", f"G38.2 Z-{self.definition.max_search_z:.3f} F{self.definition.slow_feed:.3f}",
+                              "G10 L20 P1 X0 Y0 Z0", f"G0 G91 Z{self.definition.safe_z:.3f}"))
         return True
 
     def no_contact(self) -> bool:

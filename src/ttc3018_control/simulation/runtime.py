@@ -14,6 +14,7 @@ from .models import Hazard, HazardKind, SimulationFault, SimulationProfile, Simu
 from .supervisor import supervisor_main
 from .trace import TraceRecorder
 from .safety import EStopDefinition, HomingLimitProfile
+from .plant import ProbeCornerCircle
 
 
 class SimulationRuntime:
@@ -28,7 +29,9 @@ class SimulationRuntime:
                  speed: str = "realtime",
                  faults: list[SimulationFault] | None = None,
                  homing_profile: HomingLimitProfile | None = None,
-                 estop_definition: EStopDefinition | None = None) -> None:
+                 estop_definition: EStopDefinition | None = None,
+                 probe_corner_circle: ProbeCornerCircle | None = None,
+                 probe_surface_z: float | None = None) -> None:
         self.profile = profile or SimulationProfile.default_3018()
         self.profile.validate()
         self.workpiece = workpiece
@@ -68,6 +71,13 @@ class SimulationRuntime:
         self.estop_definition = estop_definition or EStopDefinition()
         self.estop_definition.validate()
         self.estop_status: dict[str, Any] = self._default_estop_status()
+        if probe_corner_circle is not None:
+            probe_corner_circle.validate()
+        self.probe_corner_circle = probe_corner_circle
+        if probe_surface_z is not None:
+            if not isinstance(probe_surface_z, (int, float)) or not float(probe_surface_z) == float(probe_surface_z):
+                raise ValueError("Probe surface Z must be finite")
+        self.probe_surface_z = float(probe_surface_z) if probe_surface_z is not None else None
         for fault in faults or ():
             self.install_fault(fault)
         self._fault_sequence = 0
@@ -84,7 +94,7 @@ class SimulationRuntime:
         self._telemetry = self.ctx.Queue(maxsize=2048)
         workpiece_data = asdict(self.workpiece) if self.workpiece is not None else None
         fault_data = [asdict(fault) for fault in self.faults]
-        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data, self.homing_profile.to_dict(), asdict(self.estop_definition)), name=f"pine-twin-backend-{self.session_token[:6]}")
+        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data, self.homing_profile.to_dict(), asdict(self.estop_definition), self.probe_corner_circle.to_dict() if self.probe_corner_circle else None, self.probe_surface_z), name=f"pine-twin-backend-{self.session_token[:6]}")
         self.backend.start()
         try:
             if not self._backend_ready.poll(timeout):
@@ -280,6 +290,22 @@ class SimulationRuntime:
             raise RuntimeError("Digital twin is not running")
         self._backend_control.send({"op": "set_limit_input", "axis": axis,
                                     "electrical_active": electrical_active})
+
+    def configure_homing(self, profile: HomingLimitProfile) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        profile.validate()
+        self.homing_profile = profile
+        self._backend_control.send({"op": "configure_homing", "profile": profile.to_dict()})
+
+    def configure_probe_corner_circle(self, circle: ProbeCornerCircle | None) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        if circle is not None:
+            circle.validate()
+        self.probe_corner_circle = circle
+        self._backend_control.send({"op": "configure_probe_corner_circle",
+                                    "circle": circle.to_dict() if circle else None})
 
     def _default_estop_status(self) -> dict[str, Any]:
         return {"mode": self.estop_definition.mode.value, "active": False, "latched": False,

@@ -20,6 +20,8 @@ from ..serial_connection import GrblConnection, available_ports
 from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
 from ..tcp_connection import TcpGrblConnection
 from ..simulation.runtime import SimulationRuntime
+from ..simulation.safety import HomingLimitProfile
+from ..simulation.plant import ProbeCornerCircle
 from ..simulation.settings import SimulationSettings, SimulationSettingsStore
 from ..wifi_discovery import discover_grbl_hosts
 from .connection_service import ConnectionOutcome, ConnectionService
@@ -30,6 +32,7 @@ from .machine_session import ActionOutcome, MachineSession
 from .motion_service import MotionService
 from .homing_service import HomingService
 from .probing_service import ProbePlan, ProbingService
+from .calibration_service import AutoXYZCalibrationService
 from .tool_setting_service import ToolSettingService
 from .fixture_service import FixtureService
 from .ports import ConnectionSettingsStorePort, ProfileStorePort, StepPrepareSettingsStorePort, WorkZeroStorePort
@@ -169,6 +172,7 @@ class ApplicationController:
         )
         self.homing = HomingService(self.session, self.connection_service.send_line, self._publish_notice)
         self.probing = ProbingService(self.session, self.adapter, self.connection_service.send_line, on_notice=self._publish_notice)
+        self.calibration = AutoXYZCalibrationService(self.send_manual, on_notice=self._publish_notice)
         self.tool_setting = ToolSettingService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
         self.fixtures = FixtureService(self.session, self.adapter, self.connection_service.send_line, self._publish_notice)
 
@@ -525,6 +529,37 @@ class ApplicationController:
         runtime.inject_estop(reset_asserted=reset_asserted, feedback_electrical=feedback_electrical)
         return ActionOutcome(True, "Digital-twin E-stop injection requested; safety latch requires release and re-reference")
 
+    def configure_simulation_homing(self, profile: HomingLimitProfile) -> ActionOutcome:
+        """Apply switch declarations only through the owned twin boundary."""
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin homing declarations are unavailable while disconnected")
+        try:
+            runtime.configure_homing(profile)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Digital-twin homing declarations rejected — {exc}")
+        return ActionOutcome(True, "Digital-twin homing/limit declarations applied")
+
+    def set_simulation_limit_input(self, axis: str, electrical_active: bool) -> ActionOutcome:
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin limit input is unavailable while disconnected")
+        try:
+            runtime.set_limit_input(axis, bool(electrical_active))
+        except (RuntimeError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Digital-twin limit input rejected — {exc}")
+        return ActionOutcome(True, f"Digital-twin {axis.upper()} limit input injected")
+
+    def configure_simulation_probe_corner_circle(self, circle: ProbeCornerCircle | None) -> ActionOutcome:
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin probe geometry is unavailable while disconnected")
+        try:
+            runtime.configure_probe_corner_circle(circle)
+        except (RuntimeError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Digital-twin probe geometry rejected — {exc}")
+        return ActionOutcome(True, "Digital-twin conductive probe geometry applied")
+
     def release_simulation_estop(self) -> ActionOutcome:
         runtime = self.simulation_runtime
         if not self.simulation_active or runtime is None:
@@ -838,6 +873,32 @@ class ApplicationController:
         spindle_off = status is None or status.spindle in (None, 0)
         return self.probing.start(plan, connected=self.connected, spindle_off=spindle_off)
 
+    @property
+    def auto_xyz_calibration_state(self) -> str:
+        return self.calibration.state.value
+
+    @property
+    def auto_xyz_calibration_status(self) -> str:
+        return self.calibration.status_text
+
+    def start_auto_xyz_calibration(self, seed: tuple[float, float, float], *,
+                                   definition=None, commissioning_record=None) -> ActionOutcome:
+        """Start the commissioned calibration transaction over ordinary GRBL traffic."""
+        from ..simulation.safety import CalibrationPlateDefinition
+        definition = definition or CalibrationPlateDefinition()
+        status = self.status
+        spindle = 0.0 if status is None or status.spindle is None else status.spindle
+        envelope = (self.profile.travel_x, self.profile.travel_y, self.profile.travel_z)
+        return self.calibration.start(
+            seed=tuple(float(value) for value in seed), definition=definition,
+            commissioning_record=commissioning_record,
+            reference_trusted=self.reference_trusted,
+            controller_idle=bool(status and status.state == "Idle"),
+            spindle_rpm=spindle, envelope=envelope)
+
+    def abort_auto_xyz_calibration(self) -> ActionOutcome:
+        return self.calibration.abort()
+
     def start_z_touch_plate_input_test(self) -> ActionOutcome:
         if not self.z_touch_plate_definition:
             return ActionOutcome(False, "Enable the movable Z touch plate first.")
@@ -951,6 +1012,7 @@ class ApplicationController:
         outcome = self.connection_service.disconnect()
         self.motion.reset()
         self.job.reset()
+        self.calibration.reset()
         self.homing.reset(outcome.message)
         self.probing.reset()
         self._z_probe_pending = False
@@ -1103,6 +1165,7 @@ class ApplicationController:
         outcome = self.connection_service.close()
         self.motion.reset()
         self.job.reset()
+        self.calibration.reset()
         self.manual_pending_acks = 0
         self._work_zero_request_pending_ack = False
         self._work_zero_expected_offset = None
@@ -1165,6 +1228,20 @@ class ApplicationController:
         probing_state_before = self.probing.state
         self.homing.observe_status(status, self.machine_definition)
         self.probing.observe_status(status)
+        calibration_wco_pending = self.calibration.work_offset_confirmation_pending
+        calibration_expected_wco = self.calibration.expected_work_offset
+        calibration_failed = self.calibration.observe_status(status)
+        if calibration_failed and self.calibration.state.value == "failed":
+            self.manual_pending_acks = 0
+            self.session.invalidate_work_zero("Auto XYZ calibration failed; work zero requires re-confirmation")
+        matching_calibration_wco = (
+            calibration_expected_wco is not None and status.work_offset is not None
+            and all(abs(actual - expected) <= 0.001 for actual, expected in zip(
+                (status.work_offset.x, status.work_offset.y, status.work_offset.z),
+                (calibration_expected_wco.x, calibration_expected_wco.y, calibration_expected_wco.z)))
+        )
+        if calibration_wco_pending and matching_calibration_wco and status.state == "Idle":
+            self.session.work_zero_confirmed = True
         if self._z_probe_pending and probing_state_before.value == "confirm_offset" and self.probing.state.value == "safe_retract":
             self._z_probe_offset_confirmed = True
         self.fixtures.observe_status(status)
@@ -1211,6 +1288,14 @@ class ApplicationController:
         """Dispatch one controller response to the owning application service."""
         text = response.strip()
         lowered = text.lower()
+        calibration_ack = self.calibration.awaiting_ack and lowered == "ok"
+        if self.calibration.handle_response(text):
+            if calibration_ack:
+                self.manual_pending_acks = max(0, self.manual_pending_acks - 1)
+            if self.calibration.state.value == "failed":
+                self.manual_pending_acks = 0
+                self.session.invalidate_work_zero("Auto XYZ calibration failed; work zero requires re-confirmation")
+            return True
         if self.homing.handle_response(text):
             return True
         if self.probing.handle_response(text):
@@ -1274,6 +1359,7 @@ class ApplicationController:
         else:
             self.homing.reset("GRBL reset")
         self.probing.reset()
+        self.calibration.reset()
         self._z_probe_pending = False
         self._z_probe_offset_confirmed = False
         self._z_commissioning_pending = False

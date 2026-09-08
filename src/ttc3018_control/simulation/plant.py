@@ -26,6 +26,37 @@ class MotionBlock:
         return self.points or (self.start, self.target)
 
 
+@dataclass(frozen=True)
+class ProbeCornerCircle:
+    """Optional conductive vertical corner-circle used by the digital twin.
+
+    Coordinates are machine-frame coordinates.  The circle is deliberately
+    optional so the default twin retains the existing Z-only probe semantics.
+    """
+
+    center_x: float
+    center_y: float
+    radius: float
+    z: float = 0.0
+
+    def validate(self) -> None:
+        values = (self.center_x, self.center_y, self.radius, self.z)
+        if not all(math.isfinite(value) for value in values) or self.radius <= 0:
+            raise ValueError("Probe corner circle must be finite with a positive radius")
+
+    def to_dict(self) -> dict[str, float]:
+        self.validate()
+        return {"center_x": self.center_x, "center_y": self.center_y,
+                "radius": self.radius, "z": self.z}
+
+    @classmethod
+    def from_dict(cls, value: dict[str, object]) -> "ProbeCornerCircle":
+        circle = cls(float(value["center_x"]), float(value["center_y"]),
+                     float(value["radius"]), float(value.get("z", 0.0)))
+        circle.validate()
+        return circle
+
+
 class VirtualMachinePlant:
     """Continuous pose source used by both protocol and visual/collision layers."""
 
@@ -45,7 +76,9 @@ class VirtualMachinePlant:
         self.spindle_rpm = 0.0
         self.hold_requested = False
         self.probe_surface_z: float | None = None
+        self.probe_corner_circle: ProbeCornerCircle | None = None
         self.probe_active = False
+        self.probe_contact: tuple[float, float, float] | None = None
         self.pins = ""
         self._next_block_id = 1
         self._sequence = 0
@@ -122,6 +155,7 @@ class VirtualMachinePlant:
         self.spindle_target = 0.0
         self.hold_requested = False
         self.probe_active = False
+        self.probe_contact = None
         self.state = "Idle"
 
     def advance(self, delta_ns: int) -> PlantSnapshot:
@@ -156,12 +190,16 @@ class VirtualMachinePlant:
             distance_step = self.current_speed * remaining
             new_distance = min(distance_total, block.progress * distance_total + distance_step)
             block.progress = 1.0 if distance_total <= 1e-12 else new_distance / distance_total
+            previous_position = tuple(self.position)
             self.position[:] = self._point_at_path(path, new_distance, distance_total)
             self.feed = block.feed
             self._check_limits()
+            if block.probing and self._check_corner_probe(previous_position, tuple(self.position), block):
+                block.progress = 1.0
             if block.probing and self.probe_surface_z is not None and self.position[2] <= self.probe_surface_z:
                 self.position[2] = self.probe_surface_z
                 self.probe_active = True
+                self.probe_contact = tuple(self.position)
                 block.progress = 1.0
             if block.progress >= 1.0 - 1e-12:
                 completed = block
@@ -178,6 +216,40 @@ class VirtualMachinePlant:
                 remaining = 0.0
         self._sequence += 1
         return self.snapshot()
+
+    def _check_corner_probe(self, start: tuple[float, float, float],
+                            end: tuple[float, float, float], block: MotionBlock) -> bool:
+        circle = self.probe_corner_circle
+        if not block.probing or circle is None:
+            return False
+        # The optional plate is a conductive vertical edge.  Probe contact is
+        # the first swept XY intersection with its circle; Z probing remains
+        # independently governed by probe_surface_z above.
+        cx, cy, radius = circle.center_x, circle.center_y, circle.radius
+        sx, sy = start[0] - cx, start[1] - cy
+        ex, ey = end[0] - cx, end[1] - cy
+        dx, dy = ex - sx, ey - sy
+        a = dx * dx + dy * dy
+        if a <= 1e-18:
+            return False
+        b = 2.0 * (sx * dx + sy * dy)
+        c = sx * sx + sy * sy - radius * radius
+        discriminant = b * b - 4.0 * a * c
+        if discriminant < -1e-12:
+            return False
+        roots = () if discriminant < 0 else (
+            (-b - math.sqrt(max(0.0, discriminant))) / (2.0 * a),
+            (-b + math.sqrt(max(0.0, discriminant))) / (2.0 * a),
+        )
+        candidates = sorted(t for t in roots if -1e-9 <= t <= 1.0 + 1e-9)
+        if not candidates:
+            return False
+        t = max(0.0, min(1.0, candidates[0]))
+        contact = tuple(start[index] + (end[index] - start[index]) * t for index in range(3))
+        self.position[:] = contact
+        self.probe_active = True
+        self.probe_contact = contact
+        return True
 
     def snapshot(self) -> PlantSnapshot:
         motion = None

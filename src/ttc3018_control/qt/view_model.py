@@ -836,6 +836,14 @@ class ControllerViewModel(QObject):
         return "Homing switches: DIGITAL TWIN inputs (X/Y/Z)"
 
     @Property(str, notify=simulation_changed)
+    def simulation_limit_status(self) -> str:
+        runtime = self.application.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return "Limit inputs: unavailable while disconnected"
+        pins = getattr(runtime, "estop_status", {}).get("pins", "")
+        return f"Limit inputs: twin Pn={pins or 'none'}"
+
+    @Property(str, notify=simulation_changed)
     def simulation_estop_status(self) -> str:
         if not self.simulation_active:
             return "E-stop: safety-rated physical power cutoff remains primary"
@@ -849,7 +857,13 @@ class ControllerViewModel(QObject):
 
     @Property(str, notify=simulation_changed)
     def simulation_auto_xyz_status(self) -> str:
-        return "Auto XYZ calibration plate: unavailable — plate/input not commissioned"
+        if not self.simulation_active:
+            return "Auto XYZ calibration plate: unavailable — plate/input not commissioned"
+        return self.application.auto_xyz_calibration_status
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_auto_xyz_active(self) -> bool:
+        return self.application.calibration.active
 
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
@@ -1672,6 +1686,36 @@ class ControllerViewModel(QObject):
     @Slot()
     def home_machine(self) -> None:
         outcome = self.application.home_machine()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def release_simulation_estop(self) -> None:
+        outcome = self.application.release_simulation_estop()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def acknowledge_simulation_estop(self) -> None:
+        outcome = self.application.acknowledge_simulation_estop()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(str, bool)
+    def inject_simulation_limit(self, axis: str, active: bool) -> None:
+        outcome = self.application.set_simulation_limit_input(axis, active)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(float, float, float)
+    def start_auto_xyz_calibration(self, x: float, y: float, z: float) -> None:
+        outcome = self.application.start_auto_xyz_calibration((x, y, z))
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def abort_auto_xyz_calibration(self) -> None:
+        outcome = self.application.abort_auto_xyz_calibration()
         self._set_notice(outcome.message)
         self._emit_state()
 

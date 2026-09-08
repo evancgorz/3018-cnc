@@ -323,6 +323,7 @@ ApplicationWindow {
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
                         Label { text: appViewModel ? appViewModel.simulation_homing_status : "Homing switches: not commissioned"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Label { text: appViewModel ? appViewModel.simulation_limit_status : "Limit inputs: unavailable while disconnected"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_estop_status : "E-stop: external safety cutoff required"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_auto_xyz_status : "Auto XYZ calibration plate: unavailable"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         SecondaryButton { Layout.fillWidth: true; text: "Preview Auto XYZ calibration plate (commissioning required)"; enabled: appViewModel && appViewModel.simulation_auto_xyz_available; onClicked: {} }

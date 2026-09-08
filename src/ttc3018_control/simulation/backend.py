@@ -15,7 +15,7 @@ from .collision import CollisionWorld
 from .geometry import CoordinateFrame, executed_path
 from .models import SimulationFault, SimulationProfile
 from .models import SimulationWorkpiece
-from .plant import VirtualMachinePlant
+from .plant import ProbeCornerCircle, VirtualMachinePlant
 from .stock import StockModel
 from .safety import EStopDefinition, HomingLimitProfile
 
@@ -25,11 +25,17 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                 workpiece_data: dict[str, Any] | None = None, speed: str = "realtime",
                 faults_data: list[dict[str, Any]] | None = None,
                 homing_data: dict[str, Any] | None = None,
-                estop_data: dict[str, Any] | None = None) -> None:
+                estop_data: dict[str, Any] | None = None,
+                probe_corner_circle_data: dict[str, Any] | None = None,
+                probe_surface_z: float | None = None) -> None:
     profile = SimulationProfile(**profile_data)
     profile.validate()
     plant = VirtualMachinePlant(profile)
     controller = VirtualGrblController(plant)
+    if probe_surface_z is not None:
+        plant.probe_surface_z = float(probe_surface_z)
+    if probe_corner_circle_data:
+        controller.configure_probe_corner_circle(ProbeCornerCircle.from_dict(probe_corner_circle_data))
     controller.configure_homing(HomingLimitProfile.from_dict(homing_data) if homing_data else HomingLimitProfile.default_3018())
     controller.configure_estop(EStopDefinition(**(estop_data or {})))
     for data in faults_data or ():
@@ -77,6 +83,12 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                     controller.install_fault(SimulationFault(**dict(message.get("fault", {}))))
                 if isinstance(message, dict) and message.get("op") == "clear_faults":
                     controller.clear_faults()
+                if isinstance(message, dict) and message.get("op") == "configure_homing":
+                    controller.configure_homing(HomingLimitProfile.from_dict(dict(message.get("profile", {}))))
+                if isinstance(message, dict) and message.get("op") == "configure_probe_corner_circle":
+                    raw_circle = message.get("circle")
+                    controller.configure_probe_corner_circle(
+                        ProbeCornerCircle.from_dict(dict(raw_circle)) if raw_circle else None)
                 if isinstance(message, dict) and message.get("op") == "inject_estop":
                     controller.inject_estop(reset_asserted=bool(message.get("reset_asserted", False)),
                                             feedback_electrical=message.get("feedback_electrical"))

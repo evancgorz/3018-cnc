@@ -7,7 +7,7 @@ import math
 import re
 from typing import Callable
 
-from .plant import VirtualMachinePlant
+from .plant import ProbeCornerCircle, VirtualMachinePlant
 from .models import SimulationFault
 from .protocol import ParsedLine, ProtocolError, parse_line
 from .safety import EStopDefinition, EStopLatch, HomingLimitProfile, HomingSensorBank
@@ -114,6 +114,12 @@ class VirtualGrblController:
         profile.validate()
         self.homing_profile = profile
         self.sensor_bank = HomingSensorBank(profile)
+
+    def configure_probe_corner_circle(self, circle: ProbeCornerCircle | None) -> None:
+        """Configure optional simulation-only conductive XY probe geometry."""
+        if circle is not None:
+            circle.validate()
+        self.plant.probe_corner_circle = circle
 
     def set_limit_input(self, axis: str, electrical_active: bool, *, now_ns: int | None = None) -> bool:
         if self.sensor_bank is None:
@@ -525,7 +531,7 @@ class VirtualGrblController:
 
     def _block_complete(self, block) -> None:
         if block.probing:
-            self._last_probe = self.plant.machine_position
+            self._last_probe = self.plant.probe_contact or self.plant.machine_position
             success = (self.plant.probe_active
                        and not self._fault_active("probe_failure", time_ns=self.plant.clock.time_ns))
             self._emit(f"[PRB:{','.join(f'{v:.3f}' for v in self._last_probe)}:{1 if success else 0}]")
