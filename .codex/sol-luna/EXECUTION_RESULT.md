@@ -525,7 +525,8 @@ Validation evidence:
 - PowerShell-expanded `test_simulation_*.py` plus
   `tests/test_application_contracts.py` → **175 passed in 71.33s**.
 
-No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
+Sol review completed and this package was committed and pushed as `5f7a8ee`
+(`Add synthetic commissioning parity fixtures`). No GUI, hardware, USB/COM,
 Wi-Fi, LAN/non-loopback endpoint, runtime config, generated evidence, or
 physical commissioning was accessed or executed.
 
