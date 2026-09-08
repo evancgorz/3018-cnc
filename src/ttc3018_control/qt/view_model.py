@@ -1989,6 +1989,7 @@ class ControllerViewModel(QObject):
             return
         path_text = selected_file.toLocalFile()
         if not path_text:
+            self._set_notice("G-code load ignored — choose a local file")
             return
         try:
             program = self.application.load_program(Path(path_text))
@@ -2320,7 +2321,12 @@ class ControllerViewModel(QObject):
 
     @classmethod
     def _strokes_for_program(cls, program: GCodeProgram) -> list[list[list[float]]]:
-        return cls._strokes_for_qml(tuple(tuple((segment.start.x, segment.start.y), (segment.end.x, segment.end.y)) for segment in program.segments))
+        return cls._strokes_for_qml(
+            tuple(
+                ((segment.start.x, segment.start.y), (segment.end.x, segment.end.y))
+                for segment in program.segments
+            )
+        )
 
     @classmethod
     def _strokes_for_step_model(cls, model: StepPlanarModel) -> list[list[list[float]]]:

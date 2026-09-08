@@ -1526,3 +1526,51 @@ hardware, USB/COM, physical Wi-Fi, GPIO/reset pin, or non-loopback endpoint
 was accessed. This section corrects the earlier historical chooser audit;
 the older audit remains preserved as historical evidence rather than a current
 residual blocker.
+
+## G1–G3 G-code handoff and keyboard-focus correction (2026-09-08)
+
+The public existing-G-code picker path is now covered through the
+`ControllerViewModel.load_gcode_file(QUrl)` boundary. A valid local metric
+program atomically replaces the previously validated job, updates the file
+name/summary and preview strokes, and emits the persistent
+`G-code loaded and validated` notice. Invalid input is parsed before any job
+mutation and leaves the prior program, filename, and summary intact while
+emitting an actionable `G-code rejected — ...` notice. Empty picker results
+now emit `G-code load ignored — choose a local file`; active jobs are refused
+with `G-code load ignored — a job is active` and the previous program remains
+loaded. The handoff also repaired a real preview conversion defect: valid
+segments were previously constructed with an invalid two-argument `tuple()`
+call, which raised before replacement; the conversion now emits the expected
+two-point stroke tuples.
+
+The QML picker remains public and accepted-bound: `Main.qml` retains the
+`G-code files (*.nc *.gcode *.tap *.cnc *.txt)` filter and
+`onAccepted: appViewModel.load_gcode_file(selectedFile)` binding.
+
+G2 focus was reproduced offscreen before changing policy with
+`QQuickWindow.activeFocusItem` and synthetic Qt Tab events. The first
+actionable sequence observed was `Connect → Prepare → Preview & Run`, followed
+by additional labeled controls; no focus-scope/tab-order source change was
+warranted and no transport/plant action is triggered by the focus test.
+Historical native GUI observations in `docs/GUI_USER_TEST_REPORT.md` remain
+preserved as audit history; this section claims only the deterministic public
+Qt/offscreen evidence below.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest -q tests/test_qt_shell.py -k
+  "gcode_picker or main_qml_palette or keyboard_focus" --disable-warnings
+  --maxfail=1` → **5 passed, 40 deselected in 2.04s** after the preview
+  conversion correction.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_qt_shell.py
+  tests/test_application_contracts.py --disable-warnings --maxfail=1` →
+  **87 passed in 17.12s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **520 passed in 163.74s (0:02:43)**.
+
+No GUI instance was launched, no native window was touched, and no hardware,
+USB/COM, Wi-Fi, non-loopback endpoint, physical factory, runtime config, or
+protected generated evidence was accessed or staged. Overall status remains
+**PARTIAL** only for the intentionally unobserved physical commissioning
+boundary and other historical/native-only acceptance items.

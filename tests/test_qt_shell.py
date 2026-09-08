@@ -21,7 +21,8 @@ from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel, load_step_isolated
 from ttc3018_control.z_touch_plate import ZTouchPlateRecord
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, Qt
+from PySide6.QtTest import QTest
 
 
 class _FakeConnection:
@@ -90,6 +91,94 @@ def test_main_qml_palette_references_are_declared() -> None:
     declared = set(re.findall(r"\b(\w+)\s*:\s*Qt\.color", palette_block))
     referenced = set(re.findall(r"window\.palette\.(\w+)", qml))
     assert referenced <= declared
+
+
+def test_gcode_picker_binding_and_filter_are_public_and_validated() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+    picker = qml[qml.index("id: gcodeFileDialog"):qml.index("id: saveGcodeDialog")]
+    assert 'title: "Load existing job"' in picker
+    assert 'G-code files (*.nc *.gcode *.tap *.cnc *.txt)' in picker
+    assert 'onAccepted: appViewModel.load_gcode_file(selectedFile)' in picker
+
+
+def test_gcode_picker_replaces_valid_job_and_preserves_it_on_rejection(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    first = tmp_path / "first.nc"
+    second = tmp_path / "second.gcode"
+    invalid = tmp_path / "invalid.nc"
+    first.write_text("G21 G90\nG0 X0 Y0 Z3\nG1 X10 Y10 F100\nM5\n", encoding="ascii")
+    second.write_text("G21 G90\nG0 X1 Y2 Z3\nG1 X6 Y8 F100\nM5\n", encoding="ascii")
+    invalid.write_text("G21 G90\nG1 Xnot-a-number F100\n", encoding="ascii")
+    notices: list[str] = []
+    view_model.toast_requested.connect(notices.append)
+
+    view_model.load_gcode_file(QUrl.fromLocalFile(str(first)))
+    original = controller.program
+    assert original is not None
+    assert view_model.job_file == "first.nc"
+    assert notices[-1] == "G-code loaded and validated"
+
+    view_model.load_gcode_file(QUrl.fromLocalFile(str(invalid)))
+    assert controller.program is original
+    assert view_model.job_file == "first.nc"
+    assert "G-code rejected" in notices[-1]
+
+    view_model.load_gcode_file(QUrl.fromLocalFile(str(second)))
+    assert controller.program is not original
+    assert controller.program.path.name == "second.gcode"
+    assert view_model.job_file == "second.gcode"
+    assert notices[-1] == "G-code loaded and validated"
+
+
+def test_gcode_picker_empty_selection_and_active_job_are_truthful(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    fixture = tmp_path / "job.nc"
+    replacement = tmp_path / "replacement.nc"
+    fixture.write_text("G21 G90\nG0 X0 Y0 Z3\nG1 X2 Y2 F100\nM5\n", encoding="ascii")
+    replacement.write_text("G21 G90\nG0 X1 Y1 Z3\nG1 X3 Y4 F100\nM5\n", encoding="ascii")
+    notices: list[str] = []
+    view_model.toast_requested.connect(notices.append)
+    view_model.load_gcode_file(QUrl.fromLocalFile(str(fixture)))
+    original = controller.program
+
+    view_model.load_gcode_file(QUrl())
+    assert controller.program is original
+    assert notices[-1] == "G-code load ignored — choose a local file"
+
+    controller.job._completion_waiting_for_idle = True
+    try:
+        view_model.load_gcode_file(QUrl.fromLocalFile(str(replacement)))
+    finally:
+        controller.job._completion_waiting_for_idle = False
+    assert controller.program is original
+    assert view_model.job_file == "job.nc"
+    assert notices[-1] == "G-code load ignored — a job is active"
+
+
+def test_qml_keyboard_focus_reaches_actionable_controls_offscreen(qapp) -> None:
+    engine, view_model = build_engine(visible=False)
+    root = engine.rootObjects()[0]
+    root.show()
+    root.requestActivate()
+    qapp.processEvents()
+
+    focused_labels: list[str] = []
+    for _ in range(5):
+        QTest.keyClick(root, Qt.Key_Tab)
+        qapp.processEvents()
+        focused = root.activeFocusItem()
+        assert focused is not None
+        text = focused.property("text")
+        assert isinstance(text, str) and text.strip(), type(focused).__name__
+        focused_labels.append(text)
+
+    assert focused_labels[:3] == ["Connect", "Prepare", "Preview & Run"]
+    root.close()
+    view_model.close()
 
 
 def test_h6_public_safety_and_auto_xyz_controls_are_guarded() -> None:
