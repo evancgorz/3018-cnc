@@ -1249,10 +1249,45 @@ boundary visible. The native flow then visibly completed:
 
 The exact validator instance was disconnected/closed cleanly; no physical
 transport, USB/COM port, network controller, GPIO, reset pin, or unrelated
-window was accessed. The remaining overall status stays PARTIAL solely because
-the arbitrary native STEP-file chooser/run acceptance remains blocked; the
-bundled STEP path is covered by automated backend/UI tests and is recorded
-above.
+window was accessed. The remaining overall status stays PARTIAL because
+arbitrary native STEP-file chooser/run acceptance and first-contact/evidence-
+export coverage are still not complete; the bundled native path is recorded
+below.
+
+## Native GUI bundled STEP acceptance (2026-09-08)
+
+Fresh isolated validator marker: `pine-twin-gui-7ff82535c9fb`.
+Manifest: `C:\\Users\\EVANGO~1\\AppData\\Local\\Temp\\pine-twin-gui-7ff82535c9fb-jbp97cg7\\gui-validation-manifest.json`.
+
+The public UI connected only to **Virtual Machine (Digital Twin)** at loopback
+`127.0.0.1:56322`; the simulator was hidden with the new hide affordance and
+the main workflow remained visible. Reference and XYZ work zero were both
+trusted/confirmed. In Prepare → Guided STEP setup, the validator first
+reported that its isolated temporary fixture was missing; the repository
+fixture `examples/showcase-pocket-island.step` was then staged into that
+validator-owned temporary `examples` directory and the bundled action was
+retried successfully.
+
+Native bundled import and proposal review then completed with visible data:
+
+- automatic part `40.00 × 30.00 mm`, `3 closed loop(s)`, XY face, thickness
+  `5.00 mm`, two detected `3.00 mm` blind recesses, and four accessible
+  planar patches;
+- validated review proposal: stock `43.2 × 33.2 mm`, tool `3.17 mm`, depth
+  `-5.20 mm`, 6 passes, 2 operations, 9 paths, 2411 mm cut, 702 mm rapid,
+  40 retracts, bounds X `0.0…43.2`, Y `0.0…33.2`;
+- **Generate and load** completed with `Validated G-code loaded` and
+  `Generated generated-step.gcode and loaded it for review`;
+- Preview & Run visibly showed the generated pocket/island toolpath and
+  preflight checks for connected/idle machine, trusted reference, confirmed
+  work zero, and virtual-envelope fit.
+
+The material/tool secure confirmation remained intentionally unchecked, so no
+job motion was started. The exact validator was disconnected and closed
+cleanly; no physical transport, USB/COM port, network controller, GPIO, reset
+pin, or unrelated window was accessed. Overall status remains PARTIAL only for
+the still-unproven arbitrary chooser/run path and first-contact/evidence-export
+gate.
 
 ## Simulator hide affordance (2026-09-08)
 
