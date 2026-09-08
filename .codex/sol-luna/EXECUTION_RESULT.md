@@ -1227,3 +1227,26 @@ Validation evidence:
 
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
+
+## Stale commissioning messaging correction (2026-09-08)
+
+Updated `CommissioningDialog.qml` and `docs/Z_TOUCH_PLATE.md` to accurately
+describe the current boundary: per-axis homing/limit declarations are
+available through Machine Setup; Auto XYZ and E-stop exercises are
+simulation-only digital-twin capabilities; physical commissioning remains
+explicit; and hardware-free validation never certifies physical safety or
+GPIO/reset wiring. Removed the stale claim that homing switches and XYZ
+fixtures were hidden until implementation.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -k
+  "commissioning_copy or z_probe_input" -q`
+  → **2 passed, 35 deselected in 0.67s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -q`
+  → **37 passed in 9.44s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q` → **511 passed in 136.76s**.
+
+No GUI was launched or relaunched; no hardware, physical transport,
+non-loopback endpoint, generated evidence, or runtime config was touched.

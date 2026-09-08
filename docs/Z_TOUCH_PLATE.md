@@ -43,8 +43,11 @@ stale and must be reviewed again.
   information, spindle off, an open input, and no competing motion or job.
 - A failed, stale, alarmed, cancelled, timed-out, or disconnected transaction
   changes no work offset and is not treated as a successful datum.
-- Homing switches, fixed tool setters, and XYZ probes remain hidden until their
-  workflows are implemented and hardware-tested.
+- Per-axis homing/limit declarations are available in Machine Setup, and the
+  Auto XYZ fixture plus E-stop exercises are available only in the
+  simulation-only digital twin. Physical commissioning remains explicit and
+  must be performed separately; hardware-free validation never certifies
+  physical safety or GPIO/reset wiring.
 
 Physical acceptance still requires a supervised continuity check, emergency-stop
 check, repeatability check, Z accuracy check, puck-removal check, and air cut.

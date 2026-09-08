@@ -73,7 +73,7 @@ Dialog {
                     }
                 }
 
-                Label { text: "Homing switches and XYZ workpiece fixtures are hidden until their workflows are implemented and tested."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                Label { text: "Per-axis homing/limit declarations are available in Machine Setup. The Auto XYZ fixture and E-stop exercises are simulation-only digital-twin capabilities; physical commissioning remains explicit and must be performed separately. Hardware-free validation never certifies physical safety."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
             }
         }
 

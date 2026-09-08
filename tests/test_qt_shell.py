@@ -478,6 +478,20 @@ def test_z_probe_input_uses_a_guided_no_motion_wizard() -> None:
     assert 'placeholderText: "Sample 1"' not in commissioning_qml
 
 
+def test_commissioning_copy_exposes_available_twin_capabilities_without_claiming_physical_safety() -> None:
+    root = Path(__file__).parents[1]
+    commissioning_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "CommissioningDialog.qml").read_text(encoding="utf-8")
+    plate_docs = (root / "docs" / "Z_TOUCH_PLATE.md").read_text(encoding="utf-8")
+    for text in (commissioning_qml, plate_docs):
+        normalized = re.sub(r"\s+", " ", text.lower())
+        assert "per-axis homing/limit declarations" in normalized
+        assert "simulation-only" in normalized
+        assert "physical commissioning remains explicit" in normalized
+        assert "never certifies physical safety" in normalized
+    assert "hidden until their workflows are implemented" not in commissioning_qml
+    assert "remain hidden until their workflows are implemented" not in plate_docs
+
+
 def test_z_probe_status_distinguishes_input_verification_from_samples(qapp, tmp_path) -> None:
     controller = ApplicationController(tmp_path)
     view_model = ControllerViewModel(controller)
