@@ -157,6 +157,10 @@ class ApplicationController:
                 profile=self.simulation_settings.profile,
                 workpiece=self.simulation_settings.workpiece,
                 speed=self.simulation_settings.speed,
+                # Re-read the selected, validated machine declaration for
+                # every new twin session.  Explicit factories remain fully
+                # caller-owned and are not given implicit arguments.
+                homing_profile=self.homing_limit_profile,
                 # Symbolic pins make the public exercise controls useful in
                 # the twin while remaining completely inert for physical
                 # transports.

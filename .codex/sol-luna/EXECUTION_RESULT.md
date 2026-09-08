@@ -495,6 +495,30 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## H7 follow-up — persisted homing profile at twin reconnect (2026-09-08)
+
+The default ApplicationController simulation factory now seeds each newly
+started twin from the selected machine's validated `homing_limit_profile`.
+Explicit caller-provided `simulation_factory` implementations remain
+unchanged and the existing runtime reconfiguration boundary is preserved.
+
+Added a loopback regression that saves non-default X/Y/Z declarations, starts
+the twin twice through ApplicationController, and verifies the spawned
+controller retains max/min home ends, active-low polarity, symbolic input pins,
+and corresponding homing positions on both sessions. Forbidden USB/Wi-Fi
+factories were not called.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h7.py
+  tests/test_simulation_h6.py tests/test_simulation_spawn_workers.py -q`
+  → **20 passed in 8.77s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q` → **509 passed in 136.41s**.
+
+No GUI was launched, no physical transport or non-loopback endpoint was
+selected, and protected config/evidence artifacts remain excluded.
+
 ## H7 — public digital-twin E-stop and limit exercises (2026-09-08)
 
 Implemented the public simulation-only safety exercise boundary without GUI

@@ -89,6 +89,43 @@ def test_h7_public_limit_toggles_reach_twin_sensor_bank_and_clear(tmp_path) -> N
     assert physical_calls == []
 
 
+def test_h7_persisted_homing_profile_seeds_each_reconnected_twin(tmp_path) -> None:
+    physical_calls: list[str] = []
+
+    def forbidden():
+        physical_calls.append("physical")
+        raise AssertionError("physical transport factory was touched")
+
+    controller = ApplicationController(tmp_path, usb_factory=forbidden, wifi_factory=forbidden)
+    declarations = {
+        "X": {"enabled": True, "end": "max", "pin": "X1", "active_low": True, "debounce_ms": 0},
+        "Y": {"enabled": True, "end": "min", "pin": "Y1", "active_low": False, "debounce_ms": 0},
+        "Z": {"enabled": True, "end": "max", "pin": "Z1", "active_low": True, "debounce_ms": 0},
+    }
+    assert controller.save_homing_limit_declarations(declarations).accepted
+
+    try:
+        for reconnect in range(2):
+            assert controller.connect_simulation().accepted
+            _wait_idle(controller)
+            runtime = controller.simulation_runtime
+            profile = runtime.homing_profile
+            assert [(item.axis, item.homing_end.value, item.active_low, item.input_pin)
+                    for item in profile.axes] == [
+                        ("X", "max", True, "X1"),
+                        ("Y", "min", False, "Y1"),
+                        ("Z", "max", True, "Z1"),
+                    ]
+            assert controller.set_simulation_limit_input("X", False).accepted
+            _poll_until(controller, lambda: runtime.estop_status.get("limit_pins") == "X")
+            assert tuple(runtime.estop_status["homing_position"]) == (290.0, 0.0, 40.0)
+            assert controller.disconnect().accepted
+    finally:
+        if controller.connected:
+            controller.disconnect()
+    assert physical_calls == []
+
+
 def test_h7_viewmodel_guards_status_and_controls_to_digital_twin(qapp, tmp_path) -> None:
     view_model = ControllerViewModel(ApplicationController(tmp_path))
     assert "unavailable while disconnected" in view_model.simulation_limit_status
