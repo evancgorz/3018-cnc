@@ -1374,3 +1374,52 @@ workflow. Replace the stale wording with that precise boundary and add a static
 Qt/documentation regression. Run the focused Qt/documentation tests and full
 suite, append evidence, and commit/push this correction. No GUI relaunch,
 hardware, physical transport, or generated/config/evidence staging.
+
+## Sol replan delta — close the native hazard/evidence GUI gate (2026-09-08)
+
+The backend, public bindings, bundled STEP flow, and isolated alarm run are
+working, but the remaining visual gate is still incomplete for two concrete
+reasons: the default 980×680 simulator right panel clips the lower evidence
+controls, and the ViewModel clears the active hazard as soon as the terminal
+alarm emits `hazard_clear`, so a stopped collision cannot leave the visible
+first-contact projection on screen. This package makes that gate observable
+without weakening fail-closed behavior.
+
+### P0.1 — preserve terminal hazard projection until explicit recovery
+
+Update the public ViewModel/simulation projection so a terminal collision,
+operator interlock, or GRBL alarm retains its typed active hazard, point,
+bodies, message, and `FIRST CONTACT — INTERLOCK ACTIVE` state until an explicit
+safe recovery boundary (fresh reference/release/acknowledge, disconnect, or
+new clean run) clears it. Ordinary non-terminal hazard-clear telemetry must
+still clear transient hazards. Do not change backend collision verdicts,
+operator independence, job stop behavior, or physical transport semantics.
+Add focused regressions for terminal retention, explicit recovery cleanup, and
+disconnect cleanup.
+
+### P0.2 — make the evidence action reachable at default simulator size
+
+Refactor only the simulator control column/layout so all safety details,
+hazard history, `Export evidence…`, and `Disconnect digital twin` remain
+reachable at the default window size (a bounded `ScrollView` or equivalent is
+acceptable). Preserve the simulation-only warning and connected-only guards.
+Add a static/QML regression for the bounded scroll surface and existing export
+binding; no raw plant or transport calls may be introduced.
+
+### P0.3 — validation and visual gate
+
+Run the focused ViewModel/simulation/Qt tests, affected public/spawn tests,
+compileall, and the full suite. Then launch one fresh uniquely tagged isolated
+validator (virtual machine only, loopback only): connect at 10×, establish
+reference, set a safe-Z work zero, load the bundled STEP job, start with the
+simulated spindle off, and verify visible `Job stopped`/`ALARM:1`, first-contact
+ring/label, hazard kind/body/point, and the evidence action. Use the native save
+dialog to export JSON evidence and verify its paired Markdown artifact, then
+disconnect and close the exact owned validator and verify no matching process
+remains. Record marker, endpoint, screenshots/observations, export paths, and
+physical-factory calls in `EXECUTION_RESULT.md`.
+
+No hardware, USB/COM, Wi-Fi, GPIO/reset pin, non-loopback endpoint, unrelated
+window, generated repository evidence, or protected config may be accessed or
+staged. Commit and push this package as its own checkpoint; leave overall
+status PARTIAL if any visual/export gate remains unobserved.
