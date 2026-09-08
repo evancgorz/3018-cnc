@@ -1319,6 +1319,37 @@ pin, or unrelated window was accessed. Overall status remains PARTIAL only for
 the still-unproven arbitrary chooser/run path and first-contact/evidence-export
 gate.
 
+## Native GUI hazard/alarm acceptance (2026-09-08)
+
+Fresh isolated validator marker: `pine-twin-gui-fc4f6969504b`.
+Manifest: `C:\\Users\\EVANGO~1\\AppData\\Local\\Temp\\pine-twin-gui-fc4f6969504b-k1r_nj8n\\gui-validation-manifest.json`.
+The digital twin ran only on loopback `127.0.0.1:51613`; its physical factory
+call log remained empty.
+
+After connecting the collision-only twin, establishing a trusted reference,
+and moving the virtual machine to safe Z `30.00 mm` before confirming XYZ work
+zero, the bundled STEP proposal was generated and loaded. With the simulated
+spindle intentionally off, the guarded start produced visible **`Job stopped` /
+`ALARM:1`**. The maximized simulator then visibly showed **GRBL Alarm**, the
+authoritative pose `X7.51 Y5.23 Z29.41`, and the hazard list:
+
+- `Cutter enters stock with spindle off`;
+- `Controller reports motion without pose progress`;
+- `Independent operator disagrees with backend hazard verdict`.
+
+The root window also showed the digital-twin operator-interlock alarm. The
+simulator's post-stop safety label returned to `Clear`; a first-contact ring/
+label was not observed in this particular stop state. The public **Export
+evidence…** action was visible in the simulator, but the native save-dialog
+interaction was not completed, so no GUI evidence JSON/Markdown export is
+claimed from this pass.
+
+The simulator child was closed with the exact validator authorization, the
+root disconnected, and the root window closed cleanly. No physical transport,
+USB/COM port, network controller, GPIO, reset pin, unrelated window, or
+production app was accessed. Overall status remains **PARTIAL** only for the
+unobserved first-contact visual projection and native evidence-save completion.
+
 ## Simulator hide affordance (2026-09-08)
 
 Added a clearly visible `Hide simulator` button near the top of the simulator
