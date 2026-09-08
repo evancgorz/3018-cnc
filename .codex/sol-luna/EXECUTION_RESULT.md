@@ -1574,3 +1574,20 @@ USB/COM, Wi-Fi, non-loopback endpoint, physical factory, runtime config, or
 protected generated evidence was accessed or staged. Overall status remains
 **PARTIAL** only for the intentionally unobserved physical commissioning
 boundary and other historical/native-only acceptance items.
+
+## Native G-code picker acceptance (2026-09-08)
+
+Fresh isolated validator acceptance completed after commit `422f14e` for
+marker `pine-twin-gui-86b054b39f3d`, under temporary root
+`C:\Users\EVANGO~1\AppData\Local\Temp\pine-twin-gui-86b054b39f3d-_e1dq9mr`.
+The selected transport was **Virtual Machine (Digital Twin)** with loopback
+endpoint `127.0.0.1:56715`. Guided Setup opened the native **Load existing job**
+dialog from `C:\Github\3018-cnc\examples`; the G-code filter was visible and
+`air-cut-test.gcode` was selected and accepted. The public UI visibly reported
+**G-code loaded and validated**.
+
+The isolated session was dismissed with `ESC`, disconnected, and cleaned up
+with exact `Alt+F4`; no matching validator window or process remained. The
+validator log reported `Simulation GUI validation physical factory calls: []`.
+No production instance, physical controller, hardware, USB/COM, physical
+Wi-Fi, GPIO/reset pin, or non-loopback endpoint was accessed.
