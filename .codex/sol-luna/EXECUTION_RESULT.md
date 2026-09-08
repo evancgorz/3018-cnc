@@ -543,6 +543,23 @@ state from the superseded GUI task was not interacted with by this package.
 Generated evidence/config, `%SystemDrive%`, and unrelated dirty files remain
 excluded. This package is ready for its separate safety checkpoint review.
 
+## Sol independent review — safety checkpoint (2026-09-07)
+
+The pushed safety checkpoints were independently reviewed after Luna's report:
+
+- `tests/test_simulation_safety.py tests/test_simulation_spawn_workers.py
+  -k "safety or production_boundary_homing"` → **12 passed, 11 deselected**.
+- E-stop application and safety UI checks → **4 passed, 93 deselected**.
+- Affected simulation/application/homing/config/QML set (PowerShell-expanded
+  `tests/test_simulation_*.py` plus the affected application, homing, machine
+  config, and Qt tests) → **230 passed in 79.78s**.
+
+The new backlog contract was committed and pushed separately as `e0df1c7` after
+review. No source/config/evidence artifacts are dirty; only pre-existing
+untracked runtime/config artifacts remain preserved. The overall result stays
+**PARTIAL** because the post-change public GUI acceptance and any physical
+commissioning run were intentionally not performed.
+
 ### H1-H4 Sol review correction — production-boundary integration
 
 The follow-up closes the review gaps without touching physical transports. The
