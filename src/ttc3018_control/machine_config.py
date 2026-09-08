@@ -51,6 +51,11 @@ class AxisDefinition:
     input_pin: str | None = None
     active_low: bool = False
     hard_limit: bool = False
+    # Optional safety metadata.  ``switch_end`` remains the legacy/public
+    # homing direction; this override lets a commissioned profile declare a
+    # measured maximum without changing the nominal machine travel.
+    max_override: float | None = None
+    debounce_ms: float = 5.0
 
     def validate(self, axis: str) -> None:
         if self.positive_direction not in (-1, 1):
@@ -59,6 +64,10 @@ class AxisDefinition:
             raise ValueError(f"{axis} cannot configure a switch pin or hard limit when switches are off")
         if self.switch_mode is SwitchMode.SINGLE and not self.input_pin:
             raise ValueError(f"{axis} single-switch homing requires an input pin")
+        if self.max_override is not None and (not math.isfinite(self.max_override) or self.max_override <= 0):
+            raise ValueError(f"{axis} maximum override must be finite and positive")
+        if not math.isfinite(self.debounce_ms) or self.debounce_ms < 0:
+            raise ValueError(f"{axis} debounce must be finite and nonnegative")
 
 
 @dataclass(frozen=True)

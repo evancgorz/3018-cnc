@@ -322,6 +322,9 @@ ApplicationWindow {
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
+                        Label { text: appViewModel ? appViewModel.simulation_homing_status : "Homing switches: not commissioned"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Label { text: appViewModel ? appViewModel.simulation_estop_status : "E-stop: external safety cutoff required"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Label { text: appViewModel ? appViewModel.simulation_auto_xyz_status : "Auto XYZ calibration plate: unavailable"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}"); color: window.palette.muted; font.family: "Cascadia Mono"; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Safety state: " + (appViewModel ? appViewModel.simulation_collision_state : "Clear"); color: appViewModel && appViewModel.simulation_hazard_active ? window.palette.danger : window.palette.success; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
                         Label { text: "Kind: " + (appViewModel ? appViewModel.simulation_collision_kind : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }

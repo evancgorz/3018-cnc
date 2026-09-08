@@ -495,6 +495,54 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
+
+Implemented the bounded safety-input package headlessly and simulation-only.
+`simulation/safety.py` adds versioned machine-scoped per-axis declarations,
+default-min homing ends with measured maximum overrides, active-low polarity,
+input pins, hard-limit flags, debounce, profile fingerprints, migration, and a
+debounced X/Y/Z sensor bank. `VirtualGrblController` exposes simulation
+`$5/$21/$22/$23` semantics, sensor `Pn` telemetry, commissioned homing, and
+fail-closed limit behavior without physical GPIO or reset access.
+
+The E-stop contract supports disabled, reset-only, feedback-only, and combined
+declarations with active-low polarity, debounce, latching, spindle/planner
+stop, alarm reporting, and explicit release → Idle/unlock → re-reference
+recovery. The twin injects these states in-process and emits no physical reset.
+The automated XYZ workflow is separate from manual Zero actions, requires a
+trusted reference, Idle/spindle-off state and an explicit interior seed, then
+collects four contacts, fits a deterministic circle with residual checks and
+tool-radius compensation, performs a fresh-WCO two-stage Z touch, and fails
+closed on missing contacts, stale WCO, or envelope violations.
+
+H4 public bindings now expose homing, E-stop, and automated-plate capability
+status in the existing ViewModel/simulator surface. The automated workflow is
+disabled until input/plate commissioning is current; no interior seed is ever
+treated as a datum. Wiring caveats and an inert physical preflight checklist
+are documented in `docs/SIMULATION_SAFETY_COMMISSIONING.md` and linked from
+README.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_safety.py -q`
+  → **8 passed in 0.19s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_safety.py
+  tests/test_qt_shell.py -k "simulation_safety or simulation_hazard or
+  simulation_show_action" -q` → **11 passed, 30 deselected in 1.97s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_safety.py
+  tests/test_simulation_controller_branches.py tests/test_simulation_core.py
+  tests/test_application_contracts.py tests/test_homing_service.py
+  tests/test_machine_config.py tests/test_qt_shell.py -q` → **123 passed in
+  23.96s**.
+- `.venv\\Scripts\\python.exe -m compileall -q src tests` and `git diff --check`
+  both passed.
+
+No physical machine, GPIO/reset pin, USB/COM, Wi-Fi, LAN/non-loopback endpoint,
+or new GUI validation was accessed for this package. Existing owned validator
+state from the superseded GUI task was not interacted with by this package.
+Generated evidence/config, `%SystemDrive%`, and unrelated dirty files remain
+excluded. This package is ready for its separate safety checkpoint review.
+
 ## P3 synthetic A/B commissioning plan and fixtures — 2026-09-07
 
 Added a versioned, machine-readable synthetic twin/controller commissioning

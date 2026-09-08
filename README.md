@@ -406,6 +406,12 @@ cannot prove its physical position. Even afterward, a stall, wiring fault, or
 manual movement can invalidate coordinates. Keep the cutting area clear and
 remain ready to use physical power removal or the emergency stop.
 
+The simulation-only homing/limit, E-stop, and automated XYZ calibration-plate
+contracts are documented in [SIMULATION_SAFETY_COMMISSIONING.md](docs/SIMULATION_SAFETY_COMMISSIONING.md).
+The twin exposes these as deterministic, loopback-only capabilities; it never
+opens GPIO, reset pins, USB/COM, Wi-Fi, or non-loopback endpoints. Manual
+work-zero buttons remain separate from the capability-gated automated workflow.
+
 ## Tests
 
 ```powershell

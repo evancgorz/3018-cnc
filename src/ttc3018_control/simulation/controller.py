@@ -10,6 +10,7 @@ from typing import Callable
 from .plant import VirtualMachinePlant
 from .models import SimulationFault
 from .protocol import ParsedLine, ProtocolError, parse_line
+from .safety import EStopDefinition, EStopLatch, HomingLimitProfile, HomingSensorBank
 
 
 @dataclass
@@ -45,6 +46,9 @@ class VirtualGrblController:
         self._delayed_ack_until: list[int] = []
         self._delayed_spindle: tuple[int, float] | None = None
         self._last_status_line = ""
+        self.homing_profile: HomingLimitProfile | None = None
+        self.sensor_bank: HomingSensorBank | None = None
+        self.estop = EStopLatch(EStopDefinition())
         self.plant.on_limit = self._limit_alarm
         self.plant.on_block_complete = self._block_complete
 
@@ -105,6 +109,51 @@ class VirtualGrblController:
         self._delayed_ack_until.clear()
         self._delayed_spindle = None
 
+    def configure_homing(self, profile: HomingLimitProfile) -> None:
+        """Install a machine-scoped, simulation-only switch declaration."""
+        profile.validate()
+        self.homing_profile = profile
+        self.sensor_bank = HomingSensorBank(profile)
+
+    def set_limit_input(self, axis: str, electrical_active: bool, *, now_ns: int | None = None) -> bool:
+        if self.sensor_bank is None:
+            raise RuntimeError("Homing switches are not commissioned")
+        active = self.sensor_bank.set_input(axis, electrical_active,
+                                            self.plant.clock.time_ns if now_ns is None else now_ns)
+        self.plant.pins = self.sensor_bank.pins()
+        if active and self._setting_enabled(21):
+            self._limit_alarm(self.plant.machine_position)
+        return active
+
+    def configure_estop(self, definition: EStopDefinition) -> None:
+        definition.validate()
+        self.estop = EStopLatch(definition)
+
+    def inject_estop(self, *, reset_asserted: bool = False, feedback_electrical: bool | None = None) -> bool:
+        """Inject a twin E-stop observation; no physical reset/GPIO is emitted."""
+        latched = self.estop.observe(reset_asserted=reset_asserted,
+                                     feedback_electrical=feedback_electrical,
+                                     now_ns=self.plant.clock.time_ns)
+        if latched:
+            self.plant.reset()
+            self.plant.state = "Alarm"
+            self.alarm = True
+            if "E" not in self.plant.pins:
+                self.plant.pins += "E"
+            self._emit("ALARM:1")
+        return latched
+
+    def release_estop(self) -> None:
+        self.estop.release()
+        self.plant.pins = self.plant.pins.replace("E", "")
+
+    def acknowledge_estop(self, *, reference_trusted: bool) -> bool:
+        if not self.estop.acknowledge(controller_idle=self.plant.state == "Idle",
+                                     reference_trusted=reference_trusted):
+            return False
+        self.alarm = False
+        return True
+
     def status_line(self) -> str:
         now_ns = self.plant.clock.time_ns
         if self._fault_active("malformed_status", time_ns=now_ns):
@@ -112,7 +161,7 @@ class VirtualGrblController:
         if self._fault_active("stale_status", time_ns=now_ns) and self._last_status_line:
             return self._last_status_line
         snapshot = self.plant.snapshot()
-        state = snapshot.state
+        state = "Alarm" if self.estop.interlocked else snapshot.state
         mpos = ",".join(f"{value:.3f}" for value in snapshot.machine_position)
         work_position = list(snapshot.work_position)
         # Tool length offset participates in the reported work coordinate;
@@ -166,6 +215,11 @@ class VirtualGrblController:
     def _normal(self, line: str) -> None:
         self._line_sequence += 1
         sequence = self._line_sequence
+        # Releasing the input permits the normal GRBL unlock/reset path to
+        # establish Idle; it does not itself clear the application latch.
+        if self.estop.interlocked and not (line.strip() == "$X" and not self.estop.active):
+            self._emit("ALARM:1")
+            return
         if self._fault_active("reset_alarm", sequence, self.plant.clock.time_ns):
             self.plant.reset()
             self.alarm = True
@@ -310,7 +364,10 @@ class VirtualGrblController:
             self.plant.state = "Idle"
             return
         if line == "$H":
-            self.plant.position[:] = [0.0, 0.0, 0.0]
+            if self.sensor_bank is not None and self._setting_enabled(22):
+                self.plant.position[:] = list(self.sensor_bank.homing_position())
+            else:
+                self.plant.position[:] = [0.0, 0.0, 0.0]
             self.plant.state = "Idle"
             self.alarm = False
             return
@@ -320,7 +377,14 @@ class VirtualGrblController:
         number, value = int(match.group(1)), float(match.group(2))
         if number not in self.settings or value < 0 or not math.isfinite(value):
             raise ProtocolError("unsupported or invalid setting")
+        if number in {5, 21, 22} and value not in {0, 1}:
+            raise ProtocolError("invalid safety setting")
+        if number == 23 and value not in range(256):
+            raise ProtocolError("invalid homing direction mask")
         self.settings[number] = value
+
+    def _setting_enabled(self, number: int) -> bool:
+        return bool(int(self.settings.get(number, 0)) & 1)
 
     def _execute(self, parsed: ParsedLine, *, sequence: int | None = None) -> None:
         sequence = self._line_sequence if sequence is None else sequence

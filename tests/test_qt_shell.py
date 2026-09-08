@@ -118,6 +118,17 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     assert 'if (appViewModel && appViewModel.job_active)' in qml
     assert 'enabled: appViewModel && appViewModel.simulation_export_available' in qml
     assert 'visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"' in qml
+
+
+def test_simulation_safety_capabilities_are_public_and_fail_closed(qapp, tmp_path) -> None:
+    view_model = ControllerViewModel(ApplicationController(tmp_path))
+    assert not view_model.simulation_auto_xyz_available
+    assert "not commissioned" in view_model.simulation_auto_xyz_status
+    assert "safety-rated" in view_model.simulation_estop_status
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert "simulation_homing_status" in qml
+    assert "simulation_estop_status" in qml
+    assert "simulation_auto_xyz_status" in qml
     assert '"Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}")' in qml
     assert 'text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job()' in qml
     assert 'text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job()' in qml

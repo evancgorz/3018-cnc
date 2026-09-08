@@ -828,6 +828,29 @@ class ControllerViewModel(QObject):
     def simulation_collision_z(self) -> float:
         return self._simulation_collision_coordinate(2)
 
+    @Property(str, notify=simulation_changed)
+    def simulation_homing_status(self) -> str:
+        """Public capability projection; physical switch commissioning is never inferred."""
+        if not self.simulation_active:
+            return "Homing switches: physical capability not commissioned"
+        return "Homing switches: DIGITAL TWIN inputs (X/Y/Z)"
+
+    @Property(str, notify=simulation_changed)
+    def simulation_estop_status(self) -> str:
+        if not self.simulation_active:
+            return "E-stop: safety-rated physical power cutoff remains primary"
+        return "E-stop: simulation latch available — no physical GPIO/reset"
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_auto_xyz_available(self) -> bool:
+        # A contact/vision capability and a machine-scoped commissioning record
+        # are required; an interior seed alone must never enable this action.
+        return False
+
+    @Property(str, notify=simulation_changed)
+    def simulation_auto_xyz_status(self) -> str:
+        return "Auto XYZ calibration plate: unavailable — plate/input not commissioned"
+
     @Property(str, notify=state_changed)
     def preferred_transport(self) -> str:
         return self.transport
