@@ -91,6 +91,15 @@ def test_circle_fit_compensation_and_fail_closed_noise() -> None:
         fit_plate_circle((*contacts[:3], PlateContact(0, 13)), tolerance=.1)
 
 
+def test_calibration_plate_has_bounded_default_conductive_z_surface() -> None:
+    definition = CalibrationPlateDefinition()
+    assert definition.effective_probe_surface_z == pytest.approx(20.0)
+    custom = CalibrationPlateDefinition(safe_z=35.0, max_search_z=8.0)
+    assert custom.effective_probe_surface_z == pytest.approx(27.0)
+    explicit = CalibrationPlateDefinition(probe_surface_z=18.5)
+    assert explicit.effective_probe_surface_z == pytest.approx(18.5)
+
+
 def test_auto_xyz_workflow_requires_truthful_state_and_fresh_wco() -> None:
     workflow = AutoXYZCalibrationWorkflow(CalibrationPlateDefinition(diameter=20, repeatability_tolerance=.2))
     assert workflow.start(seed=(10, 10, 10), reference_trusted=False, controller_idle=True,

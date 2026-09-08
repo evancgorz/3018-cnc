@@ -707,6 +707,7 @@ class ApplicationController:
             definition.validate()
             self.simulation_runtime.configure_probe_corner_circle(
                 ProbeCornerCircle(definition.circle_center_x, definition.circle_center_y, definition.radius, 0.0))
+            self.simulation_runtime.configure_probe_surface(definition.effective_probe_surface_z)
             self._simulation_plate_record = CalibrationCommissioningRecord(
                 plate_fingerprint=definition.fingerprint(), input_tested=True,
                 geometry_tested=True, machine_id=self.machine_id or "digital-twin-3018")

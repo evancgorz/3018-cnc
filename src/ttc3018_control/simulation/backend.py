@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import multiprocessing.connection
 import queue
 import select
@@ -89,6 +90,13 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                     raw_circle = message.get("circle")
                     controller.configure_probe_corner_circle(
                         ProbeCornerCircle.from_dict(dict(raw_circle)) if raw_circle else None)
+                if isinstance(message, dict) and message.get("op") == "configure_probe_surface":
+                    raw_surface = message.get("z")
+                    if raw_surface is not None:
+                        raw_surface = float(raw_surface)
+                        if not math.isfinite(raw_surface):
+                            raise ValueError("Probe surface Z must be finite")
+                    controller.plant.probe_surface_z = raw_surface
                 if isinstance(message, dict) and message.get("op") == "inject_estop":
                     controller.inject_estop(reset_asserted=bool(message.get("reset_asserted", False)),
                                             feedback_electrical=message.get("feedback_electrical"))

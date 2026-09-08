@@ -93,7 +93,8 @@ def test_simulation_declarations_use_runtime_boundary_without_physical_settings(
 
 
 def test_public_loopback_commissioned_plate_enables_auto_xyz(tmp_path) -> None:
-    controller = ApplicationController(tmp_path, simulation_factory=lambda: SimulationRuntime(speed="10x", probe_surface_z=20.0))
+    controller = ApplicationController(tmp_path)
+    assert controller.configure_simulation("10x").accepted
     assert controller.connect_simulation().accepted
 
     def pump_until(predicate, timeout=6.0):

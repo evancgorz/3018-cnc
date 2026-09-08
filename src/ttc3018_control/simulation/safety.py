@@ -338,12 +338,40 @@ class CalibrationPlateDefinition:
     active_low: bool = False
     circle_center_x: float = 20.0
     circle_center_y: float = 20.0
+    # The bundled twin fixture has a deterministic conductive Z surface.  A
+    # missing value derives the reachable surface from the bounded plan.
+    probe_surface_z: float | None = None
 
     def validate(self) -> None:
         values = (self.diameter, self.thickness, self.tool_radius, self.safe_z, self.search_margin,
                   self.fast_feed, self.slow_feed, self.repeatability_tolerance, self.max_search_xy, self.max_search_z,
                   self.circle_center_x, self.circle_center_y)
         _finite(values, "calibration plate values")
+        if self.probe_surface_z is not None and not math.isfinite(float(self.probe_surface_z)):
+            raise ValueError("probe_surface_z must be finite when provided")
+        if min(self.diameter, self.thickness, self.fast_feed, self.slow_feed, self.repeatability_tolerance,
+               self.max_search_xy, self.max_search_z) <= 0:
+            raise ValueError("calibration plate dimensions/feeds must be positive")
+        if self.tool_radius < 0 or self.search_margin >= self.diameter / 2:
+            raise ValueError("invalid tool radius/search margin")
+        if not 0 <= self.effective_probe_surface_z <= self.safe_z:
+            raise ValueError("probe_surface_z must be within the safe-Z envelope")
+
+    @property
+    def effective_probe_surface_z(self) -> float:
+        """Return the deterministic conductive surface used by the twin."""
+        self.validate_base()
+        return (self.safe_z - self.max_search_z
+                if self.probe_surface_z is None else float(self.probe_surface_z))
+
+    def validate_base(self) -> None:
+        """Validate dimensions without recursively evaluating the surface."""
+        values = (self.diameter, self.thickness, self.tool_radius, self.safe_z, self.search_margin,
+                  self.fast_feed, self.slow_feed, self.repeatability_tolerance, self.max_search_xy, self.max_search_z,
+                  self.circle_center_x, self.circle_center_y)
+        _finite(values, "calibration plate values")
+        if self.probe_surface_z is not None and not math.isfinite(float(self.probe_surface_z)):
+            raise ValueError("probe_surface_z must be finite when provided")
         if min(self.diameter, self.thickness, self.fast_feed, self.slow_feed, self.repeatability_tolerance,
                self.max_search_xy, self.max_search_z) <= 0:
             raise ValueError("calibration plate dimensions/feeds must be positive")

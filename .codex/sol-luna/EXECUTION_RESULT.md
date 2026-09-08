@@ -1245,6 +1245,31 @@ Validation evidence:
 
 No GUI was launched or hardware or transport was accessed.
 
+## Auto XYZ default-twin conductive Z surface correction (2026-09-08)
+
+Fixed the native Auto XYZ default-factory failure where the bundled twin had
+no Z probe surface and therefore returned `PRB ...:0` / “Calibration probe
+reported no contact”. `CalibrationPlateDefinition` now carries an explicit
+optional conductive `probe_surface_z`, deriving the bounded default as
+`safe_z - max_search_z` (20.0 mm for the bundled plate). Commissioning sends
+that validated surface through the SimulationRuntime backend-control boundary
+to the spawned virtual plant; physical transports are unaffected.
+
+The public loopback commissioning test now uses the default ApplicationController
+factory at 10× speed and proves default-seed Auto XYZ completes. Added
+deterministic coverage for default, derived, and explicit surface values.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h6.py
+  tests/test_simulation_h5.py tests/test_simulation_safety.py -q`
+  → **21 passed in 7.56s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q` → **512 passed in 259.12s**.
+
+No GUI was launched, no hardware or physical transport was accessed, and
+protected config/evidence artifacts remain unstaged.
+
 ## Stale commissioning messaging correction (2026-09-08)
 
 Updated `CommissioningDialog.qml` and `docs/Z_TOUCH_PLATE.md` to accurately

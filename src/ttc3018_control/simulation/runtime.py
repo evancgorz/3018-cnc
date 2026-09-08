@@ -6,6 +6,7 @@ import multiprocessing as mp
 import queue
 import secrets
 import time
+import math
 from dataclasses import asdict
 from typing import Any
 
@@ -306,6 +307,17 @@ class SimulationRuntime:
         self.probe_corner_circle = circle
         self._backend_control.send({"op": "configure_probe_corner_circle",
                                     "circle": circle.to_dict() if circle else None})
+
+    def configure_probe_surface(self, z: float | None) -> None:
+        """Configure the simulation-only conductive Z surface via backend control."""
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        if z is not None:
+            if not isinstance(z, (int, float)) or not math.isfinite(float(z)):
+                raise ValueError("Probe surface Z must be finite")
+            z = float(z)
+        self.probe_surface_z = z
+        self._backend_control.send({"op": "configure_probe_surface", "z": z})
 
     def _default_estop_status(self) -> dict[str, Any]:
         return {"mode": self.estop_definition.mode.value, "active": False, "latched": False,
