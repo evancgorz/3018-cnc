@@ -1519,3 +1519,23 @@ unproven because the available computer-control surface did not expose those
 windows/actions. Physical commissioning and any hardware A/B run remain
 intentionally outside this contract and require separate authorization and
 physical evidence.
+
+## Sol follow-up delta — software-only scope closure audit (2026-09-08)
+
+Create a concise, evidence-backed closure matrix for the original TTC 3018
+digital-twin request. Map each requested capability—three-axis 290/170/40
+envelope and motion semantics, GRBL-compatible controller boundary, independent
+operator/safety process, workpiece/STEP geometry and collision handling,
+homing/limits with polarity and end selection, E-stop behavior, automated XYZ
+corner-circle work-zero calibration, backend-first deterministic tests, and
+optional isolated commissioning/A-B boundary—to the current source modules,
+tests, commits, and result evidence. Separate implemented software scope,
+native-observation gaps, physical-commissioning prerequisites, and deliberately
+deferred CAM/product capabilities. Do not claim the deferred unchecked STEP
+items are unfinished twin safety work, and do not expand scope or change source
+behavior.
+
+Place the matrix in `docs/DIGITAL_TWIN_CLOSURE_AUDIT.md`, preserve historical
+reports, run `git diff --check`, commit only the new audit plus this contract
+delta, and push the checkpoint. No GUI, hardware, runtime/protected config, or
+generated evidence may be touched.
