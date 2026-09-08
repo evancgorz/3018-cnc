@@ -322,6 +322,7 @@ ApplicationWindow {
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
+                        SecondaryButton { Layout.fillWidth: true; visible: appViewModel && appViewModel.simulation_active; text: "Hide simulator"; onClicked: simulationWindow.visible = false }
                         Label { text: appViewModel ? appViewModel.simulation_homing_status : "Homing switches: not commissioned"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_limit_status : "Limit inputs: unavailable while disconnected"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_estop_status : "E-stop: external safety cutoff required"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }

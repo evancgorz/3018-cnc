@@ -141,6 +141,8 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     assert "simulationWindow.raise()" in qml
     assert "simulationWindow.requestActivate()" in qml
     assert 'SecondaryButton { visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"; onClicked: window.showSimulator() }' in qml
+    assert 'text: "Hide simulator"; onClicked: simulationWindow.visible = false' in qml
+    assert 'visible: appViewModel && appViewModel.simulation_active; text: "Hide simulator"' in qml
     assert 'if (appViewModel && appViewModel.job_active)' in qml
     assert 'enabled: appViewModel && appViewModel.simulation_export_available' in qml
     assert 'visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"' in qml

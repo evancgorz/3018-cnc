@@ -1228,6 +1228,23 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## Simulator hide affordance (2026-09-08)
+
+Added a clearly visible `Hide simulator` button near the top of the simulator
+right-hand control column. It is simulation-session guarded and directly sets
+the owned simulator window invisible, leaving the existing main-window
+`Show simulator` action available for restoration.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -k
+  "simulation_show_action or simulation_safety_capabilities" -q`
+  → **2 passed, 35 deselected in 2.90s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -q`
+  → **37 passed in 29.16s**.
+
+No GUI was launched or hardware or transport was accessed.
+
 ## Stale commissioning messaging correction (2026-09-08)
 
 Updated `CommissioningDialog.qml` and `docs/Z_TOUCH_PLATE.md` to accurately
