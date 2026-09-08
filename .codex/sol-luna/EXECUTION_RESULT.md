@@ -1199,3 +1199,31 @@ Focused evidence:
 No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
+
+## Bundled showcase STEP action — deterministic import path (2026-09-08)
+
+Added a read-only `ApplicationController.bundled_showcase_step_path` resolver
+for the versioned `examples/showcase-pocket-island.step` fixture. The public
+ViewModel `load_bundled_showcase_step()` slot feeds that path into the exact
+same asynchronous TaskRunner, application importer, parser, preview, and
+completion/error feedback pipeline used by native file selection. Native
+arbitrary-file import remains available and unchanged.
+
+Added visible “Load bundled showcase STEP” actions to both guided and advanced
+STEP dialogs, guarded by the existing import-in-progress state. Focused Qt
+coverage proves path provenance, async completion, missing-fixture feedback,
+and both QML bindings.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -k
+  "step_import or bundled" tests/test_application_contracts.py -q`
+  → **2 passed, 76 deselected in 2.05s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_application_contracts.py tests/test_step_simulation.py -q`
+  → **87 passed in 9.52s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q` → **510 passed in 139.47s**.
+
+No GUI was launched or relaunched; no hardware, physical transport,
+non-loopback endpoint, generated evidence, or runtime config was touched.

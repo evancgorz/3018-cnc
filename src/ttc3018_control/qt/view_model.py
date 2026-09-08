@@ -1289,18 +1289,18 @@ class ControllerViewModel(QObject):
             spindle_rpm=args[15] if args[15] > 0 else None,
         )
 
-    @Slot(QUrl)
-    def import_step_file(self, selected_file: QUrl) -> None:
-        """Import a STEP URL selected by Qt Quick's file dialog."""
-
+    def _start_step_import(self, path: Path) -> None:
+        """Start the shared asynchronous STEP import pipeline."""
         if self._step_importing:
             self._set_notice("STEP import is already in progress")
             return
-        path_text = selected_file.toLocalFile()
-        if not path_text:
-            self._set_notice("STEP import rejected — choose a local STEP file")
+        if not path.is_file():
+            detail = f"STEP file does not exist: {path}"
+            self._step_source_text = "STEP import failed"
+            self._step_import_status = f"Import failed: {detail}"
+            self._set_notice(f"STEP import rejected — {detail}")
+            self._emit_state()
             return
-        path = Path(path_text)
         self._step_importing = True
         self._step_source_text = f"Importing {path.name}…"
         self._step_import_status = "Reading STEP geometry and finding planar machining faces…"
@@ -1313,6 +1313,29 @@ class ControllerViewModel(QObject):
         )
         self._emit_state()
         self._step_task_token = self._task_runner.submit(lambda: self.application.import_step(path))
+
+    @Slot(QUrl)
+    def import_step_file(self, selected_file: QUrl) -> None:
+        """Import a STEP URL selected by Qt Quick's file dialog."""
+        path_text = selected_file.toLocalFile()
+        if not path_text:
+            self._set_notice("STEP import rejected — choose a local STEP file")
+            return
+        self._start_step_import(Path(path_text))
+
+    @Slot()
+    def load_bundled_showcase_step(self) -> None:
+        """Load the versioned showcase fixture through the normal importer."""
+        try:
+            path = self.application.bundled_showcase_step_path
+        except (FileNotFoundError, OSError, RuntimeError, ValueError, TypeError) as exc:
+            detail = str(exc)
+            self._step_source_text = "Bundled showcase STEP unavailable"
+            self._step_import_status = f"Import failed: {detail}"
+            self._set_notice(f"Bundled showcase STEP unavailable — {detail}")
+            self._emit_state()
+            return
+        self._start_step_import(path)
 
     @Slot(object)
     def _finish_background_task(self, result: TaskResult) -> None:

@@ -517,6 +517,52 @@ def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path
     assert view_model.step_loaded
     assert view_model.step_source == "part.step"
 
+
+def test_bundled_showcase_step_uses_shared_async_pipeline_and_reports_errors(qapp, tmp_path, monkeypatch) -> None:
+    _engine, view_model = build_engine()
+    path = tmp_path / "examples" / "showcase-pocket-island.step"
+    path.parent.mkdir()
+    path.write_text("placeholder", encoding="ascii")
+    model = StepPlanarModel(
+        path,
+        (PlanarLoop((Point2D(0, 0), Point2D(10, 0), Point2D(10, 5), Point2D(0, 5))),),
+        0,
+        2,
+        (0, 0, 0, 10, 5, 2),
+    )
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        type(view_model.application),
+        "bundled_showcase_step_path",
+        property(lambda _controller: path),
+    )
+    view_model.application.import_step = lambda selected: calls.append(selected) or model
+
+    view_model.load_bundled_showcase_step()
+    deadline = time.monotonic() + 2
+    while view_model.step_importing and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert not view_model.step_importing
+    assert calls == [path]
+    assert view_model.step_source == path.name
+    assert view_model.step_loaded
+
+    missing = tmp_path / "missing-showcase.step"
+    monkeypatch.setattr(
+        type(view_model.application),
+        "bundled_showcase_step_path",
+        property(lambda _controller: missing),
+    )
+    view_model._step_model = None
+    view_model.load_bundled_showcase_step()
+    assert "does not exist" in view_model.step_model_summary
+    assert view_model.step_source == "STEP import failed"
+
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert qml.count('text: "Load bundled showcase STEP"') == 2
+    assert qml.count("load_bundled_showcase_step()") == 2
+
 def test_qt_view_model_projects_grbl_status(qapp) -> None:
     _engine, view_model = build_engine()
 

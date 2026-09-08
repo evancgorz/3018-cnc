@@ -762,6 +762,7 @@ ApplicationWindow {
                                 MutedLabel { text: "Nothing moves during import or preview. The generated program still passes the normal parser, stock simulation, and machine-envelope checks." }
                                 Divider {}
                                 BusyButton { Layout.fillWidth: true; palette: window.palette; idleText: "Import STEP file…"; busy: appViewModel && appViewModel.step_importing; actionEnabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
+                                SecondaryButton { Layout.fillWidth: true; text: "Load bundled showcase STEP"; enabled: appViewModel && !appViewModel.step_importing; onClicked: appViewModel.load_bundled_showcase_step() }
                                 Label { text: appViewModel ? appViewModel.step_source : "No model selected"; color: window.palette.accent; font.weight: Font.DemiBold; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                 Label { text: appViewModel ? appViewModel.step_model_summary : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                                 Item { Layout.fillHeight: true }
@@ -935,6 +936,7 @@ ApplicationWindow {
             Label { text: "Import a STEP model and generate a bounded 2.5D toolpath from accessible planar faces, pockets, bosses, holes, and ramps."; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
             RowLayout { Layout.fillWidth: true; spacing: 10
                 BusyButton { palette: window.palette; idleText: "Import STEP…"; busy: appViewModel && appViewModel.step_importing; actionEnabled: !appViewModel || !appViewModel.step_importing; onClicked: stepFileDialog.open() }
+                SecondaryButton { text: "Load bundled showcase STEP"; enabled: appViewModel && !appViewModel.step_importing; onClicked: appViewModel.load_bundled_showcase_step() }
                 Label { text: appViewModel ? appViewModel.step_source : "No STEP model imported"; color: window.palette.text; elide: Text.ElideMiddle; Layout.fillWidth: true }
             }
             Label { text: appViewModel ? appViewModel.step_model_summary : "Import a planar STEP model to begin."; color: window.palette.accent; font.weight: Font.DemiBold; Layout.fillWidth: true }

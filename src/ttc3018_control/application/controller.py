@@ -873,6 +873,14 @@ class ApplicationController:
     def import_step(self, path, plane: str | None = None):
         return self.generation_service.import_step(path, plane)
 
+    @property
+    def bundled_showcase_step_path(self) -> Path:
+        """Resolve the read-only, versioned showcase STEP fixture."""
+        path = (self._root / "examples" / "showcase-pocket-island.step").resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Bundled showcase STEP fixture is missing: {path}")
+        return path
+
     def save_wifi_settings(self, host: str, port: int) -> None:
         if self.simulation_active:
             raise RuntimeError("Physical connection settings are disabled in the digital twin")
