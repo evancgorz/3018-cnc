@@ -11,7 +11,7 @@ from shapely.geometry import GeometryCollection, LineString, MultiLineString, Mu
 from shapely.ops import unary_union
 
 from .gcode import parse_gcode, validate_nonnegative_work_xy, validate_rapid_xy_clearance
-from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepPlanarModel
+from .step_geometry import Point2D, PlanarLoop, PlanarSurfacePatch, StepHeightField, StepPlanarModel
 from .step_operations import StepOperation, build_step_operation_plan, validate_operation_plan
 from .step_simulation import (
     StepStockSimulation,
@@ -25,7 +25,7 @@ from .step_verification import StepVerification, verify_flat_clearing_paths
 from .text_engraver import Stroke, _fmt
 
 
-STEP_MODES = ("Automatic part", "Engraving", "Detected feature", "Planar surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot")
+STEP_MODES = ("Automatic part", "Engraving", "Detected feature", "Planar surface", "3D surface", "Profile cutout", "Outside contour", "Inside contour", "Pocket", "Hole", "Slot")
 STEP_ORIENTATIONS = ("Top (XY)", "Top (YX)")
 STEP_ZERO_LOCATIONS = ("Lower-left", "Center")
 
@@ -150,6 +150,19 @@ def generate_step_gcode(
             _feature_target_depth(feature, resolved_thickness, breakthrough)
             for feature in model.features
         )
+    elif mode == "3D surface":
+        if model.height_field is None:
+            raise ValueError("The imported STEP has no bounded triangulated surface observation")
+        if model.height_field.collision_only:
+            raise ValueError(
+                "The imported STEP height field contains undercut or overhang cells; collision-only"
+            )
+        visible_depths = [
+            value for row in model.height_field.cells for value in row if value is not None
+        ]
+        if not visible_depths or any(not math.isfinite(value) for value in visible_depths):
+            raise ValueError("The imported STEP height field contains no finite surface cells")
+        depth = min(-0.001, min(visible_depths))
     _validate_settings(
         model, mode, orientation, zero_location, tool_diameter, depth, passes,
         safe_z, cut_feed, plunge_feed, spindle_rpm,
@@ -190,6 +203,8 @@ def generate_step_gcode(
     region = _even_odd_region(loops)
     machining_region = _slot_region(model, loops) if mode == "Slot" else region
     surface_paths: tuple[tuple[tuple[float, float, float], ...], ...] = ()
+    surface_target = None
+    surface_depth_at = None
     if mode == "Planar surface":
         surface_paths, depth = _planar_surface_paths(
             model.surface_patches, orientation, region, tool_diameter, offset_x, offset_y
@@ -198,6 +213,17 @@ def generate_step_gcode(
             raise ValueError("No accessible planar surface path could be generated from the imported geometry")
         if not -20 <= depth < 0:
             raise ValueError("The imported planar surface exceeds the supported 20 mm machining depth")
+    elif mode == "3D surface":
+        surface_paths, surface_target, surface_depth_at = _height_field_paths(
+            model.height_field,
+            orientation,
+            offset_x,
+            offset_y,
+            max_stepdown=max_stepdown if max_stepdown is not None else 1.0,
+            tool_radius=tool_diameter / 2,
+        )
+        if not surface_paths:
+            raise ValueError("The imported STEP height field has no connected raster pass")
     profile_paths = _profile_cutout_paths(region, tool_diameter) if mode == "Profile cutout" else []
     if _profile_outer_only:
         profile_paths = [path for path in profile_paths if path[1]]
@@ -228,7 +254,7 @@ def generate_step_gcode(
         ]
         strokes = [stroke for stroke, _depth in detected_paths]
         depth_paths = [-feature_depth for _stroke, feature_depth in detected_paths]
-    elif mode == "Planar surface":
+    elif mode in {"Planar surface", "3D surface"}:
         strokes = [tuple((x, y) for x, y, _z in path) for path in surface_paths]
     else:
         strokes = [stroke for stroke, _is_outer in profile_paths] if profile_paths else _toolpaths(model, loops, machining_region, mode, tool_diameter)
@@ -254,6 +280,13 @@ def generate_step_gcode(
             tuple((x + placement_offset_x, y + placement_offset_y, z) for x, y, z in path)
             for path in surface_paths
         )
+        if surface_target is not None:
+            surface_target = _translate_geometry(surface_target, placement_offset_x, placement_offset_y)
+        if surface_depth_at is not None:
+            previous_surface_depth_at = surface_depth_at
+            surface_depth_at = lambda x, y: previous_surface_depth_at(
+                x - placement_offset_x, y - placement_offset_y
+            )
         depth_paths = list(depth_paths)
         profile_paths = [
             (_translate_stroke(stroke, placement_offset_x, placement_offset_y), is_outer)
@@ -277,7 +310,7 @@ def generate_step_gcode(
     elif mode == "Profile cutout":
         profile_paths = _schedule_profile_paths(profile_paths)
         strokes = [stroke for stroke, _is_outer in profile_paths]
-    elif mode not in {"Planar surface", "Pocket", "Slot"}:
+    elif mode not in {"Planar surface", "3D surface", "Pocket", "Slot"}:
         strokes = _schedule_strokes(strokes)
     _validate_strokes_inside_stock(strokes, resolved_stock_width, resolved_stock_height)
     verification = None
@@ -332,6 +365,18 @@ def generate_step_gcode(
             stock_thickness=resolved_thickness,
             passes=passes,
         )
+    if mode == "3D surface":
+        surface_simulation = simulate_surface_paths(
+            surface_paths,
+            surface_target,
+            tool_diameter / 2,
+            surface_depth_at,
+            stock_width=resolved_stock_width,
+            stock_height=resolved_stock_height,
+            stock_thickness=resolved_thickness,
+            passes=1,
+            maximum_slope=1.75,
+        )
     profile_simulation: StepProfileSimulation | None = None
     if mode == "Profile cutout":
         profile_simulation = simulate_profile_paths(
@@ -380,7 +425,7 @@ def generate_step_gcode(
         )
     if surface_simulation is not None:
         commands.append(
-            f"; Simulation planar surface: reachable {surface_simulation.reachable_area:.3f} mm2, "
+            f"; Simulation {'3D' if mode == '3D surface' else 'planar'} surface: reachable {surface_simulation.reachable_area:.3f} mm2, "
             f"swept {surface_simulation.swept_area:.3f} mm2, "
             f"uncovered {surface_simulation.uncovered_area:.3f} mm2, "
             f"max Z error {surface_simulation.maximum_surface_error:.4f} mm"
@@ -405,12 +450,13 @@ def generate_step_gcode(
         )
     for pass_index in range(1, passes + 1):
         pass_depth = depth * pass_index / passes
-        if mode == "Planar surface":
+        if mode in {"Planar surface", "3D surface"}:
             for surface_path in surface_paths:
                 first_x, first_y, first_z = surface_path[0]
-                commands.extend((f"G0 X{_fmt(first_x)} Y{_fmt(first_y)}", f"G1 Z{_fmt(max(first_z, pass_depth))} F{plunge_feed:g}"))
+                initial_z = max(first_z, pass_depth) if mode == "Planar surface" else first_z
+                commands.extend((f"G0 X{_fmt(first_x)} Y{_fmt(first_y)}", f"G1 Z{_fmt(initial_z)} F{plunge_feed:g}"))
                 commands.extend(
-                    f"G1 X{_fmt(x)} Y{_fmt(y)} Z{_fmt(max(z, pass_depth))} F{cut_feed:g}"
+                    f"G1 X{_fmt(x)} Y{_fmt(y)} Z{_fmt(max(z, pass_depth) if mode == 'Planar surface' else z)} F{cut_feed:g}"
                     for x, y, z in surface_path[1:]
                 )
                 commands.append(f"G0 Z{safe_z:g}")
@@ -975,7 +1021,7 @@ def _cutout_placement_offset(
     # cutter, not just its centerline, remains inside the nonnegative stock
     # envelope.  Outside/profile paths already include outward compensation.
     sweep_padding = tool_diameter / 2 if mode in {
-        "Detected feature", "Inside contour", "Pocket", "Hole", "Slot", "Planar surface"
+        "Detected feature", "Inside contour", "Pocket", "Hole", "Slot", "Planar surface", "3D surface"
     } else 0.0
     return max(0.0, sweep_padding - min_x), max(0.0, sweep_padding - min_y)
 
@@ -1210,6 +1256,71 @@ def _planar_surface_paths(
         connected.append(active)
     minimum_depth = min(point[2] for path in connected for point in path)
     return tuple(connected), minimum_depth
+
+
+def _height_field_paths(
+    field: StepHeightField | None,
+    orientation: str,
+    offset_x: float,
+    offset_y: float,
+    *,
+    max_stepdown: float,
+    tool_radius: float,
+):
+    """Return connected boustrophedon passes over valid height-field cells."""
+    if field is None:
+        raise ValueError("A bounded STEP height field is required for 3D surface mode")
+    if not math.isfinite(max_stepdown) or not 0.01 <= max_stepdown <= 20:
+        raise ValueError("3D surface stepdown must be between 0.01 and 20 mm")
+    valid = [value for row in field.cells for value in row if value is not None]
+    if not valid:
+        return (), GeometryCollection(), lambda _x, _y: None
+    paths: list[tuple[tuple[float, float, float], ...]] = []
+    for row_index, row in enumerate(field.cells):
+        segments: list[list[tuple[float, float, float]]] = []
+        active: list[tuple[float, float, float]] = []
+        previous: float | None = None
+        for column_index, value in enumerate(row):
+            if value is None or (previous is not None and abs(value - previous) > max_stepdown + 1e-9):
+                if len(active) >= 2:
+                    segments.append(active)
+                active = []
+                previous = None
+                if value is None:
+                    continue
+            x = (column_index + 0.5) * field.resolution + offset_x
+            y = (row_index + 0.5) * field.resolution + offset_y
+            point = (x, y, float(value)) if orientation == "Top (XY)" else (y, x, float(value))
+            active.append(point)
+            previous = float(value)
+        if len(active) >= 2:
+            segments.append(active)
+        if row_index % 2:
+            segments = [list(reversed(segment)) for segment in reversed(segments)]
+        paths.extend(tuple(segment) for segment in segments)
+    # The target is the reachable portion of each emitted pass.  This keeps
+    # void/cliff splits explicit: a narrow void is never silently filled by a
+    # global buffer around the entire stock region, while the stock simulator
+    # still verifies the exact cutter footprint for every valid raster cell.
+    target = unary_union([
+        LineString([(x, y) for x, y, _z in path]).buffer(
+            tool_radius + max(0.05, tool_radius * 0.5), cap_style=1, join_style=1
+        )
+        for path in paths
+    ]).buffer(0) if paths else GeometryCollection()
+
+    def depth_at(x: float, y: float) -> float | None:
+        local_x, local_y = (x - offset_x, y - offset_y)
+        if orientation != "Top (XY)":
+            local_x, local_y = local_y, local_x
+        column = int(math.floor(local_x / field.resolution))
+        row = int(math.floor(local_y / field.resolution))
+        if not 0 <= row < field.rows or not 0 <= column < field.columns:
+            return None
+        value = field.cells[row][column]
+        return None if value is None else float(value)
+
+    return tuple(paths), target, depth_at
 
 
 def _validate_surface_patch_arrangement(

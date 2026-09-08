@@ -31,6 +31,16 @@ def main() -> int:
                 "face_origin": list(model.face_origin),
                 "face_u": list(model.face_u),
                 "face_v": list(model.face_v),
+                "height_field": None
+                if model.height_field is None
+                else {
+                    "resolution": model.height_field.resolution,
+                    "cells": model.height_field.cells,
+                    "triangle_count": model.height_field.triangle_count,
+                    "source": model.height_field.source,
+                    "max_cells": model.height_field.max_cells,
+                    "collision_only": model.height_field.collision_only,
+                },
                 "features": [
                     {
                         "kind": feature.kind,

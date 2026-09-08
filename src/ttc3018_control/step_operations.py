@@ -117,6 +117,8 @@ def build_step_operation_plan(
         return _topological_operation_order(tuple(operations))
     if mode == "Planar surface":
         return (StepOperation("planar-surface", "Planar surface raster", depth, strategy="height-field raster"),)
+    if mode == "3D surface":
+        return (StepOperation("3d-surface", "3D surface raster", depth, strategy="bounded triangulated height-field raster"),)
     strategies = {
         "Engraving": "single-pass centerline",
         "Outside contour": "compensated outside contour",

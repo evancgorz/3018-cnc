@@ -1767,3 +1767,51 @@ finite thickness, rotated nested-loop generation/program bounds, rotated
 compound disconnected roots, and invalid input rejection. No GUI, hardware,
 USB/COM/Wi-Fi/non-loopback endpoint, runtime config, generated evidence, or
 protected artifact was accessed or staged.
+
+## M1 bounded triangulated STEP surface machining (2026-09-08)
+
+Added an immutable `StepHeightField` observation to the normalized STEP model.
+The isolated OCP worker meshes the imported solid after legacy planar-feature
+classification, projects triangle vertices into the selected S1 face basis,
+and rasterizes the highest visible finite intersection at a deterministic
+1.0 mm resolution under a 20,000-cell/50,000-triangle budget. Payload round
+trip preserves cells, resolution, triangle count, digest inputs, and explicit
+`collision_only` metadata. Empty, non-finite, malformed, or over-budget
+observations fail closed; cells with more than the supported visible layer
+count are labeled collision-only and cannot enter the machining generator.
+
+Added the public `3D surface` mode. It emits deterministic connected
+boustrophedon raster paths only across valid cells, splits at voids and
+stepdown cliffs, keeps safe-Z/retracts, and validates the exact generated
+program through the existing parser, nonnegative work-XY, rapid-clearance,
+envelope, and surface-stock simulation gates. The simulation target is the
+reachable footprint of the emitted valid passes, so voids are not bridged by a
+global stock fill. Unsupported undercuts/overhangs remain collision-only;
+this package makes no adaptive clearing, waterline, rest-machining,
+force/thermal/deflection, or CAM lead-in claim.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_surface_3d.py` →
+  **7 passed in 7.37s**.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_surface_3d.py
+  tests/test_step_geometry_s1.py tests/test_step_geometry.py
+  tests/test_step_engraver.py tests/test_step_operations.py
+  tests/test_step_simulation.py` → **107 passed in 74.03s** (post-correction
+  legacy/M1 run).
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_surface_3d.py
+  tests/test_simulation_generated_step.py tests/test_simulation_geometry_and_parity.py
+  tests/test_simulation_public_scenarios.py tests/test_qt_shell.py
+  tests/test_application_contracts.py` → **127 passed in 54.26s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **539 passed in 152.29s (0:02:32)**.
+- `git diff --check` → **passed before checkpoint staging**.
+
+The OCP/fixture regressions cover deterministic repeated mesh import and
+digest, curved/compound relief fixtures, valid raster generation and parser
+bounds, synthetic void/cliff splitting without path bridging, explicit
+collision-only rejection, missing observation rejection, and malformed or
+over-budget field rejection. No GUI, hardware, USB/COM/Wi-Fi/non-loopback
+endpoint, runtime config, generated evidence, or protected artifact was
+accessed or staged.

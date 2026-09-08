@@ -245,7 +245,7 @@ streaming pipeline.
 
 ## Deferred deliberately
 
-- [ ] General-purpose 3D STEP surface machining.
+- [x] Bounded triangulated visible-surface STEP height-field raster at deterministic resolution with void/cliff splits; unsupported undercuts/overhangs remain collision-only and general adaptive 3D CAM is deferred.
 - [x] Bounded arbitrary-angle planar-face orientation using serialized orthonormal basis projection, including disconnected/nested planar topology; curved/non-planar 3D remains unsupported.
 - [ ] 3D adaptive clearing, waterline, raster, or rest machining.
 - [x] Full-resolution swept height-field stock collision simulation at the configured resolution for accepted executed paths, including ramps and multi-segment paths; unsupported arbitrary 3D remains collision-only.
@@ -310,3 +310,4 @@ streaming pipeline.
 | 2026-09-08 | `F1` | Added configured-resolution swept rectangle/footprint stock removal for accepted executed segments, including tangent, diagonal/ramp, and multi-segment paths; arbitrary 3D remains collision-only. |
 | 2026-09-08 | `B1` | Added validated simulation polygon boundary probing through loopback G38.2 first-contact reports and a bounded four-direction trace orchestrator; physical probe repeatability remains unclaimed. |
 | 2026-09-08 | `S1` | Added deterministic ARBITRARY planar-face basis projection and isolated-worker round trip for rotated, compound, and nested planar STEP topology; curved/non-planar 3D remains deferred. |
+| 2026-09-08 | `M1` | Added bounded isolated OCP triangulation and serialized visible-surface height fields with deterministic `3D surface` raster generation, parser/envelope/stock simulation gates, and fail-closed collision-only undercut metadata; adaptive/waterline/rest/CAM lead-ins remain deferred. |

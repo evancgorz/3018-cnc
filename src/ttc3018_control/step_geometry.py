@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -88,6 +89,74 @@ class PlanarSurfacePatch:
 
 
 @dataclass(frozen=True)
+class StepHeightField:
+    """Bounded, immutable tool-axis-visible STEP surface observation.
+
+    ``cells`` is indexed as ``cells[row][column]`` in the selected face
+    basis.  Values are signed work-Z heights relative to the selected face
+    origin; ``None`` is an intentional void where no triangulated surface is
+    visible.  This is an observation for the bounded raster strategy, not a
+    general solid/material simulation.
+    """
+
+    resolution: float
+    cells: tuple[tuple[float | None, ...], ...]
+    triangle_count: int
+    source: str = "OCP triangulation"
+    max_cells: int = 20_000
+    collision_only: bool = False
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.resolution) or self.resolution <= 0:
+            raise ValueError("STEP height-field resolution must be finite and positive")
+        if not isinstance(self.triangle_count, int) or self.triangle_count <= 0:
+            raise ValueError("STEP height-field triangle count must be positive")
+        if not isinstance(self.max_cells, int) or self.max_cells <= 0:
+            raise ValueError("STEP height-field cell budget must be positive")
+        if not isinstance(self.collision_only, bool):
+            raise ValueError("STEP height-field collision-only metadata must be boolean")
+        if not self.cells or not self.cells[0]:
+            raise ValueError("STEP height-field must contain a non-empty grid")
+        width = len(self.cells[0])
+        if any(len(row) != width for row in self.cells):
+            raise ValueError("STEP height-field rows must have equal width")
+        if len(self.cells) * width > self.max_cells:
+            raise ValueError("STEP height-field exceeds the configured cell budget")
+        if any(value is not None and (not math.isfinite(value)) for row in self.cells for value in row):
+            raise ValueError("STEP height-field contains a non-finite cell")
+
+    @property
+    def rows(self) -> int:
+        return len(self.cells)
+
+    @property
+    def columns(self) -> int:
+        return len(self.cells[0])
+
+    @property
+    def valid_cells(self) -> int:
+        return sum(value is not None for row in self.cells for value in row)
+
+    @property
+    def void_cells(self) -> int:
+        return self.rows * self.columns - self.valid_cells
+
+    @property
+    def digest(self) -> str:
+        payload = json.dumps(
+            {
+                "resolution": self.resolution,
+                "triangle_count": self.triangle_count,
+                "collision_only": self.collision_only,
+                "cells": self.cells,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True)
 class StepPlanarModel:
     path: Path
     loops: tuple[PlanarLoop, ...]
@@ -102,6 +171,7 @@ class StepPlanarModel:
     face_origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
     face_u: tuple[float, float, float] = (1.0, 0.0, 0.0)
     face_v: tuple[float, float, float] = (0.0, 1.0, 0.0)
+    height_field: StepHeightField | None = None
 
     @property
     def face_basis(self) -> tuple[tuple[float, float, float], ...]:
@@ -363,6 +433,19 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
             tuple(float(value) for value in payload.get("face_origin", (0.0, 0.0, 0.0))),
             tuple(float(value) for value in payload.get("face_u", (1.0, 0.0, 0.0))),
             tuple(float(value) for value in payload.get("face_v", (0.0, 1.0, 0.0))),
+            None
+            if payload.get("height_field") is None
+            else StepHeightField(
+                float(payload["height_field"]["resolution"]),
+                tuple(
+                    tuple(None if value is None else float(value) for value in row)
+                    for row in payload["height_field"]["cells"]
+                ),
+                int(payload["height_field"]["triangle_count"]),
+                str(payload["height_field"].get("source", "OCP triangulation")),
+                int(payload["height_field"].get("max_cells", 20_000)),
+                bool(payload["height_field"].get("collision_only", False)),
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StepImportError("STEP importer returned incomplete geometry") from exc
@@ -370,6 +453,8 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
 
 def _ocp_modules() -> dict[str, Any]:
     try:
+        from OCP.BRep import BRep_Tool
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
         from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
         from OCP.BRepBndLib import BRepBndLib
         from OCP.BRepTools import BRepTools_WireExplorer
@@ -378,6 +463,7 @@ def _ocp_modules() -> dict[str, Any]:
         from OCP.IFSelect import IFSelect_RetDone
         from OCP.STEPControl import STEPControl_Reader
         from OCP.TopAbs import TopAbs_FACE, TopAbs_WIRE
+        from OCP.TopLoc import TopLoc_Location
         from OCP.TopExp import TopExp_Explorer
         from OCP.TopoDS import TopoDS
     except ImportError as exc:
@@ -518,6 +604,7 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
                  if selected_axis != "ARBITRARY"
                  else _basis_thickness(bounds, basis[3], planar_faces))
     loop_parents = loop_containment_parents(normalized)
+    height_field = None
     if selected_axis == "ARBITRARY":
         features = ()
         surface_patches = ()
@@ -533,6 +620,17 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
             planar_faces, selected_axis, machine_top, min_x, min_y, modules
         )
         top_z = face_coordinate
+    # Mesh only after OCC feature/surface classification: incremental meshing
+    # can mutate native topology caches used by the legacy axial analyzers.
+    height_field = _triangulated_height_field(
+        shape,
+        modules,
+        basis,
+        min_x,
+        min_y,
+        max(point.x for loop in normalized for point in loop.points),
+        max(point.y for loop in normalized for point in loop.points),
+    )
     return StepPlanarModel(
         path,
         normalized,
@@ -547,6 +645,7 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         basis[0],
         basis[1],
         basis[2],
+        height_field,
     )
 
 
@@ -629,6 +728,152 @@ def _basis_thickness(
     if not math.isfinite(thickness) or thickness <= 1e-9:
         raise StepImportError("Planar face has no finite solid thickness along its normal")
     return thickness
+
+
+def _triangulated_height_field(
+    shape: Any,
+    modules: dict[str, Any],
+    basis: tuple[tuple[float, float, float], ...],
+    projected_offset_x: float,
+    projected_offset_y: float,
+    width: float,
+    height: float,
+    *,
+    resolution: float = 1.0,
+    max_cells: int = 20_000,
+    max_triangles: int = 50_000,
+) -> StepHeightField | None:
+    """Build a bounded visible-surface grid from the isolated OCC mesh.
+
+    The mesh is deliberately an observation only: each cell stores the
+    highest triangle intersection along the selected face normal.  This
+    makes voids and undercuts explicit instead of flattening them into a
+    claimed finished surface.
+    """
+    if not all(math.isfinite(value) for value in (projected_offset_x, projected_offset_y, width, height)):
+        raise StepImportError("STEP height-field bounds are non-finite")
+    if width <= 1e-9 or height <= 1e-9:
+        raise StepImportError("STEP height-field has no measurable projected area")
+    columns = max(1, math.ceil(width / resolution))
+    rows = max(1, math.ceil(height / resolution))
+    if rows * columns > max_cells:
+        # Keep ordinary import usable, while the 3D surface mode fails closed
+        # when no bounded observation is available.
+        return None
+    try:
+        modules["BRepMesh_IncrementalMesh"](
+            shape,
+            max(0.05, resolution * 0.25),
+            False,
+            0.5,
+            True,
+        )
+    except Exception:
+        return None
+    triangles: list[tuple[tuple[float, float, float], ...]] = []
+    explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
+    while explorer.More():
+        face = modules["TopoDS"].Face_s(explorer.Current())
+        location = modules["TopLoc_Location"]()
+        triangulation = modules["BRep_Tool"].Triangulation_s(face, location)
+        if triangulation is not None and triangulation.NbNodes() and triangulation.NbTriangles():
+            transform = location.Transformation()
+            nodes = {}
+            for index in range(1, triangulation.NbNodes() + 1):
+                point = triangulation.Node(index).Transformed(transform)
+                values = (float(point.X()), float(point.Y()), float(point.Z()))
+                if not all(math.isfinite(value) for value in values):
+                    raise StepImportError("STEP mesh contains a non-finite vertex")
+                projected = _basis_project_world(values, basis)
+                nodes[index] = (
+                    projected[0] - projected_offset_x,
+                    projected[1] - projected_offset_y,
+                    projected[2],
+                )
+            for index in range(1, triangulation.NbTriangles() + 1):
+                triangle = triangulation.Triangle(index).Get()
+                points = tuple(nodes[node] for node in triangle)
+                if _triangle_area_xy(points) > 1e-9:
+                    triangles.append(points)
+                    if len(triangles) > max_triangles:
+                        return None
+        explorer.Next()
+    if not triangles:
+        return None
+    cells: list[list[float | None]] = [[None for _ in range(columns)] for _ in range(rows)]
+    collision_only = False
+    for row in range(rows):
+        sample_y = (row + 0.5) * resolution
+        for column in range(columns):
+            sample_x = (column + 0.5) * resolution
+            samples: list[float] = []
+            for triangle in triangles:
+                triangle_min_x = min(point[0] for point in triangle)
+                triangle_max_x = max(point[0] for point in triangle)
+                triangle_min_y = min(point[1] for point in triangle)
+                triangle_max_y = max(point[1] for point in triangle)
+                if not triangle_min_x - 1e-9 <= sample_x <= triangle_max_x + 1e-9:
+                    continue
+                if not triangle_min_y - 1e-9 <= sample_y <= triangle_max_y + 1e-9:
+                    continue
+                z = _triangle_height_at(triangle, sample_x, sample_y)
+                if z is not None:
+                    samples.append(float(z))
+            if samples:
+                layers: list[float] = []
+                for value in sorted(samples):
+                    if not layers or abs(value - layers[-1]) > 0.25:
+                        layers.append(value)
+                # More than the ordinary top/bottom or pocket-floor layers
+                # means the projected cell contains an overhang/undercut
+                # that a single visible height cannot represent safely.
+                if len(layers) > 3:
+                    collision_only = True
+                cells[row][column] = round(max(samples), 9)
+    if not any(value is not None for row in cells for value in row):
+        return None
+    return StepHeightField(
+        resolution,
+        tuple(tuple(row) for row in cells),
+        len(triangles),
+        max_cells=max_cells,
+        collision_only=collision_only,
+    )
+
+
+def _basis_project_world(
+    point: tuple[float, float, float],
+    basis: tuple[tuple[float, float, float], ...],
+) -> tuple[float, float, float]:
+    origin, u, v, normal = basis
+    delta = tuple(point[index] - origin[index] for index in range(3))
+    return (
+        sum(delta[index] * u[index] for index in range(3)),
+        sum(delta[index] * v[index] for index in range(3)),
+        sum(delta[index] * normal[index] for index in range(3)),
+    )
+
+
+def _triangle_area_xy(triangle: tuple[tuple[float, float, float], ...]) -> float:
+    (ax, ay, _), (bx, by, _), (cx, cy, _) = triangle
+    return abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) * 0.5
+
+
+def _triangle_height_at(
+    triangle: tuple[tuple[float, float, float], ...],
+    x: float,
+    y: float,
+) -> float | None:
+    (ax, ay, az), (bx, by, bz), (cx, cy, cz) = triangle
+    denominator = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+    if abs(denominator) <= 1e-12:
+        return None
+    first = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / denominator
+    second = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / denominator
+    third = 1.0 - first - second
+    if min(first, second, third) < -1e-8:
+        return None
+    return first * az + second * bz + third * cz
 
 
 def _merge_coplanar_loops(

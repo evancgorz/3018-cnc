@@ -1648,3 +1648,42 @@ Luna must run focused geometry/engraver/import tests, affected simulation and
 Qt/application tests, compileall, diff checks, and the full suite. Commit and
 push only this package plus its contract/result/progress evidence; leave the
 remaining 3D/adaptive/CAM backlog items untouched.
+
+## Sol plan — M1 bounded triangulated 3D STEP surface machining (2026-09-08)
+
+Implement the next unchecked general-purpose 3D STEP surface item as a
+bounded, deterministic triangulated height-field pipeline. This package must
+remain hardware-free and use the existing parser, envelope, stock, and
+independent-safety gates.
+
+### Required behavior
+
+- Add an immutable normalized `StepHeightField`/mesh observation to the
+  isolated STEP model. Triangulate the selected solid/faces inside the OCP
+  worker, project vertices into the selected face basis (including S1
+  arbitrary planar bases), and rasterize a bounded finite grid of the
+  tool-axis-visible surface. Preserve valid/void cells, target depth, and
+  deterministic resolution/metadata; reject non-finite, empty, inverted, or
+  over-budget meshes fail-closed.
+- Add a `3D surface` machining mode that generates connected raster passes
+  over valid height-field cells with safe Z, bounded stepdown, cliff/void
+  splits, and deterministic pass ordering. Do not bridge voids or steep
+  discontinuities. Every generated program must pass the existing metric
+  parser, nonnegative work-XY, rapid-clearance, envelope, and surface-stock
+  simulation gates.
+- Keep existing orthogonal/planar/ramp/feature jobs byte-compatible unless the
+  new mode is selected. Unsupported undercuts/overhangs must be labeled
+  collision-only or rejected, never silently flattened into a claimed finished
+  part. Carry the grid through the isolated worker payload and model round trip.
+- Add OCP-generated curved/compound/rotated fixtures and deterministic tests
+  for mesh import, repeated payload/digest stability, raster coverage, void and
+  cliff handling, parser bounds, stock simulation, malformed/over-budget
+  rejection, and no transport/hardware calls. Add a public mode contract test
+  if the Qt mode list is changed.
+- Update STEP progress/result with the exact bounded capability and limitations;
+  do not claim force/thermal/deflection or arbitrary undercut machining.
+
+Luna must run focused M1 geometry/engraver/simulation tests, affected Qt and
+application tests, compileall, diff checks, and the full suite. Commit and
+push only this package plus contract/result/progress evidence. Leave adaptive
+clearing/waterline/rest and CAM lead-in work for later packages.
