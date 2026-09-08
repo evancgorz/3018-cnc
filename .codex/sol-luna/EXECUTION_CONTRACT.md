@@ -901,6 +901,136 @@ groups. Record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
 
+## Sol replan delta — homing sensors, E-stop handling, and automated XYZ datum (2026-09-07)
+
+The user has materially expanded the backlog with three safety-critical
+capabilities. This section supersedes any earlier statement that homing
+switches or XYZ fixtures are hidden or unimplemented. Work remains backend-
+first and simulation-only until a separate commissioning authorization.
+
+### Package H1 — explicit homing/limit capability and digital-twin sensors
+
+Audit the existing machine-definition, commissioning, GRBL adapter, controller,
+and setup UI paths. Extend the versioned machine schema (with migration and
+fingerprint invalidation) so X, Y, and Z independently declare a homing/limit
+switch, input pin, active-low polarity, home end (default `min`, with explicit
+`max` support), and hard-limit behavior. Preserve the 3018 travel defaults
+(290/170/40 mm) and the ability to leave every optional capability disabled.
+Expose the declarations and commissioning state publicly; do not silently
+assume a switch exists because a pin is reported.
+
+Extend the virtual plant/controller so each axis has deterministic switch
+activation at the configured machine-frame end, applies polarity consistently,
+reports GRBL `Pn:X/Y/Z` inputs, models `$22` homing enable, `$23` homing-direction
+mask, `$5` limit polarity, and `$21` hard-limit enable where supported, and
+keeps homing acknowledgement separate from motion completion. A configured
+minimum-end switch must home toward zero; a maximum-end switch must home toward
+the configured travel. A hard-limit transition during ordinary motion must
+stop motion, emit a stable alarm, and invalidate reference; a homing cycle must
+only trust a fresh Idle report after the expected switches and direction are
+observed. Wrong polarity, missing axis, simultaneous unexpected inputs,
+switch chatter, travel overshoot, and reset during homing fail closed.
+
+Add a deterministic commissioning workflow for testing X/Y/Z inputs one at a
+time (inactive -> active -> released), direction/end review, and a homing
+cycle. Store machine-scoped evidence and stale it when switch geometry,
+polarity, pin, controller, or travel changes. Add focused unit, controller,
+runtime, public-scenario, and property tests for every axis, both ends,
+active-high/active-low, hard-limit versus homing semantics, and no physical
+factory calls.
+
+### Package H2 — hardware-safe emergency-stop contract
+
+Add a versioned E-stop capability definition and commissioning record. Model
+the real safety boundary explicitly: a safety-rated power cutoff remains the
+primary protection; a GRBL reset pin may stop the controller but may provide no
+feedback, so an optional feedback input is required if the application must
+display a confirmed physical E-stop state. Support disabled, reset-only,
+feedback-only, and reset-plus-feedback declarations with active-low polarity,
+debounce, latching, and an explicit manual-reset/re-reference requirement.
+
+Through the production controller boundary, an E-stop event must immediately
+stop scheduling, request spindle-off/hold when possible, clear or abort the
+active job, latch an interlock, invalidate reference and work-zero trust, and
+block all motion, probing, homing, and restart commands until the input is
+released, the controller is known Idle, and the user performs an explicit
+reset/re-reference acknowledgement. Treat GRBL reset banners, alarm responses,
+feedback pin transitions, timeout, and contradictory signals as fail-closed.
+Never claim software E-stop equivalence to a safety-rated circuit and never
+emit a physical reset or GPIO action from the twin by default.
+
+Extend the digital twin with deterministic E-stop injection and telemetry,
+including spindle-off, queue/process cleanup, stable alarm/interlock evidence,
+manual recovery, and replay. Add regression tests for idle, jog, probing,
+homing, active job, pause/resume, alarm, disconnect, reset, feedback polarity,
+debounce/chatter, missing feedback, and recovery ordering. Add a concise wiring
+and commissioning document that calls out reset-pin caveats and requires
+physical power removal to remain reachable.
+
+### Package H3 — automated XYZ calibration-plate work-zero workflow
+
+Keep the existing manual `Zero X`, `Zero Y`, `Zero Z`, and `Zero XYZ` actions.
+Add a separate, explicitly selected `Auto XYZ calibration plate` workflow;
+never replace or silently reinterpret the manual buttons. Define a versioned
+calibration-plate geometry containing the square plate datum, corner-circle
+center/radius or diameter, plate thickness, tool-radius compensation,
+clearance/safe-Z, search margins, fast/slow feeds, repeatability tolerance,
+maximum XY/Z travel, and the conductive probe input/polarity. Require a
+machine-scoped input/geometry commissioning record before enabling it.
+
+The safe state machine is: trusted homed/reference state (automatic `$H` when
+commissioned, otherwise an explicit manual reference) -> spindle off and Idle
+-> user places the tool tip inside the known corner circle and confirms the
+starting pose -> retract to safe Z -> perform bounded, low-speed orthogonal
+edge searches (or a declared camera-assisted equivalent when that capability is
+actually available) to collect at least four contact points -> solve the circle
+center with tool-radius compensation and a deterministic residual/repeatability
+check -> verify the solved center and all moves remain inside the 3018 envelope
+and outside the forbidden holder/plate regions -> move to a validated point
+outside the circle -> perform the existing two-stage Z touch sequence -> set
+only the intended G54 X/Y/Z work offset after fresh reports confirm it ->
+retract to safe Z and optionally return to reference/work zero. The initial
+pose is an interior seed, not evidence of the center; without an available
+contact or vision signal the workflow must refuse to guess.
+
+Every segment must be collision/swept-path checked by the twin and the
+independent operator. Unexpected contact, no-contact timeout, out-of-envelope
+search, radius/residual mismatch, active spindle, stale WCO, plate-removal
+acknowledgement, E-stop, switch alarm, supervisor loss, or any uncertain state
+must stop, retract only when proven safe, latch an alarm/interlock, and leave
+work zero unconfirmed. Record a typed trace containing seed pose, contact
+points, fitted center/residual, compensation, Z triggers, generated commands,
+hazards, and final WCO; export JSON and Markdown evidence.
+
+Add deterministic geometry/state-machine tests for ideal and noisy circles,
+tool-radius offsets, interior seeds near each quadrant, insufficient search
+space, wrong plate size, missing/stuck/inverted probe input, failed contact,
+holder/fixture/bed collisions, switch/E-stop interruption, stale WCO, and
+replay-stable successful and failed runs. Exercise the complete public
+loopback twin boundary and verify no USB/COM/Wi-Fi or non-loopback endpoint is
+selected.
+
+### Package H4 — public UI, documentation, and evidence gates
+
+Expose H1/H2/H3 through the existing public view-model/QML boundaries with
+clear capability-gated controls, per-axis switch end/polarity, homing and
+E-stop commissioning status, manual-versus-automatic work-zero choice,
+progress/abort/recovery messaging, and a simulator overlay that shows switch
+states, E-stop latch, circle geometry, contact points, fitted center, Z-touch
+path, hazards, and final verdict. Keep all physical controls disabled until
+their evidence is current. Update README and dedicated commissioning docs
+with the exact physical prerequisites and no-hardware simulation procedure.
+
+Validation order for each package is targeted static/compile checks, focused
+unit tests, affected simulation/controller/application tests, deterministic
+multi-seed/property and replay tests, then one concise public UI acceptance
+pass. Review staged files and exclude generated evidence, runtime config,
+`%SystemDrive%`, credentials, and unrelated user changes. Commit and push each
+package separately to the tracked branch, confirm the remote commit, and
+update `EXECUTION_RESULT.md` with exact commands, counts, digests, and any
+remaining GUI or physical-commissioning gap. Do not access real hardware or
+perform a physical A/B run.
+
 ## Sol program delta — synthetic A/B commissioning plan and fixtures (2026-09-07)
 
 The final scheduled package is a P3 synthetic twin-versus-controller A/B
