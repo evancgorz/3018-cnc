@@ -1031,6 +1031,70 @@ update `EXECUTION_RESULT.md` with exact commands, counts, digests, and any
 remaining GUI or physical-commissioning gap. Do not access real hardware or
 perform a physical A/B run.
 
+## Sol replan delta — production calibration execution and safety control plane (2026-09-07)
+
+The H1-H4 checkpoint provides the safety contracts and deterministic plan
+helpers, but Sol review finds one material end-state gap: the automated XYZ
+workflow is not yet executed through the production application/controller and
+the twin's ordinary GRBL probe boundary. The next coherent package is H5.
+
+### H5.1 — public safety control plane
+
+Expose versioned homing/limit declarations, commissioning evidence, E-stop
+status/release/acknowledgement, and simulation sensor injection through the
+existing ApplicationController/ViewModel public methods. Preserve the physical
+capability gate: no declaration or simulated telemetry may imply that a real
+switch, reset pin, GPIO, or safety-rated cutoff exists. Add deterministic
+headless Qt/application tests for disconnected/connected, active/released,
+stale/invalidated evidence, and every recovery rejection path. Keep physical
+transport factories untouched and disabled by default.
+
+### H5.2 — ordinary-protocol calibration execution
+
+Add a production application service/state machine that consumes the existing
+`CalibrationPlateDefinition` and `AutoXYZCalibrationWorkflow` plan through the
+same `send_manual`/response/status boundaries used by physical GRBL. It must
+sequence: trusted reference and Idle/spindle-off gate; safe-Z retract; four
+bounded orthogonal `G38.2` searches; ordered `[PRB:...]` contact responses;
+circle fit/residual and tool-radius validation; safe outside-circle witness
+move; existing two-stage Z probe; intended G54 update; fresh WCO confirmation;
+safe retract and explicit plate-removal acknowledgement. Manual Zero actions
+remain unchanged.
+
+Every command must be acknowledged and motion/status-complete before the next
+stage. Abort, alarm, E-stop, limit input, no-contact, timeout, malformed probe,
+stale WCO, supervisor loss, or collision must stop the transaction, request
+spindle-off/hold where possible, leave work zero unconfirmed, and expose a
+typed failure reason and replayable trace. No direct simulator-state mutation
+is allowed.
+
+### H5.3 — twin geometry and production-boundary fixtures
+
+Extend the virtual GRBL plant/controller with an optional conductive corner
+circle/plate geometry. During ordinary `G38.2` X/Y motion, the twin must stop at
+the first swept tool/plate contact, emit the same ordered `[PRB:x,y,z:1]`
+response as a real controller, and report failure when the bounded search does
+not contact. Preserve normal Z-surface probing, spindle, WCO, limits, and
+collision/operator semantics. Geometry must be explicit, versioned, and inert
+unless a simulation fixture is supplied.
+
+Add deterministic loopback tests for ideal/noisy fits, all four search
+directions, tool-radius and WCO transforms, successful end-to-end calibration,
+wrong plate/insufficient search/no-contact, probe polarity, limit/E-stop/
+collision interruption, ordered acknowledgements, stale WCO, plate removal,
+replay digest, and exact process cleanup. At least one test must drive the
+ApplicationController over the loopback runtime rather than calling the
+workflow helper directly.
+
+### H5.4 — validation and checkpoint
+
+Run focused calibration/control-plane tests, then affected simulation,
+application, spawn-worker, and Qt shell tests; run compileall and diff checks.
+Review only intended source/tests/docs, exclude generated/config/evidence and
+`%SystemDrive%`, commit and push H5 as a separate checkpoint, and append exact
+evidence to `EXECUTION_RESULT.md`. Do not launch the GUI after source changes,
+access hardware, select USB/COM/Wi-Fi, or use non-loopback endpoints.
+
 ## Sol program delta — synthetic A/B commissioning plan and fixtures (2026-09-07)
 
 The final scheduled package is a P3 synthetic twin-versus-controller A/B

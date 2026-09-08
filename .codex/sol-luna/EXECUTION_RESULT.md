@@ -559,6 +559,19 @@ Validation:
   → **153 passed in 19.31s**.
 - `python -m compileall -q src/ttc3018_control` and `git diff --check` passed.
 
+## Sol independent review — H5 production calibration (2026-09-07)
+
+Independent verification after the H5 correction passed:
+
+- `tests/test_simulation_h5.py tests/test_simulation_core.py -k
+  "calibration or estop"` → **2 passed, 25 deselected**.
+- PowerShell-expanded simulation tests plus application, homing, machine-config,
+  Qt shell, and H5 coverage → **238 passed in 81.98s**.
+
+Remote `main` was confirmed at `3dd4382`. The remaining overall status is
+**PARTIAL** only for the previously documented post-source-change GUI visual/
+export acceptance and the intentionally deferred physical commissioning.
+
 ## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
 
 Implemented the bounded safety-input package headlessly and simulation-only.
