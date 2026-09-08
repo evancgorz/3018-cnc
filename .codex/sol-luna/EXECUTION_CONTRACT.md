@@ -1255,3 +1255,52 @@ trace/verify/scenario tests followed by affected simulation/application/public
 gates, record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
+
+## Sol replan delta — public safety commissioning and Auto XYZ controls (2026-09-08)
+
+The backend safety contracts are present, but the public surface still hides
+the capability that the requested workflow needs: `MachineSetupDialog.qml`
+describes homing/limit switches and XYZ fixtures as temporarily unimplemented,
+`simulation_auto_xyz_available` is hard-coded false, and the Auto XYZ preview
+button has an empty handler. This package closes that architectural boundary
+without any GUI launch or physical transport access.
+
+### H6.1 — explicit homing/limit configuration through public application APIs
+
+Add a validated ApplicationController/ViewModel boundary for per-axis
+homing/limit declarations: switch enabled, minimum/maximum home end, input pin,
+active-low polarity, hard-limit behavior, debounce, and optional measured
+maximum. Keep the existing 3018 travel defaults and `MachineDefinition`
+fingerprints authoritative. When connected to a real controller, apply only
+the ordinary GRBL `$5/$21/$22/$23` settings after Idle and preserve the
+no-motion/physical-safety gates; when disconnected, persist the declaration for
+later commissioning. The digital twin must receive the same declaration through
+its existing runtime control boundary. No physical factory, discovery, COM,
+USB, Wi-Fi, or non-loopback endpoint may be selected by tests.
+
+### H6.2 — commissioned simulation plate and public Auto XYZ workflow
+
+Expose an explicit simulation-only calibration-plate fixture using the existing
+`CalibrationPlateDefinition`, `CalibrationCommissioningRecord`, and
+`ProbeCornerCircle` contracts. A fresh twin may offer Auto XYZ only when the
+fixture is present and its machine-scoped commissioning record is valid; a
+physical connection must remain unavailable until a real commissioning record
+exists. Provide a public dialog/control that accepts the user's interior seed
+pose, shows the bounded search/safe-retract/Z-touch plan and typed state, starts
+and aborts through the existing ApplicationController methods, and never emits
+raw plant mutations or motion from QML. Preserve the separate manual Zero X/Y/Z
+and Zero XYZ buttons.
+
+### H6.3 — headless verification and checkpoint
+
+Add deterministic tests for declaration persistence/validation, per-axis
+polarity/end/pin mapping, GRBL setting application and Idle gating, simulation
+projection/cleanup, Auto XYZ availability gating, seed validation, start/abort
+and fail-closed interlocks, and QML bindings/action enablement. Include at least
+one ApplicationController loopback calibration through the public ViewModel
+boundary. Run focused config/application/Qt tests, affected simulation and
+spawn-worker tests, compileall, and the full suite; record exact evidence in
+`EXECUTION_RESULT.md`, review staged scope, and commit/push this package
+separately. Do not launch/relaunch the GUI after source edits, access hardware,
+or stage generated/config/evidence artifacts. A fresh manual GUI relaunch is
+still required later for the native visual/export gate.
