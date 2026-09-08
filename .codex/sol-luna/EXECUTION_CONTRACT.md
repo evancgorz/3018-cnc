@@ -1362,3 +1362,15 @@ headless/Qt regressions for path provenance, import completion/error feedback,
 and QML binding. Run affected tests and the full suite, record evidence, and
 commit/push the correction. No GUI relaunch after edits, hardware, physical
 transport, or generated/config/evidence staging.
+
+## Sol review delta — remove stale hidden-capability messaging (2026-09-08)
+
+Update `CommissioningDialog.qml` and `docs/Z_TOUCH_PLATE.md`, which still say
+homing switches and XYZ fixtures are hidden until implemented. The current
+public surface exposes per-axis homing/limit declarations, simulation E-stop
+exercises, and the simulation-only Auto XYZ fixture; physical commissioning
+must still be explicitly performed and remains outside this hardware-free
+workflow. Replace the stale wording with that precise boundary and add a static
+Qt/documentation regression. Run the focused Qt/documentation tests and full
+suite, append evidence, and commit/push this correction. No GUI relaunch,
+hardware, physical transport, or generated/config/evidence staging.
