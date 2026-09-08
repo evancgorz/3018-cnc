@@ -495,6 +495,33 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## QML warning audit — undefined STEP palette color (2026-09-07)
+
+Audited the archived tagged-validator logs without launching or interacting
+with any Pine instance. The historical logs consistently reported two copies
+of `Unable to assign [undefined] to QColor` at `Main.qml:901:52` while the
+STEP setup panel was created. The current source location is the STEP
+operation delegate at `Main.qml:928`; it referenced `window.palette.elevated`,
+but the shared palette declares `raised` and has no `elevated` key. This was a
+real visual/QML defect (and not a digital-twin safety-state defect), so the
+reference was corrected to `window.palette.raised`.
+
+Added `test_main_qml_palette_references_are_declared`, which statically checks
+that every `window.palette.*` reference in `Main.qml` is declared by the
+palette. No GUI was relaunched for this audit; the archived warning is the
+only runtime evidence, and a future clean validator run should confirm the
+warning is absent.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest -q tests/test_qt_shell.py -k
+  "palette or simulation"` → **9 passed, 25 deselected in 1.17s**.
+- `.venv\\Scripts\\python.exe -m pytest -q` → **500 passed in 133.89s**.
+
+Only `Main.qml`, `tests/test_qt_shell.py`, and this result audit are in scope;
+the contract, generated evidence, runtime/config files, `%SystemDrive%`, and
+unrelated user work remain unstaged.
+
 ## H5 homing/E-stop/public auto-XYZ calibration — 2026-09-07
 
 Implemented the H5 production-boundary slice headlessly, without GUI or

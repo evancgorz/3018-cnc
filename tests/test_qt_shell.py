@@ -5,6 +5,7 @@ import math
 import os
 import queue
 from pathlib import Path
+import re
 from types import SimpleNamespace
 import time
 
@@ -79,6 +80,16 @@ def test_simulation_gui_launcher_sentinels_and_manifest_are_isolated(tmp_path) -
     assert json.loads(path.read_text(encoding="utf-8")) == manifest
     isolated = ApplicationController(tmp_path, usb_factory=lambda: None, wifi_factory=lambda: None)
     assert (isolated.profile.travel_x, isolated.profile.travel_y, isolated.profile.travel_z) == (290, 170, 40)
+
+
+def test_main_qml_palette_references_are_declared() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+    palette_block = qml.split("readonly property var palette: ({", 1)[1].split("})", 1)[0]
+    declared = set(re.findall(r"\b(\w+)\s*:\s*Qt\.color", palette_block))
+    referenced = set(re.findall(r"window\.palette\.(\w+)", qml))
+    assert referenced <= declared
 
 
 def test_simulation_hazard_detail_projection_and_public_visualization_surface(qapp, tmp_path) -> None:

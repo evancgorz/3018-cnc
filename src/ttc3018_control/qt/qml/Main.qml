@@ -925,7 +925,7 @@ ApplicationWindow {
                                     model: appViewModel ? appViewModel.step_operations : []
                                     delegate: Rectangle {
                                         Layout.fillWidth: true; implicitHeight: modelData.dependsOn ? 49 : 38
-                                        radius: 8; color: window.palette.elevated; border.color: window.palette.divider; border.width: 1
+                                        radius: 8; color: window.palette.raised; border.color: window.palette.divider; border.width: 1
                                         Column {
                                             anchors.fill: parent; anchors.margins: 8; spacing: 2
                                             Label { text: (index + 1) + ". " + modelData.kind; color: window.palette.text; font.pixelSize: 11; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
