@@ -1479,3 +1479,20 @@ delete historical screenshots or report rows, and do not touch hardware,
 runtime configuration, protected untracked files, or generated evidence. Run
 `git diff --check`, commit only the two documentation files plus this contract
 delta if needed, and push the checkpoint.
+
+## Sol replan delta — deterministic constrained-shell verification (2026-09-08)
+
+The GUI report’s remaining layout gap is specifically native visual resizing
+to approximately 1180×720; the QML root already declares that as its minimum.
+Add an offscreen Qt regression that sets the real root window to 1180×720,
+processes each Prepare/Preview & Run/Machine workspace, and proves the minimum
+size and workspace transitions remain stable without warnings or transport
+actions. Record this as complementary evidence, not as a replacement for a
+native screenshot. Preserve the splash-capture gap and physical-commissioning
+boundary.
+
+Keep the package limited to the regression and its evidence/documentation. Do
+not change layout behavior unless the test exposes a real defect; do not touch
+hardware, runtime/protected config, generated evidence, or unrelated files.
+Run the focused Qt test, compileall, and the full suite, then commit and push
+one checkpoint.
