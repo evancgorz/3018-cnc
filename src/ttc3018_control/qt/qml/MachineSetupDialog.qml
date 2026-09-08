@@ -12,6 +12,7 @@ Dialog {
     property bool toolSetterEnabled: false
     property bool movableXyzEnabled: false
     property bool fixedFixtureEnabled: false
+    property var axisDraft: ({})
     modal: true
     title: "Machine setup"
     width: 720
@@ -26,6 +27,21 @@ Dialog {
         switchesEnabled = false
         movableXyzEnabled = false
         fixedFixtureEnabled = false
+        try { axisDraft = JSON.parse(appViewModel ? appViewModel.homing_limit_declarations_json : "{}") } catch (error) { axisDraft = ({}) }
+    }
+    function axisValue(axis, key, fallback) {
+        const item = axisDraft[axis]
+        return item && item[key] !== undefined ? item[key] : fallback
+    }
+    function setAxisValue(axis, key, value) {
+        const next = {}
+        for (const name in axisDraft) next[name] = axisDraft[name]
+        const item = {}
+        const current = axisDraft[axis] || {}
+        for (const name in current) item[name] = current[name]
+        item[key] = value
+        next[axis] = item
+        axisDraft = next
     }
     background: Rectangle { color: dialog.appPalette.surface; radius: 12; border.color: dialog.appPalette.divider; border.width: 1 }
 
@@ -52,7 +68,40 @@ Dialog {
             ColumnLayout { spacing: 10
                 Label { text: "Travel and safety geometry"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
                 Label { text: appViewModel ? appViewModel.profile_summary : ""; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Label { text: "Edit the measured travel and safe-Z values with Machine profile. Axis direction and switch details will be expanded here as capabilities are configured."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                Label { text: "Declare each homing/limit input before commissioning. The values are persisted per machine; physical GRBL settings are sent only while Idle and safety-enabled."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                GridLayout { columns: 8; Layout.fillWidth: true; columnSpacing: 6; rowSpacing: 6
+                    Label { text: "Axis"; color: dialog.appPalette.subtle }
+                    Label { text: "Switch"; color: dialog.appPalette.subtle }
+                    Label { text: "End"; color: dialog.appPalette.subtle }
+                    Label { text: "Pin"; color: dialog.appPalette.subtle }
+                    Label { text: "Active-low"; color: dialog.appPalette.subtle }
+                    Label { text: "Hard limit"; color: dialog.appPalette.subtle }
+                    Label { text: "Debounce ms"; color: dialog.appPalette.subtle }
+                    Label { text: "Max override"; color: dialog.appPalette.subtle }
+                    Repeater { model: ["X", "Y", "Z"]
+                        delegate: RowLayout { Layout.columnSpan: 8; spacing: 6
+                            Label { text: modelData; color: dialog.appPalette.text; Layout.preferredWidth: 28 }
+                            CheckBox { checked: dialog.axisValue(modelData, "enabled", false); onToggled: dialog.setAxisValue(modelData, "enabled", checked) }
+                            ComboBox { model: ["min", "max"]; currentIndex: dialog.axisValue(modelData, "end", "min") === "max" ? 1 : 0; onActivated: dialog.setAxisValue(modelData, "end", currentText) }
+                            TextField { Layout.preferredWidth: 58; text: dialog.axisValue(modelData, "pin", ""); onEditingFinished: dialog.setAxisValue(modelData, "pin", text) }
+                            CheckBox { checked: dialog.axisValue(modelData, "active_low", false); onToggled: dialog.setAxisValue(modelData, "active_low", checked) }
+                            CheckBox { checked: dialog.axisValue(modelData, "hard_limit", false); onToggled: dialog.setAxisValue(modelData, "hard_limit", checked) }
+                            TextField {
+                                Layout.preferredWidth: 70
+                                text: String(dialog.axisValue(modelData, "debounce_ms", 5))
+                                validator: DoubleValidator { bottom: 0; top: 1000 }
+                                onEditingFinished: dialog.setAxisValue(modelData, "debounce_ms", Number(text))
+                            }
+                            TextField {
+                                Layout.preferredWidth: 78
+                                text: dialog.axisValue(modelData, "max_override", null) === null ? "" : String(dialog.axisValue(modelData, "max_override", ""))
+                                validator: DoubleValidator { bottom: 0.001; top: 10000 }
+                                onEditingFinished: dialog.setAxisValue(modelData, "max_override", text === "" ? null : Number(text))
+                            }
+                        }
+                    }
+                }
+                Button { text: "Save homing / limit declarations"; onClicked: if (appViewModel) appViewModel.save_homing_limit_declarations(JSON.stringify(dialog.axisDraft)) }
                 Item { Layout.fillHeight: true }
             }
             ScrollView {
@@ -87,7 +136,7 @@ Dialog {
                     ModernCheckBox { id: plateActiveLow; palette: dialog.appPalette; visible: dialog.zPlateEnabled; checked: dialog.zPlateActiveLow; onToggled: dialog.zPlateActiveLow = checked; text: "Invert probe input polarity in GRBL ($6)" }
                     Label { visible: dialog.zPlateEnabled; text: "Prefilled at 19.37 mm from your stated puck height — verify with calipers before probing."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
                     Button { visible: dialog.zPlateEnabled; Layout.fillWidth: true; text: "Save touch plate settings"; onClicked: if (appViewModel) appViewModel.save_z_touch_plate_settings(Number(plateThickness.text), dialog.zPlateActiveLow, Number(plateFastFeed.text), Number(plateSlowFeed.text), Number(plateSearch.text), Number(plateRetract.text), Number(plateSafeRetract.text), Number(plateTolerance.text)) }
-                    Label { text: "Homing switches, fixed tool setters, and XYZ workpiece fixtures are temporarily hidden until they are implemented and hardware-tested."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                    Label { text: "Homing/limit declarations are available on the Axes tab. Physical GPIO/reset remains inert until separately commissioned."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 }
             }
             ColumnLayout { spacing: 10

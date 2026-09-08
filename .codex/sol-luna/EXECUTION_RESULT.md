@@ -825,6 +825,54 @@ Validation evidence:
   tests/test_simulation_spawn_workers.py tests/test_application_contracts.py
   -q` → **83 passed in 26.34s**.
 
+## H6 public safety commissioning and Auto XYZ controls — 2026-09-08
+
+Implemented the requested public, headless-only boundary without launching or
+interacting with Pine and without selecting any physical transport:
+
+- `ApplicationController.save_homing_limit_declarations()` validates all X/Y/Z
+  declarations (enabled switch, min/max end, pin, active-low, hard-limit,
+  debounce, and measured maximum override), persists disconnected physical
+  declarations per machine, and maps the same profile into the active twin.
+  Real GRBL receives only guarded `$5/$21/$22/$23` commands after Idle and
+  safety checks; mixed per-axis values that cannot be represented by GRBL's
+  global settings are rejected rather than collapsed silently.
+- `CalibrationCommissioningRecord` now supports a required machine-scoped
+  identity when checked through the public H6 path. The simulation-only
+  commissioning action installs the explicit conductive corner-circle fixture
+  through the runtime boundary and creates a session-scoped record. Disconnect
+  and close clear that record.
+- The ViewModel exposes declaration JSON, fixture/Auto XYZ availability,
+  typed state, and the bounded search/retract/Z-touch plan. `MachineSetupDialog`
+  now exposes per-axis fields and a save action. The simulator exposes guarded
+  commission/preview/start/abort controls; QML does not mutate plant state and
+  manual Zero X/Y/Z/XYZ controls remain unchanged.
+- Added application/configuration, real GRBL setting-gate, twin-boundary,
+  loopback Auto XYZ, and static QML binding regressions. An initial affected
+  run caught two QML parser errors caused by compact nested validators; those
+  ordinary defects were expanded into valid multiline QML and the gates were
+  rerun successfully.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest -q tests/test_simulation_h6.py` →
+  **4 passed in 2.51s**.
+- `.venv\\Scripts\\python.exe -m pytest -q tests/test_simulation_h6.py
+  tests/test_simulation_safety.py tests/test_simulation_h5.py
+  tests/test_qt_shell.py -k "h6 or simulation or auto_xyz or homing or palette"`
+  → **30 passed, 25 deselected in 5.62s**.
+- Affected simulation/application/spawn/Qt/machine gate → **245 passed in
+  83.63s**.
+- `.venv\\Scripts\\python.exe -m compileall -q src tests` → passed;
+  `git diff --check` → passed.
+- Final `.venv\\Scripts\\python.exe -m pytest -q` → **505 passed in
+  133.73s**.
+
+No GUI, hardware, GPIO/reset pin, USB/COM, Wi-Fi, non-loopback endpoint,
+generated evidence, runtime config, `%SystemDrive%`, or unrelated user work
+was staged. The unresolved native visual/export acceptance gate remains
+PARTIAL as documented above.
+
 No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
 Wi-Fi, non-loopback endpoint, generated evidence/config, `%SystemDrive%`, or
 unrelated user files were accessed or staged.

@@ -92,6 +92,21 @@ def test_main_qml_palette_references_are_declared() -> None:
     assert referenced <= declared
 
 
+def test_h6_public_safety_and_auto_xyz_controls_are_guarded() -> None:
+    root = Path(__file__).parents[1]
+    main_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    setup_qml = (root / "src" / "ttc3018_control" / "qt" / "qml" / "MachineSetupDialog.qml").read_text(encoding="utf-8")
+    assert "save_homing_limit_declarations" in setup_qml
+    for label in ("active_low", "hard_limit", "debounce_ms", "max_override"):
+        assert label in setup_qml
+    assert "commission_simulation_calibration_plate" in main_qml
+    assert "autoXyzDialog.open()" in main_qml
+    assert "start_auto_xyz_calibration" in main_qml
+    assert "abort_auto_xyz_calibration" in main_qml
+    assert "onClicked: {}" not in main_qml
+    assert "Zero X" in main_qml and "Zero Y" in main_qml and "Zero Z" in main_qml
+
+
 def test_simulation_hazard_detail_projection_and_public_visualization_surface(qapp, tmp_path) -> None:
     view_model = ControllerViewModel(ApplicationController(tmp_path))
     assert not view_model.simulation_hazard_active

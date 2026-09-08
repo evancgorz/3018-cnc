@@ -13,14 +13,20 @@ from ..connection_settings import ConnectionSettings, ConnectionSettingsStore
 from ..grbl import GrblStatus, Position, REALTIME_HOLD, REALTIME_JOG_CANCEL, REALTIME_SOFT_RESET, REALTIME_STATUS, make_work_zero, parse_status
 from ..machine_state import MachineProfile, ProfileStore
 from ..machine_catalog import MachineCatalog, MachineCatalogStore
-from ..machine_config import DEFAULT_Z_TOUCH_PLATE_THICKNESS, MachineDefinition, ProbeDefinition, ProbeKind, SwitchMode
+from ..machine_config import (
+    DEFAULT_Z_TOUCH_PLATE_THICKNESS, AxisEnd as MachineAxisEnd, MachineDefinition,
+    ProbeDefinition, ProbeKind, SwitchMode,
+)
 from ..controller_adapters import Grbl11Adapter, GenericGrblAdapter
 from ..work_zero_settings import SavedWorkZero, WorkZeroStore
 from ..serial_connection import GrblConnection, available_ports
 from ..step_prepare_settings import StepPrepareSettings, StepPrepareSettingsStore
 from ..tcp_connection import TcpGrblConnection
 from ..simulation.runtime import SimulationRuntime
-from ..simulation.safety import HomingLimitProfile
+from ..simulation.safety import (
+    AxisEnd as SafetyAxisEnd, AxisSensorDeclaration, CalibrationCommissioningRecord,
+    CalibrationPlateDefinition, HomingLimitProfile,
+)
 from ..simulation.plant import ProbeCornerCircle
 from ..simulation.settings import SimulationSettings, SimulationSettingsStore
 from ..wifi_discovery import discover_grbl_hosts
@@ -128,6 +134,8 @@ class ApplicationController:
         self._z_probe_offset_confirmed = False
         self._z_commissioning_pending = False
         self._z_plate_removal_required = False
+        self._simulation_plate_definition = CalibrationPlateDefinition()
+        self._simulation_plate_record: CalibrationCommissioningRecord | None = None
         self.step_prepare_settings = step_prepare_settings
         self.status: GrblStatus | None = None
         self.manual_pending_acks = 0
@@ -232,6 +240,51 @@ class ApplicationController:
     @property
     def simulation_runtime(self):
         return self.connection_service.simulation_runtime
+
+    @property
+    def homing_limit_declarations(self) -> dict[str, dict[str, object]]:
+        """Return the validated per-axis declaration exposed to setup surfaces."""
+        return {
+            axis: {
+                "enabled": definition.switch_mode is SwitchMode.SINGLE,
+                "end": definition.switch_end.value,
+                "pin": definition.input_pin or "",
+                "active_low": bool(definition.active_low),
+                "hard_limit": bool(definition.hard_limit),
+                "debounce_ms": float(definition.debounce_ms),
+                "max_override": definition.max_override,
+            }
+            for axis, definition in self.machine_definition.axes.items()
+        }
+
+    @property
+    def homing_limit_profile(self) -> HomingLimitProfile:
+        """Translate the public machine declarations into the twin contract."""
+        travel = {"X": self.profile.travel_x, "Y": self.profile.travel_y, "Z": self.profile.travel_z}
+        axes = []
+        for axis in "XYZ":
+            item = self.machine_definition.axes[axis]
+            axes.append(AxisSensorDeclaration(
+                axis=axis, travel=travel[axis], homing_end=SafetyAxisEnd(item.switch_end.value),
+                active_low=item.active_low, input_pin=item.input_pin,
+                hard_limit=item.hard_limit, debounce_ms=item.debounce_ms,
+                max_override=item.max_override,
+            ))
+        return HomingLimitProfile(machine_id=self.machine_id or "digital-twin-3018", axes=tuple(axes))
+
+    @property
+    def simulation_plate_definition(self) -> CalibrationPlateDefinition:
+        return self._simulation_plate_definition
+
+    @property
+    def simulation_plate_record(self) -> CalibrationCommissioningRecord | None:
+        return self._simulation_plate_record
+
+    @property
+    def simulation_plate_commissioned(self) -> bool:
+        record = self._simulation_plate_record
+        return bool(self.simulation_active and record and record.valid_for(
+            self._simulation_plate_definition, machine_id=self.machine_id or ""))
 
     @property
     def state(self) -> ApplicationState:
@@ -452,6 +505,7 @@ class ApplicationController:
     def connect_simulation(self) -> ConnectionOutcome:
         outcome = self.connection_service.connect_simulation()
         if outcome.accepted:
+            self._simulation_plate_record = None
             self._simulation_physical_saved_work_zero = self._saved_work_zero
             self._simulation_saved_work_zero = None
             self._saved_work_zero = None
@@ -539,6 +593,115 @@ class ApplicationController:
         except (RuntimeError, ValueError, TypeError) as exc:
             return ActionOutcome(False, f"Digital-twin homing declarations rejected — {exc}")
         return ActionOutcome(True, "Digital-twin homing/limit declarations applied")
+
+    def save_homing_limit_declarations(self, declarations: dict[str, dict[str, object]]) -> ActionOutcome:
+        """Validate and publish per-axis homing/limit declarations.
+
+        The same immutable declaration is translated to the twin profile. A
+        real GRBL controller receives only its four guarded settings while
+        connected, Idle, and free of active operations; disconnected edits are
+        persisted for the next commissioning session.
+        """
+        if not isinstance(declarations, dict):
+            return ActionOutcome(False, "Homing declarations must be an object keyed by X, Y, and Z")
+        if set(declarations) != set("XYZ"):
+            return ActionOutcome(False, "Homing declarations must include exactly X, Y, and Z")
+        if (self.motion_busy or self.job_active or self.manual_pending_acks
+                or self.probing.active or self.homing.active or self.calibration.active):
+            return ActionOutcome(False, "Homing/limit declarations require no active machine operation")
+        if self.connected and not self.simulation_active:
+            if self.status is None or self.status.state != "Idle" or not self.status.can_jog:
+                return ActionOutcome(False, "GRBL must be Idle and safety-enabled before changing homing/limit settings")
+
+        axes = dict(self.machine_definition.axes)
+        try:
+            for axis in "XYZ":
+                raw = declarations[axis]
+                if not isinstance(raw, dict):
+                    raise ValueError(f"{axis} declaration must be an object")
+                enabled = bool(raw.get("enabled", raw.get("switch_enabled", False)))
+                end = MachineAxisEnd(str(raw.get("end", raw.get("switch_end", "min"))).lower())
+                pin = str(raw.get("pin", raw.get("input_pin", ""))).strip() or None
+                if enabled and not pin:
+                    raise ValueError(f"{axis} enabled homing switch requires an input pin")
+                max_override_raw = raw.get("max_override")
+                max_override = None if max_override_raw in (None, "", "null") else float(max_override_raw)
+                updated = replace(
+                    axes[axis], switch_mode=SwitchMode.SINGLE if enabled else SwitchMode.NONE,
+                    switch_end=end, input_pin=pin if enabled else None,
+                    active_low=bool(raw.get("active_low", False)),
+                    hard_limit=bool(raw.get("hard_limit", False)) if enabled else False,
+                    debounce_ms=float(raw.get("debounce_ms", 5.0)), max_override=max_override,
+                )
+                updated.validate(axis)
+                axes[axis] = updated
+            updated_definition = replace(self.machine_definition, axes=axes)
+            updated_definition.validate()
+            homing_profile = HomingLimitProfile(
+                machine_id=self.machine_id or "digital-twin-3018",
+                axes=tuple(AxisSensorDeclaration(
+                    axis=axis, travel=getattr(self.profile, f"travel_{axis.lower()}"),
+                    homing_end=SafetyAxisEnd(axes[axis].switch_end.value),
+                    active_low=axes[axis].active_low, input_pin=axes[axis].input_pin,
+                    hard_limit=axes[axis].hard_limit, debounce_ms=axes[axis].debounce_ms,
+                    max_override=axes[axis].max_override,
+                ) for axis in "XYZ"),
+            )
+            homing_profile.validate()
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            return ActionOutcome(False, f"Homing/limit declarations rejected — {exc}")
+
+        # GRBL exposes these as global settings. Refuse a lossy physical
+        # translation when per-axis declarations disagree; the twin remains
+        # per-axis and can represent the full declaration faithfully.
+        if self.connected and not self.simulation_active:
+            enabled_values = {item.switch_mode is SwitchMode.SINGLE for item in axes.values()}
+            polarity_values = {item.active_low for item in axes.values() if item.switch_mode is SwitchMode.SINGLE}
+            hard_values = {item.hard_limit for item in axes.values() if item.switch_mode is SwitchMode.SINGLE}
+            if len(enabled_values) > 1 or len(polarity_values) > 1 or len(hard_values) > 1:
+                return ActionOutcome(False, "Physical GRBL $5/$21/$22 are global; declarations must agree across enabled axes")
+
+        try:
+            if self.simulation_active:
+                runtime = self.simulation_runtime
+                if runtime is None:
+                    return ActionOutcome(False, "Digital-twin runtime is unavailable")
+                runtime.configure_homing(homing_profile)
+            elif self.machine_catalog is not None:
+                self.machine_catalog = self.machine_catalog_store.upsert(
+                    self.machine_catalog, updated_definition)
+            self._machine_definition = updated_definition
+            if self.connected and not self.simulation_active:
+                enabled = all(item.switch_mode is SwitchMode.SINGLE for item in axes.values())
+                active_low = bool(next(iter({item.active_low for item in axes.values()}), False))
+                hard_limit = bool(next(iter({item.hard_limit for item in axes.values()}), False))
+                direction_mask = sum(1 << index for index, axis in enumerate("XYZ")
+                                     if axes[axis].switch_end is MachineAxisEnd.MAX)
+                for number, value in ((5, 1 if active_low else 0), (21, 1 if hard_limit else 0),
+                                      (22, 1 if enabled else 0), (23, direction_mask)):
+                    self.send_manual(self.adapter.setting_command(number, value))
+            self.session.invalidate_reference("Homing/limit declarations changed; recommission and re-reference")
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Homing/limit declarations could not be applied — {exc}")
+        return ActionOutcome(True, "Homing/limit declarations saved and applied through the guarded boundary")
+
+    def commission_simulation_calibration_plate(self) -> ActionOutcome:
+        """Commission the bundled conductive plate fixture for this twin session."""
+        if not self.simulation_active or self.simulation_runtime is None:
+            return ActionOutcome(False, "The Auto XYZ fixture is simulation-only and requires an active digital twin")
+        if self.status is not None and (self.status.state != "Idle" or self.status.spindle not in (None, 0)):
+            return ActionOutcome(False, "The simulation plate requires GRBL Idle with the spindle off")
+        try:
+            definition = self._simulation_plate_definition
+            definition.validate()
+            self.simulation_runtime.configure_probe_corner_circle(
+                ProbeCornerCircle(definition.circle_center_x, definition.circle_center_y, definition.radius, 0.0))
+            self._simulation_plate_record = CalibrationCommissioningRecord(
+                plate_fingerprint=definition.fingerprint(), input_tested=True,
+                geometry_tested=True, machine_id=self.machine_id or "digital-twin-3018")
+        except (RuntimeError, ValueError, TypeError) as exc:
+            return ActionOutcome(False, f"Simulation Auto XYZ fixture commissioning failed — {exc}")
+        return ActionOutcome(True, "Simulation Auto XYZ plate commissioned for this machine session")
 
     def set_simulation_limit_input(self, axis: str, electrical_active: bool) -> ActionOutcome:
         runtime = self.simulation_runtime
@@ -884,8 +1047,10 @@ class ApplicationController:
     def start_auto_xyz_calibration(self, seed: tuple[float, float, float], *,
                                    definition=None, commissioning_record=None) -> ActionOutcome:
         """Start the commissioned calibration transaction over ordinary GRBL traffic."""
-        from ..simulation.safety import CalibrationPlateDefinition
-        definition = definition or CalibrationPlateDefinition()
+        definition = definition or (self._simulation_plate_definition if self.simulation_active
+                                    else CalibrationPlateDefinition())
+        if commissioning_record is None and self.simulation_active:
+            commissioning_record = self._simulation_plate_record
         status = self.status
         spindle = 0.0 if status is None or status.spindle is None else status.spindle
         envelope = (self.profile.travel_x, self.profile.travel_y, self.profile.travel_z)
@@ -1031,6 +1196,7 @@ class ApplicationController:
         self.session.clear_status()
         self.session.invalidate_reference(reason or outcome.message)
         if was_simulation:
+            self._simulation_plate_record = None
             self._saved_work_zero = self._simulation_physical_saved_work_zero
             self._simulation_saved_work_zero = None
             self._simulation_physical_saved_work_zero = None
@@ -1176,6 +1342,7 @@ class ApplicationController:
         self.session.clear_status()
         self.session.invalidate_reference(outcome.message)
         if was_simulation:
+            self._simulation_plate_record = None
             self._saved_work_zero = self._simulation_physical_saved_work_zero
             self._simulation_saved_work_zero = None
             self._simulation_physical_saved_work_zero = None

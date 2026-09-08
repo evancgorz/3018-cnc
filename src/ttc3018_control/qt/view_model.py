@@ -24,6 +24,7 @@ from ..grbl import (
 )
 from ..machine_state import MachineProfile
 from ..machine_config import DEFAULT_Z_TOUCH_PLATE_THICKNESS
+from ..simulation.safety import AutoXYZCalibrationWorkflow
 from ..step_engraver import STEP_MODES, STEP_ORIENTATIONS, STEP_ZERO_LOCATIONS
 from ..step_geometry import STEP_PLANES, StepImportError, StepPlanarModel
 from ..step_prepare_settings import StepPrepareSettings
@@ -836,6 +837,14 @@ class ControllerViewModel(QObject):
         return "Homing switches: DIGITAL TWIN inputs (X/Y/Z)"
 
     @Property(str, notify=simulation_changed)
+    def homing_limit_declarations_json(self) -> str:
+        return json.dumps(self.application.homing_limit_declarations, sort_keys=True)
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_plate_commissioned(self) -> bool:
+        return self.application.simulation_plate_commissioned
+
+    @Property(str, notify=simulation_changed)
     def simulation_limit_status(self) -> str:
         runtime = self.application.simulation_runtime
         if not self.simulation_active or runtime is None:
@@ -851,15 +860,35 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=simulation_changed)
     def simulation_auto_xyz_available(self) -> bool:
-        # A contact/vision capability and a machine-scoped commissioning record
-        # are required; an interior seed alone must never enable this action.
-        return False
+        return bool(self.application.simulation_plate_commissioned and not self.application.calibration.active)
 
     @Property(str, notify=simulation_changed)
     def simulation_auto_xyz_status(self) -> str:
         if not self.simulation_active:
             return "Auto XYZ calibration plate: unavailable — plate/input not commissioned"
+        if not self.application.simulation_plate_commissioned:
+            return "Auto XYZ calibration plate: unavailable — commission the simulation fixture first"
         return self.application.auto_xyz_calibration_status
+
+    @Property(str, notify=simulation_changed)
+    def simulation_auto_xyz_plan(self) -> str:
+        if not self.application.simulation_plate_commissioned:
+            return "No calibration plan until the simulation plate is commissioned"
+        definition = self.application.simulation_plate_definition
+        workflow = AutoXYZCalibrationWorkflow(definition)
+        seed = (definition.circle_center_x, definition.circle_center_y,
+                min(definition.safe_z, self.application.profile.travel_z))
+        if not workflow.start(seed=seed, reference_trusted=True, controller_idle=True,
+                              spindle_rpm=0.0, envelope=(self.application.profile.travel_x,
+                                                         self.application.profile.travel_y,
+                                                         self.application.profile.travel_z),
+                              commissioned=True):
+            return workflow.failure_reason
+        return " → ".join(workflow.commands)
+
+    @Property(str, notify=simulation_changed)
+    def auto_xyz_calibration_state(self) -> str:
+        return self.application.auto_xyz_calibration_state
 
     @Property(bool, notify=simulation_changed)
     def simulation_auto_xyz_active(self) -> bool:
@@ -1653,6 +1682,23 @@ class ControllerViewModel(QObject):
     def configure_simulation(self, speed_label: str, workpiece_label: str) -> None:
         speed = {"Realtime": "realtime", "2×": "2x", "5×": "5x", "10×": "10x", "Uncapped": "uncapped"}.get(speed_label, speed_label)
         outcome = self.application.configure_simulation(speed, workpiece_label)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(str)
+    def save_homing_limit_declarations(self, declarations_json: str) -> None:
+        try:
+            declarations = json.loads(declarations_json)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._set_notice(f"Homing/limit declarations rejected — {exc}")
+            return
+        outcome = self.application.save_homing_limit_declarations(declarations)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def commission_simulation_calibration_plate(self) -> None:
+        outcome = self.application.commission_simulation_calibration_plate()
         self._set_notice(outcome.message)
         self._emit_state()
 

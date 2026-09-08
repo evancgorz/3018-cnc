@@ -326,7 +326,8 @@ ApplicationWindow {
                         Label { text: appViewModel ? appViewModel.simulation_limit_status : "Limit inputs: unavailable while disconnected"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_estop_status : "E-stop: external safety cutoff required"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_auto_xyz_status : "Auto XYZ calibration plate: unavailable"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                        SecondaryButton { Layout.fillWidth: true; text: "Preview Auto XYZ calibration plate (commissioning required)"; enabled: appViewModel && appViewModel.simulation_auto_xyz_available; onClicked: {} }
+                        SecondaryButton { Layout.fillWidth: true; visible: appViewModel && appViewModel.simulation_active && !appViewModel.simulation_plate_commissioned; text: "Commission simulation Auto XYZ plate"; onClicked: appViewModel.commission_simulation_calibration_plate() }
+                        SecondaryButton { Layout.fillWidth: true; visible: appViewModel && appViewModel.simulation_active; text: "Preview Auto XYZ calibration plate (commissioning required)"; enabled: appViewModel && appViewModel.simulation_auto_xyz_available; onClicked: autoXyzDialog.open() }
                         Label { text: "Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}"); color: window.palette.muted; font.family: "Cascadia Mono"; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Safety state: " + (appViewModel ? appViewModel.simulation_collision_state : "Clear"); color: appViewModel && appViewModel.simulation_hazard_active ? window.palette.danger : window.palette.success; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
                         Label { text: "Kind: " + (appViewModel ? appViewModel.simulation_collision_kind : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }
@@ -347,6 +348,40 @@ ApplicationWindow {
     MachineSetupDialog {
         id: machineSetupDialog
         appPalette: window.palette
+    }
+
+    Dialog {
+        id: autoXyzDialog
+        modal: true
+        title: "Auto XYZ calibration — DIGITAL TWIN ONLY"
+        width: Math.min(760, window.width - 48)
+        height: Math.min(560, window.usableContentHeight - 24)
+        x: Math.round((window.width - width) / 2)
+        y: Math.round((window.usableContentHeight - height) / 2)
+        standardButtons: Dialog.NoButton
+        background: Rectangle { color: window.palette.surface; radius: 12; border.color: window.palette.divider; border.width: 1 }
+        ColumnLayout { anchors.fill: parent; anchors.margins: 20; spacing: 10
+            Label { text: "Commissioned conductive corner-circle fixture"; color: window.palette.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+            Label { text: appViewModel ? appViewModel.simulation_auto_xyz_status : "Unavailable"; color: window.palette.accent; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "Interior seed pose (machine mm)"; color: window.palette.muted }
+            GridLayout { columns: 6; Layout.fillWidth: true; columnSpacing: 8
+                Label { text: "X"; color: window.palette.subtle }
+                TextField { id: autoXyzSeedX; text: "20"; validator: DoubleValidator { bottom: 0; top: 290 } }
+                Label { text: "Y"; color: window.palette.subtle }
+                TextField { id: autoXyzSeedY; text: "20"; validator: DoubleValidator { bottom: 0; top: 170 } }
+                Label { text: "Z"; color: window.palette.subtle }
+                TextField { id: autoXyzSeedZ; text: "30"; validator: DoubleValidator { bottom: 0; top: 40 } }
+            }
+            Label { text: "Bounded plan: " + (appViewModel ? appViewModel.simulation_auto_xyz_plan : "Unavailable"); color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; maximumLineCount: 5; elide: Text.ElideRight }
+            Label { text: "State: " + (appViewModel ? appViewModel.auto_xyz_calibration_state : "idle"); color: window.palette.text }
+            Item { Layout.fillHeight: true }
+            RowLayout { Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Button { text: "Start Auto XYZ"; enabled: appViewModel && appViewModel.simulation_auto_xyz_available && !appViewModel.simulation_auto_xyz_active; onClicked: appViewModel.start_auto_xyz_calibration(Number(autoXyzSeedX.text), Number(autoXyzSeedY.text), Number(autoXyzSeedZ.text)) }
+                Button { text: "Abort"; enabled: appViewModel && appViewModel.simulation_auto_xyz_active; onClicked: appViewModel.abort_auto_xyz_calibration() }
+                Button { text: "Close"; onClicked: autoXyzDialog.close() }
+            }
+        }
     }
 
     onWorkspaceChanged: if (appViewModel) appViewModel.save_workspace(workspace)

@@ -376,12 +376,15 @@ class CalibrationCommissioningRecord:
     plate_fingerprint: str = ""
     input_tested: bool = False
     geometry_tested: bool = False
+    machine_id: str = ""
 
-    def valid_for(self, definition: CalibrationPlateDefinition) -> bool:
+    def valid_for(self, definition: CalibrationPlateDefinition, *, machine_id: str | None = None) -> bool:
         definition.validate()
         encoded = json.dumps(asdict(definition), sort_keys=True, separators=(",", ":")).encode()
         fingerprint = hashlib.sha256(encoded).hexdigest()
-        return self.schema_version == 1 and self.plate_fingerprint == fingerprint and self.input_tested and self.geometry_tested
+        machine_matches = machine_id is None or self.machine_id == machine_id
+        return (self.schema_version == 1 and machine_matches and self.plate_fingerprint == fingerprint
+                and self.input_tested and self.geometry_tested)
 
 
 @dataclass(frozen=True)
