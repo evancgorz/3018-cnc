@@ -5,6 +5,7 @@ import math
 import os
 import queue
 from pathlib import Path
+from types import SimpleNamespace
 import time
 
 import pytest
@@ -115,13 +116,103 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     assert "simulationWindow.requestActivate()" in qml
     assert 'SecondaryButton { visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"; onClicked: window.showSimulator() }' in qml
     assert 'if (appViewModel && appViewModel.job_active)' in qml
+    assert 'enabled: appViewModel && appViewModel.simulation_export_available' in qml
+    assert 'visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"' in qml
+    assert '"Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}")' in qml
+    assert 'text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job()' in qml
+    assert 'text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job()' in qml
+    assert 'text: "Abort"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.abort_job()' in qml
+    assert 'appViewModel.requires_exit_prompt' in qml
+    assert 'closeEvent.accepted = false' in qml
+
+
+def test_simulation_projection_clears_stale_hazard_stock_and_export_state_on_disconnect(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    view_model._simulation_active_hazard = {"kind": "tool_fixture", "message": "contact", "position": (1, 2, 3)}
+    view_model._simulation_hazards = ["contact"]
+    view_model._simulation_stock_metrics = {"removed_volume": 4}
+    view_model._simulation_export_status = "Evidence exported"
+    view_model._disconnected("test cleanup")
+    assert not view_model.simulation_hazard_active
+    assert view_model.simulation_hazards == []
+    assert view_model.simulation_stock_metrics_json == "{}"
+    assert view_model.simulation_export_status == "No simulation evidence exported"
+    assert not view_model.simulation_export_available
+
+
+def test_simulation_poll_projects_snapshot_hazard_metrics_and_caps_history(qapp, tmp_path, monkeypatch) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    connection = _FakeConnection()
+    controller.connection_service.transport = connection
+    from ttc3018_control.application.state import ConnectionMode
+    controller.connection_service.mode = ConnectionMode.SIMULATION
+    class _Supervisor:
+        def is_alive(self): return True
+    class _Runtime:
+        supervisor = _Supervisor()
+        supervisor_healthy = True
+        poll = lambda self: ()
+    controller.connection_service.simulation_runtime = _Runtime()
+    items = [
+        {"type": "snapshot", "snapshot": {"state": "Run", "machine_position": (1, 2, 3)}},
+        {"type": "stock_metrics", "metrics": {"removed_volume": 2.5}},
+        {"type": "hazard", "hazard": {"kind": "tool_fixture", "message": "contact", "body_a": "tool", "body_b": "fixture", "position": (1, 2, 3)}},
+    ] * 2
+    controller.poll_simulation = lambda: tuple(items)  # type: ignore[method-assign]
+    controller.transport_events = lambda: queue.Queue()  # type: ignore[method-assign]
+    controller.request_status = lambda: None  # type: ignore[method-assign]
+    controller.check_job_watchdog = lambda: None  # type: ignore[method-assign]
+    view_model._poll()
+    assert view_model.simulation_snapshot_json.startswith('{')
+    assert view_model.simulation_stock_metrics_json == '{"removed_volume":2.5}'
+    assert view_model.simulation_hazard_active
+    assert view_model.simulation_collision_kind == "tool_fixture"
+    assert len(view_model.simulation_hazards) == 2
+    assert view_model.simulation_supervisor_healthy
+    controller.poll_simulation = lambda: tuple(  # type: ignore[method-assign]
+        {"type": "hazard", "hazard": {"kind": "tool_fixture", "message": f"contact-{index}"}}
+        for index in range(60)
+    )
+    view_model._poll()
+    assert len(view_model.simulation_hazards) == 50
+
+
+def test_simulation_operator_and_supervisor_projections_are_truthful(qapp, tmp_path, monkeypatch) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    connection = _FakeConnection()
+    controller.connection_service.transport = connection
+    from ttc3018_control.application.state import ConnectionMode
+    controller.connection_service.mode = ConnectionMode.SIMULATION
+
+    class _Runtime:
+        supervisor = SimpleNamespace(is_alive=lambda: True)
+        supervisor_healthy = False
+        poll = lambda self: ()
+
+    controller.connection_service.simulation_runtime = _Runtime()
+    assert not view_model.simulation_supervisor_healthy
+
+    monkeypatch.setattr(controller, "hold", lambda: SimpleNamespace(accepted=False, message="alarm latched"))
+    notices: list[str] = []
+    view_model.toast_requested.connect(notices.append)
+    view_model._apply_operator_intent({"action": "hold", "reason": "collision"})
+    assert notices[-1] == "Digital twin operator hold rejected — alarm latched"
+    view_model._apply_operator_intent({"action": "interlock", "reason": "first contact"})
+    assert notices[-1] == "Digital twin operator interlock — first contact"
 
 
 def test_simulation_evidence_export_slot_reports_success_and_failure(qapp, tmp_path, monkeypatch) -> None:
     controller = ApplicationController(tmp_path)
     view_model = ControllerViewModel(controller)
     monkeypatch.setattr(type(controller), "simulation_active", property(lambda _self: True))
-    monkeypatch.setattr(type(controller), "simulation_runtime", property(lambda _self: object()))
+    monkeypatch.setattr(
+        type(controller),
+        "simulation_runtime",
+        property(lambda _self: SimpleNamespace(supervisor=SimpleNamespace(is_alive=lambda: True), poll=lambda: ())),
+    )
     events: list[tuple[str, dict]] = []
     exported: list[Path] = []
     controller.record_simulation_event = lambda kind, payload=None, **_kwargs: events.append((kind, payload or {}))  # type: ignore[method-assign]

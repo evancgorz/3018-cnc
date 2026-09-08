@@ -322,6 +322,7 @@ ApplicationWindow {
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "GRBL " + (appViewModel ? appViewModel.grbl_state : "—"); color: window.palette.muted }
+                        Label { text: "Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}"); color: window.palette.muted; font.family: "Cascadia Mono"; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Safety state: " + (appViewModel ? appViewModel.simulation_collision_state : "Clear"); color: appViewModel && appViewModel.simulation_hazard_active ? window.palette.danger : window.palette.success; font.weight: Font.DemiBold; wrapMode: Text.Wrap }
                         Label { text: "Kind: " + (appViewModel ? appViewModel.simulation_collision_kind : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }
                         Label { text: "Bodies: " + (appViewModel ? appViewModel.simulation_collision_body : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap }

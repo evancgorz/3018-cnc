@@ -495,6 +495,37 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P1 QML/frontend verification — 2026-09-07
+
+Implemented deterministic headless frontend verification through the public
+`ControllerViewModel`/`ApplicationController` boundary only; no GUI instance,
+hardware, or non-loopback transport was used:
+
+- The QML poll path now calls `ApplicationController.poll_simulation()` rather
+  than reaching into the runtime directly. Supervisor health prefers the
+  runtime heartbeat decision and fails closed when disconnected or unhealthy.
+- The simulation surface visibly binds stock metrics, first-contact
+  ring/crosshair and hazard details, safety/interlock state, evidence export
+  availability/status, connected-only simulator restore, and truthful
+  pause/resume/abort actions. Existing close-guard bindings remain asserted.
+- Added headless Qt regressions for connected/disconnected projection and
+  stale-state cleanup, snapshot/stock/hazard projection, 50-entry bounded
+  hazard history, unhealthy supervisor state, operator hold/interlock notices,
+  export success/failure feedback, and required QML visibility/action bindings.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py -k simulation -q`
+  → **7 passed, 25 deselected in 1.05s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_application_contracts.py -q`
+  → **74 passed in 9.07s**.
+
+No commit or push was made pending Sol review. Generated evidence/config,
+`%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
+non-loopback endpoints, and unrelated files remain excluded. P0 GUI acceptance
+is not claimed closed by this package.
+
 ## P2 long-duration randomized/property testing — 2026-09-07
 
 Added a deterministic seeded property corpus that drives the virtual

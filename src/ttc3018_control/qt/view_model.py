@@ -745,7 +745,14 @@ class ControllerViewModel(QObject):
     @Property(bool, notify=simulation_changed)
     def simulation_supervisor_healthy(self) -> bool:
         runtime = self.application.simulation_runtime
-        return bool(self.simulation_active and runtime is not None and runtime.supervisor is not None and runtime.supervisor.is_alive())
+        if not self.simulation_active or runtime is None:
+            return False
+        # Prefer the runtime's heartbeat-aware safety decision; the fallback
+        # keeps this projection compatible with lightweight test doubles.
+        healthy = getattr(runtime, "supervisor_healthy", None)
+        if healthy is not None:
+            return bool(healthy)
+        return bool(runtime.supervisor is not None and runtime.supervisor.is_alive())
 
     @Property(bool, notify=simulation_changed)
     def simulation_export_available(self) -> bool:
@@ -1922,7 +1929,9 @@ class ControllerViewModel(QObject):
             return
         runtime = self.application.simulation_runtime
         if self.application.simulation_active and runtime is not None:
-            for item in runtime.poll():
+            # Keep the QML-facing layer on the public application boundary;
+            # it must not reach into the runtime's transport/process details.
+            for item in self.application.poll_simulation():
                 if item.get("type") == "snapshot":
                     self._simulation_snapshot = dict(item.get("snapshot", {}))
                 elif item.get("type") == "stock_metrics":

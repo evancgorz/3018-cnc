@@ -923,6 +923,28 @@ and evidence, review staged scope, and commit/push this package as its own
 checkpoint. Keep all execution headless and simulation-only; do not launch
 GUI, access hardware, select USB/COM/Wi-Fi, or stage generated/config/evidence.
 
+## Sol program delta — QML/frontend verification (2026-09-07)
+
+The next package is the scheduled P3 frontend verification pass. Luna must
+audit the Qt/QML bindings and headless shell tests against the now-complete
+backend contracts: simulation-only connection visibility, simulator restore
+availability, hazard ring/crosshair and labeled details, stock metrics,
+operator/interlock notices, pause/resume/abort state truthfulness, evidence
+export success/failure feedback, disconnect cleanup, and the simulator close
+guard. Keep all behavior routed through public ViewModel/ApplicationController
+methods; QML must not own transport, plant, collision, or filesystem state.
+
+Add deterministic Qt binding regressions for connected/disconnected and
+running/hold/alarm/failure states, operator intents, export affordances,
+window visibility/activation, bounded event polling, and stale-state cleanup.
+Use mocked/headless surfaces for bulk coverage. A GUI pass is optional only as
+a concise milestone observation; do not claim the unresolved P0 visual/export
+acceptance gate is closed without fresh tagged first-contact visualization,
+evidence export, and exact cleanup. Run focused Qt/shell/application tests,
+record evidence, review staged scope, and commit/push this package separately.
+No hardware, physical transport, non-loopback endpoint, unrelated Pine window,
+or generated/config/evidence staging is allowed.
+
 ## Sol program delta — STEP stock-removal fidelity (2026-09-07)
 
 The next backend-first P2 package is executed stock/STEP fidelity. Luna must
