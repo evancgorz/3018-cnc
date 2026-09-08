@@ -1228,6 +1228,46 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## P0 native hazard/evidence gate — terminal retention and bounded simulator controls (2026-09-08)
+
+Implemented the bounded public-surface correction headlessly:
+
+- `ControllerViewModel` now retains terminal collision, operator-interlock,
+  and GRBL-alarm projections after a supervisor `hazard_clear` edge, including
+  the typed kind, message, bodies, severity, and XYZ point. A fresh trusted
+  reference, accepted twin E-stop release/acknowledgement, explicit operator
+  recovery, a newly accepted clean job, or disconnect clears the retained
+  projection. Warning/diagnostic hazard edges still clear normally. A GRBL
+  alarm without a preceding supervisor hazard is projected as a typed terminal
+  `grbl_alarm`, and operator interlock intents have a fail-closed projection
+  when no hazard payload preceded them.
+- The simulator right control column now uses a bounded `ScrollView` at the
+  default 980x680 size. Hazard history has a fixed 120-pixel viewport, while
+  safety details, `Export evidence…`, and `Disconnect digital twin` remain
+  reachable below it. No transport, plant, collision, or filesystem ownership
+  was added to QML.
+- Added Qt/ViewModel regressions for terminal retention through clear,
+  fresh-reference recovery, ordinary warning clear, disconnect cleanup, and
+  the bounded scroll/evidence/disconnect bindings.
+
+Validation evidence:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py -k
+  "terminal_simulation_hazard or simulator_safety_and_evidence or
+  simulation_hazard_detail or simulation_projection" -q` → **4 passed, 37
+  deselected in 1.63s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_application_contracts.py tests/test_simulation_public_scenarios.py
+  -q` → **86 passed in 33.27s**.
+- `python -m compileall -q src tests` and `git diff --check` → **passed**.
+- `.venv\\Scripts\\python.exe -m pytest -q` → **516 passed in 146.58s**.
+
+No GUI validator was relaunched after this source change, so native first-
+contact pixels, OS save-dialog interaction, paired GUI JSON/Markdown files,
+and owned-process cleanup remain the previously documented visual evidence
+gap. No hardware, USB/COM, physical Wi-Fi, non-loopback endpoint, generated
+evidence, protected config, or unrelated Pine instance was accessed.
+
 ## Native STEP chooser / first-contact evidence audit (2026-09-08)
 
 The public bindings are already correctly routed: native `stepFileDialog`

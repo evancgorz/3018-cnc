@@ -317,7 +317,16 @@ ApplicationWindow {
                     Connections { target: appViewModel; function onSimulation_changed() { simulationCanvas.requestPaint() } function onState_changed() { simulationCanvas.requestPaint() } }
                 }
                 Rectangle { Layout.preferredWidth: 260; Layout.fillHeight: true; color: window.palette.surface; radius: 10
-                    ColumnLayout { anchors.fill: parent; anchors.margins: 14; spacing: 8
+                    // Keep the safety and evidence actions reachable at the
+                    // default 980x680 simulator size.  The hazard history is
+                    // deliberately bounded so it cannot consume this column.
+                    ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        clip: true
+                        contentWidth: availableWidth
+                        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                        ColumnLayout { width: availableWidth; spacing: 8
                         Label { text: "Authoritative plant"; color: window.palette.text; font.weight: Font.DemiBold }
                         Label { text: "Machine " + (appViewModel ? appViewModel.machine_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
                         Label { text: "Work " + (appViewModel ? appViewModel.work_position : "—"); color: window.palette.text; font.family: "Cascadia Mono" }
@@ -351,10 +360,11 @@ ApplicationWindow {
                         Label { text: "Point: " + (appViewModel ? appViewModel.simulation_collision_point : "—"); color: window.palette.text; visible: appViewModel && appViewModel.simulation_hazard_active; font.family: "Cascadia Mono"; wrapMode: Text.Wrap }
                         Label { text: appViewModel ? appViewModel.simulation_collision_message : ""; color: window.palette.danger; visible: appViewModel && appViewModel.simulation_hazard_active; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: "Hazards"; color: window.palette.text; font.weight: Font.DemiBold }
-                        ListView { Layout.fillWidth: true; Layout.fillHeight: true; model: appViewModel ? appViewModel.simulation_hazards : []; delegate: Label { width: parent.width; text: "• " + modelData; color: window.palette.danger; wrapMode: Text.Wrap } }
+                        ListView { Layout.fillWidth: true; Layout.preferredHeight: 120; Layout.minimumHeight: 72; model: appViewModel ? appViewModel.simulation_hazards : []; clip: true; delegate: Label { width: parent.width; text: "• " + modelData; color: window.palette.danger; wrapMode: Text.Wrap } }
                         Label { text: appViewModel ? appViewModel.simulation_export_status : ""; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         SecondaryButton { Layout.fillWidth: true; text: "Export evidence…"; enabled: appViewModel && appViewModel.simulation_export_available; onClicked: simulationEvidenceDialog.open() }
                         SecondaryButton { Layout.fillWidth: true; text: "Disconnect digital twin"; enabled: appViewModel && appViewModel.simulation_active; onClicked: appViewModel.disconnect() }
+                        }
                     }
                 }
             }

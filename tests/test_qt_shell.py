@@ -133,6 +133,57 @@ def test_simulation_hazard_detail_projection_and_public_visualization_surface(qa
     assert "simulation_collision_message" in qml
 
 
+def test_terminal_simulation_hazard_survives_clear_until_safe_recovery(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    view_model = ControllerViewModel(controller)
+    connection = _FakeConnection()
+    controller.connection_service.transport = connection
+    from ttc3018_control.application.state import ConnectionMode
+    controller.connection_service.mode = ConnectionMode.SIMULATION
+
+    class _Supervisor:
+        def is_alive(self): return True
+
+    class _Runtime:
+        supervisor = _Supervisor()
+        supervisor_healthy = True
+        def __init__(self):
+            self.items = []
+        def poll(self):
+            items, self.items = self.items, []
+            return tuple(items)
+
+    runtime = _Runtime()
+    controller.connection_service.simulation_runtime = runtime
+    runtime.items = [
+        {"type": "hazard", "hazard": {
+            "kind": "tool_fixture", "message": "first contact", "body_a": "tool",
+            "body_b": "fixture", "position": (2.0, 3.0, 4.0), "severity": "alarm",
+        }},
+        {"type": "hazard_clear", "key": ("tool_fixture", "tool", "fixture")},
+    ]
+    controller.poll_simulation = runtime.poll  # type: ignore[method-assign]
+    controller.transport_events = lambda: queue.Queue()  # type: ignore[method-assign]
+    controller.request_status = lambda: None  # type: ignore[method-assign]
+    controller.check_job_watchdog = lambda: None  # type: ignore[method-assign]
+    view_model._poll()
+    assert view_model.simulation_collision_state == "FIRST CONTACT — INTERLOCK ACTIVE"
+    assert view_model.simulation_collision_point == "X2.00  Y3.00  Z4.00"
+
+    # A fresh reference is an explicit safe recovery boundary.
+    controller.establish_reference = lambda: SimpleNamespace(accepted=True, message="Reference established")  # type: ignore[method-assign]
+    view_model.establish_reference()
+    assert not view_model.simulation_hazard_active
+
+    # Ordinary warning edges still clear without a recovery action.
+    runtime.items = [
+        {"type": "hazard", "hazard": {"kind": "protocol", "message": "diagnostic", "severity": "warning"}},
+        {"type": "hazard_clear", "key": ("protocol", "", "")},
+    ]
+    view_model._poll()
+    assert not view_model.simulation_hazard_active
+
+
 def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
     assert "function showSimulator()" in qml
@@ -146,6 +197,16 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     assert 'if (appViewModel && appViewModel.job_active)' in qml
     assert 'enabled: appViewModel && appViewModel.simulation_export_available' in qml
     assert 'visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"' in qml
+
+
+def test_simulator_safety_and_evidence_column_is_bounded_and_scrollable() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert "ScrollView" in qml
+    assert "contentWidth: availableWidth" in qml
+    assert "ScrollBar.vertical.policy: ScrollBar.AsNeeded" in qml
+    assert "Layout.preferredHeight: 120" in qml
+    assert 'text: "Export evidence…"' in qml
+    assert 'text: "Disconnect digital twin"' in qml
 
 
 def test_simulation_safety_capabilities_are_public_and_fail_closed(qapp, tmp_path) -> None:
@@ -171,11 +232,13 @@ def test_simulation_projection_clears_stale_hazard_stock_and_export_state_on_dis
     controller = ApplicationController(tmp_path)
     view_model = ControllerViewModel(controller)
     view_model._simulation_active_hazard = {"kind": "tool_fixture", "message": "contact", "position": (1, 2, 3)}
+    view_model._simulation_terminal_hazard = dict(view_model._simulation_active_hazard)
     view_model._simulation_hazards = ["contact"]
     view_model._simulation_stock_metrics = {"removed_volume": 4}
     view_model._simulation_export_status = "Evidence exported"
     view_model._disconnected("test cleanup")
     assert not view_model.simulation_hazard_active
+    assert not view_model._simulation_terminal_hazard
     assert view_model.simulation_hazards == []
     assert view_model.simulation_stock_metrics_json == "{}"
     assert view_model.simulation_export_status == "No simulation evidence exported"

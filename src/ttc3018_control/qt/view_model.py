@@ -94,6 +94,9 @@ class ControllerViewModel(QObject):
         self._simulation_hazards: list[str] = []
         self._simulation_stock_metrics: dict[str, object] = {}
         self._simulation_active_hazard: dict[str, object] = {}
+        # Terminal safety evidence remains visible until an explicit safe
+        # recovery boundary clears it.
+        self._simulation_terminal_hazard: dict[str, object] = {}
         self._simulation_export_status = "No simulation evidence exported"
         self._job_file_text = "No G-code loaded"
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
@@ -778,7 +781,10 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=simulation_changed)
     def simulation_collision_active(self) -> bool:
-        return str(self._simulation_hazard_value("kind", "")) not in {"", "protocol", "supervisor_unavailable"}
+        return str(self._simulation_hazard_value("kind", "")) not in {
+            "", "protocol", "supervisor_unavailable", "estop_latched",
+            "grbl_alarm", "operator_interlock",
+        }
 
     def _simulation_hazard_value(self, key: str, default: object = "") -> object:
         return self._simulation_active_hazard.get(key, default)
@@ -816,6 +822,20 @@ class ControllerViewModel(QObject):
         except (TypeError, ValueError):
             return 0.0
         return value if value == value and abs(value) != float("inf") else 0.0
+
+    @staticmethod
+    def _is_terminal_simulation_hazard(hazard: dict[str, object]) -> bool:
+        kind = str(hazard.get("kind", ""))
+        severity = str(hazard.get("severity", "alarm")).lower()
+        # Warning/diagnostic edges may clear normally.  Safety alarms and
+        # interlocks remain visible until deliberate recovery or disconnect.
+        return kind not in {"", "protocol"} and severity in {"alarm", "interlock", "terminal"}
+
+    def _clear_terminal_simulation_hazard(self) -> None:
+        if self._simulation_terminal_hazard:
+            self._simulation_terminal_hazard = {}
+            self._simulation_active_hazard = {}
+            self.simulation_changed.emit()
 
     @Property(float, notify=simulation_changed)
     def simulation_collision_x(self) -> float:
@@ -1169,6 +1189,7 @@ class ControllerViewModel(QObject):
             outcome = self.application.start_job()
             if outcome.accepted:
                 self._guided_preflight_confirmed = False
+                self._clear_terminal_simulation_hazard()
             self._set_notice(outcome.message)
         elif operation == "job_abort":
             if not self.application.job_active:
@@ -1735,6 +1756,7 @@ class ControllerViewModel(QObject):
         outcome = self.application.establish_reference()
         if outcome.accepted:
             self._unreferenced_jog_allowed = False
+            self._clear_terminal_simulation_hazard()
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1813,12 +1835,16 @@ class ControllerViewModel(QObject):
     @Slot()
     def release_simulation_estop(self) -> None:
         outcome = self.application.release_simulation_estop()
+        if outcome.accepted:
+            self._clear_terminal_simulation_hazard()
         self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def acknowledge_simulation_estop(self) -> None:
         outcome = self.application.acknowledge_simulation_estop()
+        if outcome.accepted:
+            self._clear_terminal_simulation_hazard()
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -2141,7 +2167,7 @@ class ControllerViewModel(QObject):
                 elif item.get("type") == "hazard":
                     hazard = item.get("hazard", {})
                     message = str(hazard.get("message", "Digital twin hazard"))
-                    self._simulation_active_hazard = {
+                    projected = {
                         "kind": str(hazard.get("kind", "protocol")),
                         "message": message,
                         "body_a": str(hazard.get("body_a", "")),
@@ -2149,10 +2175,14 @@ class ControllerViewModel(QObject):
                         "position": tuple(hazard.get("position", (0.0, 0.0, 0.0))),
                         "severity": str(hazard.get("severity", "alarm")),
                     }
+                    self._simulation_active_hazard = projected
+                    if self._is_terminal_simulation_hazard(projected):
+                        self._simulation_terminal_hazard = dict(projected)
                     self._simulation_hazards = [*self._simulation_hazards[-49:], message]
                     self._set_notice(f"Digital twin safety supervisor: {message}")
                 elif item.get("type") == "hazard_clear":
-                    self._simulation_active_hazard = {}
+                    if not self._simulation_terminal_hazard:
+                        self._simulation_active_hazard = {}
             self.simulation_changed.emit()
             if not self.simulation_supervisor_healthy:
                 self._set_notice("Digital twin safety supervisor is unavailable; simulation is unsafe to continue")
@@ -2241,6 +2271,21 @@ class ControllerViewModel(QObject):
             500.0,
         )
         if status is not None:
+            if (self.application.simulation_active and status.state == "Alarm"
+                    and not self._simulation_active_hazard):
+                # Preserve a typed terminal projection even when a GRBL alarm
+                # arrives without a preceding supervisor hazard item.
+                projected = {
+                    "kind": "grbl_alarm",
+                    "message": text or "GRBL alarm",
+                    "body_a": "controller",
+                    "body_b": "",
+                    "position": tuple(status.machine_position or (0.0, 0.0, 0.0)),
+                    "severity": "alarm",
+                }
+                self._simulation_active_hazard = projected
+                self._simulation_terminal_hazard = dict(projected)
+                self._simulation_hazards = [*self._simulation_hazards[-49:], projected["message"]]
             if self._close_after_return_pending and self.at_reference:
                 self._close_after_return_pending = False
                 self.close_requested.emit()
@@ -2469,6 +2514,7 @@ class ControllerViewModel(QObject):
         self._simulation_hazards = []
         self._simulation_stock_metrics = {}
         self._simulation_active_hazard = {}
+        self._simulation_terminal_hazard = {}
         self._simulation_export_status = "No simulation evidence exported"
         self.simulation_changed.emit()
         self._guided_preflight_confirmed = False
@@ -2495,10 +2541,22 @@ class ControllerViewModel(QObject):
             elif action == "abort":
                 self.application.abort_job(f"Digital twin operator: {reason}")
             elif action == "interlock":
+                if not self._simulation_active_hazard:
+                    projected = {
+                        "kind": "operator_interlock",
+                        "message": reason,
+                        "body_a": "operator",
+                        "body_b": "controller",
+                        "position": tuple(self._simulation_snapshot.get("machine_position", (0.0, 0.0, 0.0))),
+                        "severity": "interlock",
+                    }
+                    self._simulation_active_hazard = projected
+                    self._simulation_terminal_hazard = dict(projected)
                 self._set_notice(f"Digital twin operator interlock — {reason}")
             elif action == "recovery_denied":
                 self._set_notice(f"Digital twin recovery denied — {reason}")
             elif action == "recover":
+                self._clear_terminal_simulation_hazard()
                 self._set_notice(f"Digital twin recovery authorized — {reason}")
         except RuntimeError as exc:
             self._set_notice(f"Digital twin operator action failed — {exc}")
