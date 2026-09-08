@@ -6,7 +6,7 @@ import multiprocessing.connection
 import time
 from typing import Any
 
-from .models import Hazard, HazardKind, PlantSnapshot, SimulationProfile, SimulationWorkpiece
+from .models import Hazard, HazardKind, PlantSnapshot, SimulationFault, SimulationProfile, SimulationWorkpiece
 from .operator import IndependentVirtualOperator
 from .geometry import CoordinateFrame, executed_path
 from .stock import StockModel
@@ -40,7 +40,8 @@ def _emit_assessment(outgoing, assessment) -> None:
 
 def supervisor_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
                     incoming, outgoing, profile_data: dict[str, Any], token: str,
-                    workpiece_data: dict[str, Any] | None = None) -> None:
+                    workpiece_data: dict[str, Any] | None = None,
+                    faults_data: list[dict[str, Any]] | None = None) -> None:
     """Run the actor without importing application, transport, or backend code."""
     profile = SimulationProfile(**profile_data)
     profile.validate()
@@ -48,6 +49,9 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
     if workpiece is not None:
         workpiece.validate()
     operator = IndependentVirtualOperator(profile, workpiece=workpiece)
+    faults = [SimulationFault(**data) for data in faults_data or ()]
+    for fault in faults:
+        fault.validate()
     stock = StockModel.from_workpiece(workpiece, profile) if workpiece is not None else None
     ready.send({"version": 1, "token": token, "role": "supervisor"})
     pending_intents: list[dict[str, Any]] = []
@@ -61,6 +65,12 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
                 return
             if isinstance(message, dict) and message.get("op") == "scenario_intents":
                 pending_intents.extend(item for item in message.get("intents", []) if isinstance(item, dict))
+            if isinstance(message, dict) and message.get("op") == "install_fault":
+                fault = SimulationFault(**dict(message.get("fault", {})))
+                fault.validate()
+                faults.append(fault)
+            if isinstance(message, dict) and message.get("op") == "clear_faults":
+                faults.clear()
         try:
             message = incoming.get(timeout=0.05)
         except Exception:
@@ -110,6 +120,9 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
             for operator_intent in operator.consume_intent(user_intent):
                 outgoing.put({"type": "operator_intent", "intent": operator_intent.to_dict()})
             outgoing.put({"type": "intent", "intent": user_intent})
-        if time.monotonic() - last_heartbeat >= 0.5:
+        heartbeat_lost = any(fault.name == "supervisor_heartbeat_loss"
+                             and fault.matches(last_sequence, previous_snapshot.time_ns if previous_snapshot else 0)
+                             for fault in faults)
+        if time.monotonic() - last_heartbeat >= 0.5 and not heartbeat_lost:
             outgoing.put({"type": "heartbeat", "time": time.monotonic()})
             last_heartbeat = time.monotonic()

@@ -924,6 +924,28 @@ exact evidence, review staged scope, and commit/push this package as its own
 checkpoint. Keep it headless and simulation-only; no GUI, hardware,
 USB/COM/Wi-Fi, or generated/config/evidence artifacts.
 
+## Sol program delta — fault injection and recovery (2026-09-07)
+
+The next backend-first P2 package is deterministic fault injection/recovery.
+Luna must make the existing `SimulationFault` hooks usable through the
+headless/runtime boundary, with explicit scope, sequence/time matching, and
+safe clearing. Cover delayed, missing, duplicate, and error acknowledgements;
+malformed/stale status; frozen motion; supervisor/backend heartbeat loss;
+telemetry overflow; disconnect/reconnect; reset/alarm; changed WCO; probe
+failure; spindle-delay; and fragmented/partial TCP. Every injected fault must
+produce truthful application/job state, bounded fail-closed interlock or
+recovery behavior, and replayable trace evidence—never silent success.
+
+Add deterministic tests for each fault class, combinations and ordering,
+mid-job and final-drain failures, supervisor failure/restart authorization,
+explicit recovery token/fresh-safe-sample requirements, queue/process cleanup,
+and deterministic replay across seeds. Verify real transports are not
+selected and recovery cannot issue motion until safety state is re-established.
+Run focused fault/controller/job/runtime tests followed by affected
+simulation/application/public/spawn gates, record exact evidence, review
+staged scope, and commit/push this package as its own checkpoint. No GUI,
+hardware, USB/COM/Wi-Fi, non-loopback, or generated/config/evidence staging.
+
 ## Sol program delta — GRBL/DLC32 protocol-fidelity expansion (2026-09-07)
 
 The next backend-first P1 package is protocol fidelity. Luna must audit the

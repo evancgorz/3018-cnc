@@ -43,6 +43,8 @@ class VirtualGrblController:
         self._line_sequence = 0
         self.faults: list[SimulationFault] = []
         self._delayed_ack_until: list[int] = []
+        self._delayed_spindle: tuple[int, float] | None = None
+        self._last_status_line = ""
         self.plant.on_limit = self._limit_alarm
         self.plant.on_block_complete = self._block_complete
 
@@ -76,7 +78,14 @@ class VirtualGrblController:
         return values
 
     def advance(self, delta_ns: int) -> None:
-        self.plant.advance(delta_ns)
+        if self._fault_active("frozen_motion", time_ns=self.plant.clock.time_ns):
+            self.plant.clock.advance(delta_ns)
+        else:
+            self.plant.advance(delta_ns)
+        if self._delayed_spindle is not None and self.plant.clock.time_ns >= self._delayed_spindle[0]:
+            _due, target = self._delayed_spindle
+            self._delayed_spindle = None
+            self.plant.set_spindle(target)
         self._drain_deferred_lines()
         if self._delayed_ack_until:
             now = self.plant.clock.time_ns
@@ -88,14 +97,20 @@ class VirtualGrblController:
     def install_fault(self, fault: SimulationFault) -> None:
         if not isinstance(fault, SimulationFault):
             raise TypeError("Expected SimulationFault")
+        fault.validate()
         self.faults.append(fault)
 
     def clear_faults(self) -> None:
         self.faults.clear()
+        self._delayed_ack_until.clear()
+        self._delayed_spindle = None
 
     def status_line(self) -> str:
-        if self._fault_active("malformed_status"):
+        now_ns = self.plant.clock.time_ns
+        if self._fault_active("malformed_status", time_ns=now_ns):
             return "<Malformed digital-twin status"
+        if self._fault_active("stale_status", time_ns=now_ns) and self._last_status_line:
+            return self._last_status_line
         snapshot = self.plant.snapshot()
         state = snapshot.state
         mpos = ",".join(f"{value:.3f}" for value in snapshot.machine_position)
@@ -104,12 +119,27 @@ class VirtualGrblController:
         # machine position and persisted WCO remain independently observable.
         work_position[2] -= self._modal.tlo
         wpos = ",".join(f"{value:.3f}" for value in work_position)
-        wco = ",".join(f"{value:.3f}" for value in snapshot.work_offset)
+        wco_values = list(snapshot.work_offset)
+        if self._fault_active("changed_wco", time_ns=now_ns):
+            active = next(fault for fault in self.faults
+                          if fault.name == "changed_wco"
+                          and fault.matches(self._line_sequence, now_ns))
+            try:
+                values = tuple(float(value.strip()) for value in active.value.split(","))
+                if len(values) == 3 and all(math.isfinite(value) for value in values):
+                    wco_values = list(values)
+                else:
+                    wco_values[2] += 1.0
+            except (TypeError, ValueError):
+                wco_values[2] += 1.0
+        wco = ",".join(f"{value:.3f}" for value in wco_values)
         planner_used = len(self.plant.queue) + (1 if self.plant.active is not None else 0)
         planner_free = max(0, self.plant.profile.planner_capacity - planner_used)
         rx_free = max(0, self.plant.profile.rx_capacity - len(self._line_buffer))
         pins = f"|Pn:{snapshot.pins}" if snapshot.pins else ""
-        return f"<{state}|MPos:{mpos}|WPos:{wpos}|WCO:{wco}|Bf:{planner_free},{rx_free}|FS:{snapshot.feed:.0f},{snapshot.spindle_rpm:.0f}{pins}>"
+        result = f"<{state}|MPos:{mpos}|WPos:{wpos}|WCO:{wco}|Bf:{planner_free},{rx_free}|FS:{snapshot.feed:.0f},{snapshot.spindle_rpm:.0f}{pins}>"
+        self._last_status_line = result
+        return result
 
     def _emit(self, line: str) -> None:
         self._responses.append(line)
@@ -136,6 +166,11 @@ class VirtualGrblController:
     def _normal(self, line: str) -> None:
         self._line_sequence += 1
         sequence = self._line_sequence
+        if self._fault_active("reset_alarm", sequence, self.plant.clock.time_ns):
+            self.plant.reset()
+            self.alarm = True
+            self._emit("ALARM:1")
+            return
         # GRBL accepts only explicit unlock/homing paths while alarmed;
         # ordinary motion must not be queued behind an uncleared alarm.
         alarm_command = line
@@ -169,7 +204,7 @@ class VirtualGrblController:
                 self._emit("ok")
             else:
                 parsed = parse_line(line)
-                self._execute(parsed)
+                self._execute(parsed, sequence=sequence)
         except (ProtocolError, ValueError, RuntimeError) as exc:
             self._emit(f"error:1 ({exc})")
             return
@@ -180,7 +215,9 @@ class VirtualGrblController:
         elif delayed_ack:
             delay_ms = 100.0
             for fault in self.faults:
-                if fault.enabled and fault.name == "delayed_ack" and fault.value:
+                if (fault.name == "delayed_ack"
+                        and fault.matches(sequence, self.plant.clock.time_ns)
+                        and fault.value):
                     try: delay_ms = max(0.0, float(fault.value))
                     except ValueError: pass
                     break
@@ -212,11 +249,21 @@ class VirtualGrblController:
         codes = {int(round(value)) for value in parsed.values("G")}
         return bool(codes.intersection({0, 1, 2, 3, 38}) or any(parsed.values(axis) for axis in "XYZ"))
 
-    def _fault_active(self, name: str, sequence: int | None = None) -> bool:
+    def _fault_active(self, name: str, sequence: int | None = None,
+                      time_ns: int | None = None) -> bool:
         target_sequence = self._line_sequence if sequence is None else sequence
-        return any(fault.enabled and fault.name == name and
-                   (fault.at_sequence is None or fault.at_sequence == target_sequence)
+        target_time = self.plant.clock.time_ns if time_ns is None else time_ns
+        return any(fault.name == name and fault.matches(target_sequence, target_time)
                    for fault in self.faults)
+
+    def _fault_delay(self, name: str, default_ms: float) -> float:
+        for fault in self.faults:
+            if fault.name == name and fault.matches(self._line_sequence, self.plant.clock.time_ns):
+                try:
+                    return max(0.0, float(fault.value))
+                except (TypeError, ValueError):
+                    return default_ms
+        return default_ms
 
     def _system(self, line: str) -> None:
         if line.startswith("$J="):
@@ -267,7 +314,8 @@ class VirtualGrblController:
             raise ProtocolError("unsupported or invalid setting")
         self.settings[number] = value
 
-    def _execute(self, parsed: ParsedLine) -> None:
+    def _execute(self, parsed: ParsedLine, *, sequence: int | None = None) -> None:
+        sequence = self._line_sequence if sequence is None else sequence
         g_codes = [int(round(value)) for value in parsed.values("G")]
         for code in g_codes:
             if code == 20:
@@ -309,7 +357,15 @@ class VirtualGrblController:
             if self._modal.feed <= 0:
                 raise ProtocolError("feed must be positive")
         if parsed.values("S"):
-            self.plant.set_spindle(parsed.values("S")[-1])
+            target_spindle = parsed.values("S")[-1]
+            if self._fault_active("spindle_delay", sequence, self.plant.clock.time_ns):
+                delay_ms = self._fault_delay("spindle_delay", 100.0)
+                self._delayed_spindle = (
+                    self.plant.clock.time_ns + round(delay_ms * 1_000_000), target_spindle
+                )
+                self.plant.set_spindle(0.0)
+            else:
+                self.plant.set_spindle(target_spindle)
         for code in [int(round(value)) for value in parsed.values("M")]:
             if code in (3, 4):
                 if not parsed.values("S"):
@@ -397,7 +453,8 @@ class VirtualGrblController:
     def _block_complete(self, block) -> None:
         if block.probing:
             self._last_probe = self.plant.machine_position
-            success = self.plant.probe_active
+            success = (self.plant.probe_active
+                       and not self._fault_active("probe_failure", time_ns=self.plant.clock.time_ns))
             self._emit(f"[PRB:{','.join(f'{v:.3f}' for v in self._last_probe)}:{1 if success else 0}]")
             self.plant.probe_active = False
 

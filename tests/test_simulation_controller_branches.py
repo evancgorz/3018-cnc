@@ -249,6 +249,46 @@ def test_delayed_and_duplicate_ack_and_fault_lifecycle():
         controller.install_fault("bad")
 
 
+def test_fault_sequence_and_virtual_time_matching_is_explicit():
+    controller = make_controller()
+    controller.install_fault(SimulationFault("missing_ack", at_time_ns=10))
+    assert send(controller, "G1 X1 F60") == ("ok",)
+    controller.advance(10)
+    assert send(controller, "G1 X2 F60") == ()
+    with pytest.raises(ValueError):
+        controller.install_fault(SimulationFault("bad", at_sequence=0))
+
+
+def test_frozen_motion_spindle_delay_probe_failure_and_changed_status_fail_truthfully():
+    plant = VirtualMachinePlant(SimulationProfile(initial_z=10))
+    controller = VirtualGrblController(plant)
+    controller.install_fault(SimulationFault("frozen_motion"))
+    assert send(controller, "G1 X10 F60") == ("ok",)
+    controller.advance(10_000_000_000)
+    assert plant.machine_position == pytest.approx((0.0, 0.0, 10.0))
+
+    controller = VirtualGrblController(VirtualMachinePlant(SimulationProfile(initial_z=10)))
+    plant = controller.plant
+    controller.install_fault(SimulationFault("spindle_delay", at_sequence=1, value="100"))
+    assert send(controller, "M3 S3000") == ("ok",)
+    assert plant.spindle_target == 0
+    controller.advance(100_000_000)
+    assert plant.spindle_target == 3000
+
+    controller.install_fault(SimulationFault("changed_wco", value="1,2,3"))
+    status = controller.status_line()
+    assert "WCO:1.000,2.000,3.000" in status
+    controller.install_fault(SimulationFault("stale_status"))
+    assert controller.status_line() == status
+
+    controller.clear_faults()
+    plant.probe_surface_z = 7.0
+    controller.install_fault(SimulationFault("probe_failure"))
+    assert send(controller, "G91 G38.2 Z-5 F60") == ("ok",)
+    plant.advance(10_000_000_000)
+    assert controller.drain()[-1].endswith(":0]")
+
+
 def test_protocol_parser_word_and_line_failures():
     assert parse_line("[ESP:SETUP]").raw.startswith("[ESP")
     for raw in (b"bad", "", "G1 Q1", "G1 Xnan", "G1 X1 ???"):

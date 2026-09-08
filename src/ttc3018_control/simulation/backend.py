@@ -13,7 +13,7 @@ from typing import Any
 from .controller import VirtualGrblController
 from .collision import CollisionWorld
 from .geometry import CoordinateFrame, executed_path
-from .models import SimulationProfile
+from .models import SimulationFault, SimulationProfile
 from .models import SimulationWorkpiece
 from .plant import VirtualMachinePlant
 from .stock import StockModel
@@ -21,11 +21,14 @@ from .stock import StockModel
 
 def backend_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
                 telemetry, profile_data: dict[str, Any], token: str,
-                workpiece_data: dict[str, Any] | None = None, speed: str = "realtime") -> None:
+                workpiece_data: dict[str, Any] | None = None, speed: str = "realtime",
+                faults_data: list[dict[str, Any]] | None = None) -> None:
     profile = SimulationProfile(**profile_data)
     profile.validate()
     plant = VirtualMachinePlant(profile)
     controller = VirtualGrblController(plant)
+    for data in faults_data or ():
+        controller.install_fault(SimulationFault(**data))
     collision_world = CollisionWorld(profile=profile)
     stock: StockModel | None = None
     previous_snapshot = None
@@ -44,6 +47,7 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
     server.listen(1)
     server.settimeout(0.05)
     client: socket.socket | None = None
+    fault_notified: set[str] = set()
     try:
         host, port = server.getsockname()
         ready.send({"version": 1, "token": token, "host": host, "port": port})
@@ -64,6 +68,10 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                             client.sendall(b"ALARM:1\n")
                         except OSError:
                             pass
+                if isinstance(message, dict) and message.get("op") == "install_fault":
+                    controller.install_fault(SimulationFault(**dict(message.get("fault", {}))))
+                if isinstance(message, dict) and message.get("op") == "clear_faults":
+                    controller.clear_faults()
             if client is None:
                 try:
                     client, _address = server.accept()
@@ -90,6 +98,14 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                         try: client.close()
                         except OSError: pass
                         client = None
+            fault_time = controller.plant.clock.time_ns
+            if controller._fault_active("disconnect", time_ns=fault_time) and "disconnect" not in fault_notified and client is not None:
+                fault_notified.add("disconnect")
+                try:
+                    client.close()
+                except OSError:
+                    pass
+                client = None
             now = time.monotonic()
             delta_ns = max(0, min(50_000_000, round((now - last) * 1_000_000_000)))
             last = now
@@ -112,6 +128,30 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                 # bounded observation cadence prevents redundant snapshots
                 # from filling the owner and supervisor queues.
                 if now - last_telemetry >= 0.02:
+                    if (controller._fault_active("telemetry_overflow", time_ns=fault_time)
+                            and "telemetry_overflow" not in fault_notified):
+                        fault_notified.add("telemetry_overflow")
+                        try:
+                            telemetry.put_nowait({"type": "telemetry_overflow"})
+                        except queue.Full:
+                            pass
+                    if (controller._fault_active("backend_heartbeat_loss", time_ns=fault_time)
+                            and "backend_heartbeat_loss" not in fault_notified):
+                        fault_notified.add("backend_heartbeat_loss")
+                        try:
+                            telemetry.put_nowait({"type": "fault", "name": "backend_heartbeat_loss"})
+                        except queue.Full:
+                            pass
+                        if client is not None:
+                            try:
+                                client.sendall(b"ALARM:1\n")
+                            except OSError:
+                                pass
+                        controller.alarm = True
+                        controller.plant.state = "Alarm"
+                    if controller._fault_active("backend_heartbeat_loss", time_ns=fault_time):
+                        last_telemetry = now
+                        continue
                     current_snapshot = controller.plant.snapshot()
                     snapshot = current_snapshot.to_dict()
                     backend_hazards = ()

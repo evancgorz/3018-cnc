@@ -292,3 +292,49 @@ def test_runtime_supervisor_tracks_stock_metrics_in_an_owned_process() -> None:
         assert runtime.supervisor is not None and runtime.supervisor.is_alive()
     finally:
         runtime.stop()
+
+
+@pytest.mark.skipif(mp.get_start_method(allow_none=True) == "fork", reason="spawn contract is validated on Windows")
+def test_runtime_accepts_initial_faults_through_owned_loopback_boundary() -> None:
+    runtime = SimulationRuntime(
+        profile=SimulationProfile(initial_z=5.0),
+        faults=[SimulationFault("reset_alarm", at_sequence=1)],
+    )
+    host, port = runtime.start(timeout=8.0)
+    try:
+        with socket.create_connection((host, port), timeout=2.0) as client:
+            client.settimeout(1.0)
+            client.recv(4096)
+            client.sendall(b"G1 X1 F60\n")
+            received = b""
+            for _ in range(3):
+                received += client.recv(4096)
+                if b"ALARM:1" in received:
+                    break
+            assert b"ALARM:1" in received
+        assert runtime.started
+    finally:
+        runtime.stop()
+
+
+@pytest.mark.skipif(mp.get_start_method(allow_none=True) == "fork", reason="spawn contract is validated on Windows")
+def test_runtime_translates_backend_fault_markers_to_one_bounded_interlock() -> None:
+    runtime = SimulationRuntime(faults=[
+        SimulationFault("telemetry_overflow", at_time_ns=0),
+        SimulationFault("backend_heartbeat_loss", at_time_ns=0),
+    ])
+    host, port = runtime.start(timeout=8.0)
+    try:
+        with socket.create_connection((host, port), timeout=2.0) as client:
+            client.settimeout(0.2)
+            client.recv(4096)
+            deadline = time.time() + 2.0
+            while time.time() < deadline and not runtime.hazards:
+                runtime.poll()
+                time.sleep(0.02)
+        assert len(runtime.hazards) == 1
+        assert runtime.hazards[0].kind is HazardKind.SUPERVISOR_UNAVAILABLE
+        kinds = [event.kind for event in runtime.trace.events]
+        assert "fault" in kinds and "hazard" in kinds
+    finally:
+        runtime.stop()

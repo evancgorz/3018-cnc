@@ -10,7 +10,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .backend import backend_main
-from .models import Hazard, HazardKind, SimulationProfile, SimulationWorkpiece
+from .models import Hazard, HazardKind, SimulationFault, SimulationProfile, SimulationWorkpiece
 from .supervisor import supervisor_main
 from .trace import TraceRecorder
 
@@ -24,7 +24,8 @@ class SimulationRuntime:
 
     def __init__(self, profile: SimulationProfile | None = None,
                  workpiece: SimulationWorkpiece | None = None,
-                 speed: str = "realtime") -> None:
+                 speed: str = "realtime",
+                 faults: list[SimulationFault] | None = None) -> None:
         self.profile = profile or SimulationProfile.default_3018()
         self.profile.validate()
         self.workpiece = workpiece
@@ -58,6 +59,10 @@ class SimulationRuntime:
         self._last_supervisor_heartbeat = 0.0
         self._supervisor_failure_reported = False
         self._supervisor_overflow_reported = False
+        self.faults: list[SimulationFault] = []
+        for fault in faults or ():
+            self.install_fault(fault)
+        self._fault_sequence = 0
 
     def start(self, timeout: float = 5.0) -> tuple[str, int]:
         if self.started:
@@ -70,7 +75,8 @@ class SimulationRuntime:
         self._backend_control, backend_parent = self.ctx.Pipe(True)
         self._telemetry = self.ctx.Queue(maxsize=2048)
         workpiece_data = asdict(self.workpiece) if self.workpiece is not None else None
-        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed), name=f"pine-twin-backend-{self.session_token[:6]}")
+        fault_data = [asdict(fault) for fault in self.faults]
+        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data), name=f"pine-twin-backend-{self.session_token[:6]}")
         self.backend.start()
         try:
             if not self._backend_ready.poll(timeout):
@@ -83,7 +89,7 @@ class SimulationRuntime:
             self._supervisor_control, supervisor_parent = self.ctx.Pipe(True)
             self._supervisor_in = self.ctx.Queue(maxsize=2048)
             self._supervisor_out = self.ctx.Queue(maxsize=2048)
-            self.supervisor = self.ctx.Process(target=supervisor_main, args=(supervisor_child, supervisor_parent, self._supervisor_in, self._supervisor_out, self.profile.to_dict(), self.session_token, workpiece_data), name=f"pine-twin-supervisor-{self.session_token[:6]}")
+            self.supervisor = self.ctx.Process(target=supervisor_main, args=(supervisor_child, supervisor_parent, self._supervisor_in, self._supervisor_out, self.profile.to_dict(), self.session_token, workpiece_data, fault_data), name=f"pine-twin-supervisor-{self.session_token[:6]}")
             self.supervisor.start()
             if not self._supervisor_ready.poll(timeout):
                 raise RuntimeError("Digital twin supervisor handshake timed out")
@@ -95,6 +101,11 @@ class SimulationRuntime:
             self._supervisor_failure_reported = False
             self._supervisor_overflow_reported = False
             self.trace.record(0, "runtime_started", {"profile": self.profile.to_dict()})
+            for fault in self.faults:
+                self.trace.record(0, "fault", {"name": fault.name,
+                                                "at_sequence": fault.at_sequence,
+                                                "at_time_ns": fault.at_time_ns,
+                                                "value": fault.value}, source="runtime")
             return self.endpoint
         except Exception:
             self.stop()
@@ -103,6 +114,7 @@ class SimulationRuntime:
     def poll(self) -> tuple[dict[str, Any], ...]:
         if not self.started:
             return ()
+        self._fault_sequence += 1
         forwarded: list[dict[str, Any]] = []
         telemetry_events = 0
         while telemetry_events < self.MAX_EVENTS_PER_POLL:
@@ -110,6 +122,11 @@ class SimulationRuntime:
             except queue.Empty: break
             forwarded.append(item)
             telemetry_events += 1
+            if item.get("type") == "fault":
+                name = str(item.get("name", "simulation fault"))
+                self._record_injected_fault(name, source="backend")
+            elif item.get("type") == "telemetry_overflow":
+                self._record_injected_fault("telemetry_overflow", source="backend")
             if item.get("type") == "snapshot":
                 snapshot_data = item.get("snapshot", {})
                 self.trace.record(int(snapshot_data.get("time_ns", 0)), "status", {
@@ -181,6 +198,54 @@ class SimulationRuntime:
             except (BrokenPipeError, EOFError, OSError):
                 pass
         return tuple(forwarded)
+
+    def _record_injected_fault(self, name: str, *, source: str) -> None:
+        """Convert a child fault marker into one bounded fail-closed incident."""
+        self.trace.record(0, "fault", {"name": name}, source=source)
+        key = (HazardKind.SUPERVISOR_UNAVAILABLE.value, "", "")
+        if key in self._active_hazard_keys:
+            return
+        self._active_hazard_keys.add(key)
+        hazard = Hazard(
+            HazardKind.SUPERVISOR_UNAVAILABLE,
+            f"Digital-twin {name.replace('_', ' ')} fault injected",
+            0, (0.0, 0.0, 0.0), source="runtime")
+        if len(self.hazards) >= self.MAX_HAZARDS:
+            del self.hazards[: len(self.hazards) - self.MAX_HAZARDS + 1]
+        self.hazards.append(hazard)
+        self.trace.record(0, "hazard", {"kind": hazard.kind.value,
+                                        "message": hazard.message}, source=hazard.source)
+        if key not in self._interlocked_hazards:
+            self._interlocked_hazards.add(key)
+            try:
+                if self._backend_control is not None:
+                    self._backend_control.send({"op": "interlock", "kind": hazard.kind.value})
+            except (BrokenPipeError, EOFError, OSError):
+                pass
+
+    def install_fault(self, fault: SimulationFault) -> None:
+        """Install one deterministic fault before or during a twin session."""
+        if not isinstance(fault, SimulationFault):
+            raise TypeError("Expected SimulationFault")
+        fault.validate()
+        self.faults.append(fault)
+        if self.started:
+            for control in (self._backend_control, self._supervisor_control):
+                if control is not None:
+                    control.send({"op": "install_fault", "fault": asdict(fault)})
+            self.trace.record(0, "fault", {"name": fault.name, "at_sequence": fault.at_sequence,
+                                            "at_time_ns": fault.at_time_ns, "value": fault.value}, source="runtime")
+
+    def clear_faults(self) -> None:
+        """Clear pending injections and cancel delayed controller effects safely."""
+        self.faults.clear()
+        for control in (self._backend_control, self._supervisor_control):
+            if control is not None:
+                try:
+                    control.send({"op": "clear_faults"})
+                except (BrokenPipeError, EOFError, OSError):
+                    pass
+        self.trace.record(0, "faults_cleared", {}, source="runtime")
 
     @property
     def supervisor_healthy(self) -> bool:

@@ -184,6 +184,22 @@ class SimulationFault:
     value: str = ""
     enabled: bool = True
 
+    def validate(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("Simulation fault name must be non-empty")
+        if self.at_sequence is not None and (not isinstance(self.at_sequence, int) or self.at_sequence < 1):
+            raise ValueError("Simulation fault sequence must be a positive integer")
+        if self.at_time_ns is not None and (not isinstance(self.at_time_ns, int) or self.at_time_ns < 0):
+            raise ValueError("Simulation fault time must be a nonnegative integer")
+        if not isinstance(self.value, str):
+            raise ValueError("Simulation fault value must be text")
+
+    def matches(self, sequence: int, time_ns: int) -> bool:
+        self.validate()
+        return bool(self.enabled
+                    and (self.at_sequence is None or self.at_sequence == sequence)
+                    and (self.at_time_ns is None or time_ns >= self.at_time_ns))
+
 
 @dataclass(frozen=True)
 class SimulationIntent:

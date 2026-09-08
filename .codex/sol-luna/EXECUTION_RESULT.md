@@ -509,8 +509,10 @@ the configured resolution/cell budget.
 Executed removal now consumes the accepted TCP polyline (including interior
 linear/arc path samples), transforms machine coordinates through the current
 WCO into the workpiece frame, and requires a spinning non-rapid motion before
-applying the swept cutter footprint. Backend and independent supervisor stock
-state use the same path/frame conversion. Metrics report stable stock,
+applying the swept cutter footprint. The declared STEP workpiece path is now
+loaded at both spawned production boundaries through the isolated importer;
+unsupported models remain collision-only. Backend and independent supervisor
+stock state use the same path/frame conversion. Metrics report stable stock,
 removed, remaining, target, uncovered/undercut, gouged/overcut, cell,
 resolution, and collision-only values; target fields are returned defensively.
 
@@ -535,6 +537,53 @@ Validation evidence:
   tests/test_simulation_public_scenarios.py tests/test_simulation_settings.py
   tests/test_simulation_spawn_workers.py tests/test_simulation_wco_live.py
   tests/test_application_contracts.py -q` → **153 passed in 63.06s**.
+- After wiring the declared STEP path through both spawned stock boundaries,
+  `.venv\Scripts\python.exe -m pytest tests/test_simulation_generated_step.py
+  tests/test_simulation_spawn_workers.py -q` → **17 passed in 35.89s**.
+
+No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
+Wi-Fi, non-loopback endpoint, generated evidence/config, `%SystemDrive%`, or
+unrelated user files were accessed or staged.
+
+## P2 deterministic fault injection and recovery — 2026-09-07
+
+Implemented the bounded headless fault-injection boundary without GUI or real
+transport access. `SimulationFault` now validates its name, sequence, time,
+and value and provides deterministic matching against virtual sequence/time;
+time-scoped faults activate only once virtual time reaches the declared point.
+The controller applies these scopes to existing acknowledgement faults and
+adds fail-closed hooks for frozen motion, malformed/stale status, changed WCO,
+spindle delay, probe failure, and reset-to-alarm. Clearing faults also cancels
+pending delayed acknowledgements/spindle effects safely.
+
+`SimulationRuntime` accepts initial faults and exposes install/clear methods
+that forward injections to both owned backend and supervisor processes. The
+backend handles deterministic telemetry-overflow, backend-heartbeat-loss, and
+disconnect/reconnect injections; backend heartbeat loss emits a typed fault,
+ALARM, and runtime safety incident rather than silent success. Runtime fault
+and telemetry-overflow markers are now explicitly translated into one
+deduplicated bounded `SUPERVISOR_UNAVAILABLE` incident, trace fault/hazard
+events, and one backend interlock. The supervisor supports heartbeat-loss
+injection while preserving its independent safety actor and owned-process
+cleanup. Existing alarm, missing/delayed/duplicate/error-ack, status, reset,
+queue, and loopback-only behavior remains intact.
+
+Added deterministic regressions for sequence/time matching, invalid fault
+scope rejection, frozen-motion safety, delayed spindle, probe failure,
+changed/stale status, and initial fault propagation through the owned loopback
+runtime. Existing job final-drain alarm and ack-fault tests remain passing.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_controller_branches.py
+  tests/test_simulation_core.py -q` → **39 passed in 4.67s** (includes the
+  typed backend-fault/telemetry-overflow interlock regression).
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_controller_branches.py
+  tests/test_simulation_core.py tests/test_job.py
+  tests/test_application_contracts.py -q` → **90 passed in 4.12s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_spawn_workers.py
+  tests/test_simulation_public_scenarios.py tests/test_job.py
+  tests/test_application_contracts.py -q` → **66 passed in 21.36s**.
 
 No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
 Wi-Fi, non-loopback endpoint, generated evidence/config, `%SystemDrive%`, or
