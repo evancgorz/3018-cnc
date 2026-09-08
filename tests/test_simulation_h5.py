@@ -125,3 +125,28 @@ def test_application_loopback_calibration_uses_tcp_and_cleans_up(tmp_path) -> No
     finally:
         controller.close()
     assert not controller.connected
+
+
+def test_application_wco_confirmation_rejects_stale_then_accepts_matching_idle_report(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+
+    controller = ApplicationController(tmp_path)
+    definition = CalibrationPlateDefinition()
+    sent: list[bytes] = []
+    controller.calibration._send_manual = sent.append
+    assert controller.start_auto_xyz_calibration((20.0, 20.0, 10.0), definition=definition,
+                                                 commissioning_record=_commissioning(definition)).accepted is False
+    # Arm the production service transaction directly at its WCO boundary;
+    # no twin state or transport is mutated by this regression.
+    assert controller.calibration.start(
+        seed=(20.0, 20.0, 10.0), definition=definition,
+        commissioning_record=_commissioning(definition), reference_trusted=True,
+        controller_idle=True, spindle_rpm=0.0, envelope=(300.0, 300.0, 100.0)).accepted
+    controller.calibration._work_offset_pending = True
+    controller.calibration._expected_work_offset = Position(12.0, 13.0, 14.0)
+    controller.apply_status(GrblStatus("Idle", Position(12, 13, 14), Position(12, 13, 14), Position(0, 0, 0)))
+    assert not controller.work_zero_confirmed
+    assert controller.calibration.work_offset_confirmation_pending
+    controller.apply_status(GrblStatus("Idle", Position(12, 13, 14), Position(0, 0, 0), Position(12, 13, 14)))
+    assert controller.calibration.work_offset_confirmed
+    assert controller.work_zero_confirmed

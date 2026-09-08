@@ -35,6 +35,7 @@ class AutoXYZCalibrationService:
         self._z_queued = False
         self._z_contact: float | None = None
         self._work_offset_pending = False
+        self._work_offset_confirmed = False
         self._expected_work_offset: Position | None = None
         self._require_idle_boundary = bool(require_idle_boundary)
         self._awaiting_idle = False
@@ -72,6 +73,11 @@ class AutoXYZCalibrationService:
     def expected_work_offset(self) -> Position | None:
         return self._expected_work_offset
 
+    @property
+    def work_offset_confirmed(self) -> bool:
+        """True only after a matching WCO was observed while Idle."""
+        return self._work_offset_confirmed
+
     def start(self, *, seed: tuple[float, float, float], definition: CalibrationPlateDefinition,
               commissioning_record: CalibrationCommissioningRecord | None,
               reference_trusted: bool, controller_idle: bool, spindle_rpm: float,
@@ -93,6 +99,7 @@ class AutoXYZCalibrationService:
         self._z_contact = None
         self._awaiting_idle = False
         self._work_offset_pending = False
+        self._work_offset_confirmed = False
         self._expected_work_offset = None
         self.last_status = None
         outcome = self._send_next()
@@ -156,8 +163,9 @@ class AutoXYZCalibrationService:
                 for actual, target in zip((status.work_offset.x, status.work_offset.y, status.work_offset.z),
                                           (expected.x, expected.y, expected.z))
             )
-            if self._work_offset_pending and matches:
+            if self._work_offset_pending and matches and status.state == "Idle":
                 self._work_offset_pending = False
+                self._work_offset_confirmed = True
         if status.state in {"Alarm", "Door"}:
             self._fail(f"Calibration failed — GRBL reported {status.state}", CalibrationFailure.COLLISION)
             return True
@@ -182,6 +190,7 @@ class AutoXYZCalibrationService:
         self._z_queued = False
         self._z_contact = None
         self._work_offset_pending = False
+        self._work_offset_confirmed = False
         self._expected_work_offset = None
         self.last_status = None
 
@@ -231,5 +240,6 @@ class AutoXYZCalibrationService:
             self.workflow.fail(message, code)
         self._awaiting_ack = self._awaiting_probe = False
         self._work_offset_pending = False
+        self._work_offset_confirmed = False
         self._expected_work_offset = None
         self._on_notice(message)

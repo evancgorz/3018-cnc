@@ -1228,19 +1228,11 @@ class ApplicationController:
         probing_state_before = self.probing.state
         self.homing.observe_status(status, self.machine_definition)
         self.probing.observe_status(status)
-        calibration_wco_pending = self.calibration.work_offset_confirmation_pending
-        calibration_expected_wco = self.calibration.expected_work_offset
         calibration_failed = self.calibration.observe_status(status)
         if calibration_failed and self.calibration.state.value == "failed":
             self.manual_pending_acks = 0
             self.session.invalidate_work_zero("Auto XYZ calibration failed; work zero requires re-confirmation")
-        matching_calibration_wco = (
-            calibration_expected_wco is not None and status.work_offset is not None
-            and all(abs(actual - expected) <= 0.001 for actual, expected in zip(
-                (status.work_offset.x, status.work_offset.y, status.work_offset.z),
-                (calibration_expected_wco.x, calibration_expected_wco.y, calibration_expected_wco.z)))
-        )
-        if calibration_wco_pending and matching_calibration_wco and status.state == "Idle":
+        if self.calibration.work_offset_confirmed:
             self.session.work_zero_confirmed = True
         if self._z_probe_pending and probing_state_before.value == "confirm_offset" and self.probing.state.value == "safe_retract":
             self._z_probe_offset_confirmed = True

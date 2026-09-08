@@ -540,6 +540,25 @@ evidence/config, `%SystemDrive%`, credentials, or unrelated files were staged.
 The authoritative contract remains unmodified and is excluded from the H5
 commit.
 
+## H5 review correction — WCO confirmation transaction — 2026-09-07
+
+Corrected the application boundary so calibration work-zero confirmation is
+set only when `AutoXYZCalibrationService.observe_status()` consumes its pending
+transaction on an Idle report whose WCO exactly matches the expected touch-point
+offset. A stale/mismatched WCO leaves the transaction pending and work zero
+unconfirmed; the matching fresh report confirms it. Added a regression covering
+both outcomes.
+
+Validation:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h5.py
+  tests/test_simulation_safety.py tests/test_simulation_core.py
+  tests/test_simulation_controller_branches.py tests/test_simulation_spawn_workers.py
+  tests/test_qt_shell.py tests/test_application_contracts.py
+  tests/test_homing_service.py tests/test_machine_config.py -q`
+  → **153 passed in 19.31s**.
+- `python -m compileall -q src/ttc3018_control` and `git diff --check` passed.
+
 ## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
 
 Implemented the bounded safety-input package headlessly and simulation-only.
