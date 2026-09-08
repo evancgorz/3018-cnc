@@ -1623,3 +1623,21 @@ Validation evidence:
 No GUI instance was launched or relaunched, no native window was touched, and
 no hardware, USB/COM, Wi-Fi, non-loopback endpoint, runtime configuration,
 generated evidence, or protected untracked artifact was accessed or staged.
+
+## Isolated native splash observation attempt (2026-09-08)
+
+An isolated splash observation attempt used temporary root
+`C:\Users\EVANGO~1\AppData\Local\Temp\pine-twin-gui-dd9c94d3e880-_365xeok`
+with marker `pine-twin-gui-dd9c94d3e880`, main PID `13728`, the validator's
+forbidden USB/Wi-Fi factories, and isolated sentinel configuration. The root
+window was held hidden while `QSplashScreen` was shown for observation. The
+live process existed, but the trusted computer-control window inventory
+exposed no UIA-visible splash or top-level window. Therefore no native
+screenshot, visibility, or splash timing claim is made.
+
+The launcher wrapper received an interrupt; the exact owned main PID `13728`
+was then stopped and verified absent. No child PIDs or loopback endpoint were
+created, physical-factory calls remained empty, and no hardware or physical
+transport was accessed. Native splash capture remains an honest coverage gap;
+the offscreen constrained-shell regression above is complementary evidence,
+not a substitute for that native observation.
