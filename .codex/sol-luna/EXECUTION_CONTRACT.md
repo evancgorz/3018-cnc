@@ -1334,3 +1334,17 @@ exact evidence to `EXECUTION_RESULT.md`, review scope, and commit/push H7.
 Do not launch the GUI after source edits, access hardware, select USB/COM/Wi-Fi,
 or stage generated/config/evidence artifacts. The native visual/export gate
 remains a later manual relaunch requirement.
+
+## Sol review delta — seed persisted homing declarations at twin startup (2026-09-08)
+
+H7 correctly routes declaration edits through the active runtime, but the
+default `ApplicationController` simulation factory still constructs a fresh
+twin with its generic default sensor profile. Before the next session starts,
+seed the default `SimulationRuntime` with the selected machine's validated
+`homing_limit_profile`; retain the existing explicit runtime reconfiguration
+path and custom simulation-factory compatibility. Add a regression that saves
+non-default X/Y/Z declarations, reconnects the twin, and proves the spawned
+controller reports the same ends/polarity/pins without any physical factory
+call. Run the focused H7/loopback/spawn tests and full suite, append evidence,
+commit, and push this correction. No GUI relaunch, hardware, physical
+transport, or generated/config/evidence staging is allowed.
