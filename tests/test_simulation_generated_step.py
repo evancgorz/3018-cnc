@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -141,3 +142,60 @@ def test_generated_mutations_fail_independently_for_shift_depth_tool_spindle_rap
     assert any(item.kind.value == "tool_fixture" for item in world.check_transition(
         previous, current, rapid=False, spindle_on=True,
     ))
+
+
+def test_step_model_builds_shifted_work_frame_target_and_retains_nested_island():
+    model = load_step_isolated(ROOT / "examples" / "showcase-pocket-island.step")
+    shifted_loops = tuple(
+        replace(loop, points=tuple(type(point)(point.x + 11.0, point.y - 7.0) for point in loop.points))
+        for loop in model.loops
+    )
+    shifted = replace(model, loops=shifted_loops, loop_parents=())
+    stock = StockModel.from_step_model(shifted, SimulationProfile(stock_resolution=0.5))
+    assert stock.workpiece.origin_x == pytest.approx(11.0)
+    assert stock.workpiece.origin_y == pytest.approx(-7.0)
+    assert not stock.workpiece.collision_only
+    # The pocket is three millimetres deep, while its nested island remains at
+    # the uncut stock height.  Samples are deliberately taken away from loop
+    # boundaries so this is stable across grid resolutions.
+    target = stock.target_height_field
+    assert target is not None
+    pocket = target[int(10 / stock.resolution)][int(10 / stock.resolution)]
+    island = target[int(15 / stock.resolution)][int(20 / stock.resolution)]
+    assert pocket == pytest.approx(2.0)
+    assert island == pytest.approx(5.0)
+    assert stock.metrics().target_volume is not None
+
+
+def test_declared_step_workpiece_loads_target_at_production_stock_boundary():
+    path = ROOT / "examples" / "showcase-pocket-island.step"
+    workpiece = SimulationWorkpiece(path=str(path), stock_width=40, stock_height=30, stock_thickness=5)
+    stock = StockModel.from_workpiece(workpiece, SimulationProfile(stock_resolution=1.0))
+    assert stock.target_height_field is not None
+    assert stock.metrics().collision_only is False
+    assert stock.metrics().target_volume is not None
+
+
+def test_step_target_rejects_unsupported_orientation_as_collision_only():
+    model = load_step_isolated(ROOT / "examples" / "showcase-pocket-island.step")
+    unsupported = replace(model, face_plane="XZ")
+    stock = StockModel.from_step_model(unsupported, SimulationProfile(stock_resolution=1.0))
+    metrics = stock.metrics()
+    assert stock.workpiece.collision_only
+    assert metrics.collision_only
+    assert metrics.target_volume is None
+    assert metrics.removed_volume == pytest.approx(0.0)
+
+
+def test_swept_path_metrics_are_replay_stable_and_report_overcut_undercut():
+    model = load_step_isolated(ROOT / "examples" / "showcase-pocket-island.step")
+    profile = SimulationProfile(stock_resolution=1.0)
+    one = StockModel.from_step_model(model, profile)
+    two = StockModel.from_step_model(model, profile)
+    path = ((10.0, 10.0, 5.0), (30.0, 10.0, 1.0), (30.0, 20.0, 1.0))
+    one.remove_swept_path(path, profile.tool_radius)
+    two.remove_swept_path(path, profile.tool_radius)
+    assert one.metrics() == two.metrics()
+    metrics = one.metrics()
+    assert metrics.undercut_volume == pytest.approx(metrics.uncovered_volume)
+    assert metrics.overcut_volume == pytest.approx(metrics.gouged_volume)

@@ -8,6 +8,7 @@ from typing import Any
 
 from .models import Hazard, HazardKind, PlantSnapshot, SimulationProfile, SimulationWorkpiece
 from .operator import IndependentVirtualOperator
+from .geometry import CoordinateFrame, executed_path
 from .stock import StockModel
 
 
@@ -47,7 +48,7 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
     if workpiece is not None:
         workpiece.validate()
     operator = IndependentVirtualOperator(profile, workpiece=workpiece)
-    stock = StockModel(workpiece, profile) if workpiece is not None else None
+    stock = StockModel.from_workpiece(workpiece, profile) if workpiece is not None else None
     ready.send({"version": 1, "token": token, "role": "supervisor"})
     pending_intents: list[dict[str, Any]] = []
     last_heartbeat = time.monotonic()
@@ -84,19 +85,22 @@ def supervisor_main(ready: multiprocessing.connection.Connection, control: multi
                 previous = previous_snapshot
                 _emit_assessment(outgoing, operator.observe(current, expected_hazards=expected))
                 previous_snapshot = current
-                if stock is not None and previous is not None and current.motion is not None and current.spindle_rpm > 1.0 and not current.motion.rapid:
+                if (stock is not None and previous is not None
+                        and (current.motion is not None or previous.motion is not None)
+                        and current.spindle_rpm > 1.0
+                        and not bool(current.motion and current.motion.rapid)):
+                    frame = CoordinateFrame(tuple(current.work_offset))
                     thickness = stock.workpiece.stock_thickness
-                    px, py, pz = previous.machine_position
-                    cx, cy, cz = current.machine_position
-                    offset_x, offset_y, offset_z = current.work_offset
-                    bottom = stock.workpiece.origin_z + offset_z - thickness
-                    start = (px - stock.workpiece.origin_x - offset_x,
-                             py - stock.workpiece.origin_y - offset_y,
-                             max(0.0, min(thickness, pz - bottom)))
-                    end = (cx - stock.workpiece.origin_x - offset_x,
-                           cy - stock.workpiece.origin_y - offset_y,
-                           max(0.0, min(thickness, cz - bottom)))
-                    stock.remove_swept_segment(start, end, profile.tool_radius)
+                    path = []
+                    for point in executed_path(previous, current):
+                        work_point = frame.machine_to_work(point)
+                        path.append((
+                            work_point[0] - stock.workpiece.origin_x,
+                            work_point[1] - stock.workpiece.origin_y,
+                            max(0.0, min(thickness,
+                                work_point[2] - stock.workpiece.origin_z + thickness)),
+                        ))
+                    stock.remove_swept_path(path, profile.tool_radius)
                 if stock is not None:
                     outgoing.put({"type": "stock_metrics", "metrics": stock.metrics().__dict__})
             elif message.get("type") == "telemetry_overflow":

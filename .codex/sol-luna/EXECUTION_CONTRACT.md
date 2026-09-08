@@ -901,6 +901,29 @@ groups. Record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
 
+## Sol program delta — STEP stock-removal fidelity (2026-09-07)
+
+The next backend-first P2 package is executed stock/STEP fidelity. Luna must
+audit the bounded `StockModel` and isolated STEP import path so the selected
+workpiece has an explicit work-frame placement, declared resolution/cell
+budget, and a deterministic target height field when the geometry is a
+supported planar 2.5D fixture. Executed removal must use the accepted TCP
+motion path, spinning cutter state, and swept cutter footprint—not the
+planned path or a GUI preview. Report removed, remaining, uncovered, gouged,
+undercut/overcut, and collision-only status with stable volumes and tolerances;
+retain islands and reject unsupported arbitrary 3D removal claims.
+
+Add deterministic tests using `examples/showcase-pocket-island.step` for
+import/placement, target generation, pocket/island retention, valid cutting,
+spindle-off/rapid/deep/wrong-tool rejection, partial-cell boundaries,
+resolution/cell-budget limits, and replay-stable stock metrics. Exercise the
+production loopback path for at least one accepted cutting segment and verify
+backend/operator hazards remain frame-consistent. Run focused STEP/stock
+tests followed by affected simulation/public/application/spawn gates, record
+exact evidence, review staged scope, and commit/push this package as its own
+checkpoint. Keep it headless and simulation-only; no GUI, hardware,
+USB/COM/Wi-Fi, or generated/config/evidence artifacts.
+
 ## Sol program delta — GRBL/DLC32 protocol-fidelity expansion (2026-09-07)
 
 The next backend-first P1 package is protocol fidelity. Luna must audit the

@@ -12,6 +12,7 @@ from typing import Any
 
 from .controller import VirtualGrblController
 from .collision import CollisionWorld
+from .geometry import CoordinateFrame, executed_path
 from .models import SimulationProfile
 from .models import SimulationWorkpiece
 from .plant import VirtualMachinePlant
@@ -33,7 +34,7 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
         # closed even when the parent process was bypassed.
         workpiece = SimulationWorkpiece(**workpiece_data)
         workpiece.validate()
-        stock = StockModel(workpiece, profile)
+        stock = StockModel.from_workpiece(workpiece, profile)
     speed_factor = {"realtime": 1.0, "2x": 2.0, "5x": 5.0, "10x": 10.0, "uncapped": 50.0}.get(speed)
     if speed_factor is None:
         raise ValueError(f"Unknown simulation speed: {speed}")
@@ -125,18 +126,15 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                         )
                         if (stock is not None and current_snapshot.motion is not None
                                 and current_snapshot.spindle_rpm > 1.0 and not current_snapshot.motion.rapid):
+                            frame = CoordinateFrame(tuple(current_snapshot.work_offset))
                             thickness = stock.workpiece.stock_thickness
-                            px, py, pz = previous_snapshot.machine_position
-                            cx, cy, cz = current_snapshot.machine_position
-                            offset_x, offset_y, offset_z = current_snapshot.work_offset
-                            bottom = stock.workpiece.origin_z + offset_z - thickness
-                            start = (px - stock.workpiece.origin_x - offset_x,
-                                     py - stock.workpiece.origin_y - offset_y,
-                                     max(0.0, min(thickness, pz - bottom)))
-                            end = (cx - stock.workpiece.origin_x - offset_x,
-                                   cy - stock.workpiece.origin_y - offset_y,
-                                   max(0.0, min(thickness, cz - bottom)))
-                            stock.remove_swept_segment(start, end, profile.tool_radius)
+                            path = []
+                            for point in executed_path(previous_snapshot, current_snapshot):
+                                work_point = frame.machine_to_work(point)
+                                path.append((work_point[0] - stock.workpiece.origin_x,
+                                             work_point[1] - stock.workpiece.origin_y,
+                                             max(0.0, min(thickness, work_point[2] - stock.workpiece.origin_z + thickness))))
+                            stock.remove_swept_path(path, profile.tool_radius)
                     previous_snapshot = current_snapshot
                     telemetry_item = {
                         "type": "snapshot",

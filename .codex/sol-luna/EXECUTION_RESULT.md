@@ -495,6 +495,51 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P2 STEP stock-removal fidelity — 2026-09-07
+
+Implemented and validated the bounded STEP/stock package headlessly. The
+isolated planar model now has an explicit work-frame origin and produces a
+deterministic target height field for supported orthogonal 2.5D geometry.
+`showcase-pocket-island.step` preserves the nested island at full stock height
+while mapping the recessed feature to its measured target depth. Unsupported
+orientation/tilted geometry is marked `collision_only` and never claims a
+removal target. Stock grids retain exact partial boundary-cell areas and enforce
+the configured resolution/cell budget.
+
+Executed removal now consumes the accepted TCP polyline (including interior
+linear/arc path samples), transforms machine coordinates through the current
+WCO into the workpiece frame, and requires a spinning non-rapid motion before
+applying the swept cutter footprint. Backend and independent supervisor stock
+state use the same path/frame conversion. Metrics report stable stock,
+removed, remaining, target, uncovered/undercut, gouged/overcut, cell,
+resolution, and collision-only values; target fields are returned defensively.
+
+Added deterministic regressions for shifted placement, target generation,
+pocket/island retention, unsupported collision-only import, replay-stable
+swept metrics, and the existing spindle-off/rapid/depth/tool rejection and
+production loopback accepted-cut coverage.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_generated_step.py
+  tests/test_simulation_geometry_and_parity.py
+  tests/test_simulation_plant_and_safety_branches.py -q` → **41 passed in
+  29.91s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_spawn_workers.py
+  tests/test_simulation_core.py -q` → **30 passed in 5.29s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_controller_branches.py
+  tests/test_simulation_core.py tests/test_simulation_evidence_branches.py
+  tests/test_simulation_generated_step.py
+  tests/test_simulation_geometry_and_parity.py tests/test_simulation_operator.py
+  tests/test_simulation_plant_and_safety_branches.py
+  tests/test_simulation_public_scenarios.py tests/test_simulation_settings.py
+  tests/test_simulation_spawn_workers.py tests/test_simulation_wco_live.py
+  tests/test_application_contracts.py -q` → **153 passed in 63.06s**.
+
+No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
+Wi-Fi, non-loopback endpoint, generated evidence/config, `%SystemDrive%`, or
+unrelated user files were accessed or staged.
+
 ## P2 deterministic evidence and replay completeness — 2026-09-07
 
 Implemented the headless evidence/replay package without GUI or physical

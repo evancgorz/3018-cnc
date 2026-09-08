@@ -216,3 +216,8 @@ def _path_positions(previous: PlantSnapshot, current: PlantSnapshot) -> tuple[tu
     points.append(at(total * end_ratio))
     points.extend((previous.machine_position, current.machine_position))
     return tuple(points)
+
+
+def executed_path(previous: PlantSnapshot, current: PlantSnapshot) -> tuple[tuple[float, float, float], ...]:
+    """Public immutable path view used by stock removal and safety assessors."""
+    return _path_positions(previous, current)
