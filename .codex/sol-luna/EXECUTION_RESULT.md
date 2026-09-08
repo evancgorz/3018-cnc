@@ -1723,3 +1723,47 @@ This is deterministic polygon boundary probing only; it makes no claim about
 physical probe repeatability, GPIO/USB/COM/Wi-Fi, non-loopback access, or
 arbitrary 3D surface tracing. Protected runtime/config/generated artifacts
 remain unstaged.
+
+## S1 arbitrary-angle planar STEP basis and projected topology (2026-09-08)
+
+Added the serialized `StepPlanarModel` face basis `(origin, U, V, normal)`
+through the isolated importer worker round trip. `Auto` retains the existing
+strict XY/XZ/YZ preference and falls back to `ARBITRARY` only when no strict
+orthogonal face is available; explicit `ARBITRARY (planar face basis)` is also
+supported. The basis is normalized deterministically from the planar normal
+and a canonical world reference, with finite orthonormality checks. Closed
+wires are projected into that local XY basis, normalized, and passed through
+the existing containment/overlap/self-intersection validation. Coplanar
+compound faces are reprojected into one shared basis before union so
+disconnected roots and nested loops remain distinct. Arbitrary thickness is
+derived from the finite parallel-face solid bounds, with a bounded fallback to
+the normal projection of the solid bounds. Curved/non-planar geometry remains
+rejected or collision-only; no general 3D material-physics claim is made.
+
+Existing orthogonal face selection, tilted auxiliary surface patches, feature
+detection, parser/generator safety, and isolated import behavior remain
+unchanged. Normalized ARBITRARY planar loops are accepted by the bounded stock
+target path; arbitrary tool-axis physical force/accuracy is outside scope.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_geometry_s1.py` →
+  **3 passed**.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_geometry.py
+  tests/test_step_engraver.py tests/test_step_operations.py tests/test_step_simulation.py`
+  → **100 passed in 49.34s**.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_step_geometry_s1.py
+  tests/test_simulation_generated_step.py tests/test_simulation_geometry_and_parity.py
+  tests/test_simulation_public_scenarios.py tests/test_qt_shell.py
+  tests/test_application_contracts.py` → **124 passed in 53.43s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **532 passed in 131.96s (0:02:11)**.
+- `git diff --check` → **passed**.
+
+The OCP-generated regressions cover repeated Auto/explicit ARBITRARY import,
+serialized basis determinism and orthonormality, rotated-box dimensions and
+finite thickness, rotated nested-loop generation/program bounds, rotated
+compound disconnected roots, and invalid input rejection. No GUI, hardware,
+USB/COM/Wi-Fi/non-loopback endpoint, runtime config, generated evidence, or
+protected artifact was accessed or staged.

@@ -1612,3 +1612,39 @@ Z-surface and Auto XYZ workflows.
 
 Commit and push this package separately; leave all other unchecked backlog
 items untouched.
+
+## Sol plan — S1 arbitrary-angle planar STEP orientation and projected topology (2026-09-08)
+
+Implement the next STEP prerequisite as a bounded geometry package. Support
+machining a selected planar face whose normal is not aligned to world X/Y/Z by
+normalizing that face into a deterministic local XY frame. Keep true curved or
+non-planar 3D removal explicitly unsupported until a later package.
+
+### Required behavior
+
+- Extend the isolated OpenCASCADE importer with a serialized orthonormal face
+  basis (origin, U, V, normal) and an `ARBITRARY` face classification. Auto
+  selection may choose an arbitrary planar face when no strict orthogonal face
+  is available; explicit XY/XZ/YZ behavior and existing fixture output must
+  remain unchanged.
+- Project every sampled closed wire into that face basis, normalize the loops
+  deterministically, derive a finite local thickness from the solid bounds,
+  and run the existing containment/overlap/self-intersection validation. Keep
+  disconnected roots and nested holes, and reject degenerate or ambiguous
+  projections fail-closed.
+- Carry the basis through the isolated worker payload and model round trip.
+  Existing STEP generation, parser, envelope, stock-target, and preview paths
+  must consume the normalized local geometry without world-axis assumptions;
+  no transport or hardware calls are allowed during import/generation.
+- Add OCP-generated rotated-box/compound/nested-loop fixtures and tests for
+  deterministic basis/projection, dimensions/thickness, topology metadata,
+  repeated isolated imports, generated-program bounds, and rejection of a
+  degenerate/non-planar selection. Preserve all orthogonal and 2.5D tests.
+- Update `docs/STEP_25D_PROGRESS.md` to describe the delivered bounded
+  arbitrary-planar orientation/topology support, not general curved B-rep or
+  arbitrary 3D material removal. Record exact test counts and evidence.
+
+Luna must run focused geometry/engraver/import tests, affected simulation and
+Qt/application tests, compileall, diff checks, and the full suite. Commit and
+push only this package plus its contract/result/progress evidence; leave the
+remaining 3D/adaptive/CAM backlog items untouched.

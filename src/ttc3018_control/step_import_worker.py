@@ -28,6 +28,9 @@ def main() -> int:
                 "source_bounds": list(model.source_bounds),
                 "face_plane": model.face_plane,
                 "face_normal": list(model.face_normal),
+                "face_origin": list(model.face_origin),
+                "face_u": list(model.face_u),
+                "face_v": list(model.face_v),
                 "features": [
                     {
                         "kind": feature.kind,

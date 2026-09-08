@@ -88,8 +88,9 @@ class StockModel:
             raise TypeError("Expected a normalized StepPlanarModel")
         min_x = min(loop.bounds[0] for loop in model.loops)
         min_y = min(loop.bounds[1] for loop in model.loops)
-        collision_only = (model.face_plane != "XY" or any(patch.tilted for patch in model.surface_patches)
-                          or not bool(model.surface_patches or model.features))
+        collision_only = (model.face_plane not in {"XY", "ARBITRARY"}
+                          or any(patch.tilted for patch in model.surface_patches)
+                          or (model.face_plane != "ARBITRARY" and not bool(model.surface_patches or model.features)))
         workpiece = SimulationWorkpiece(
             path=str(model.path), stock_width=model.width, stock_height=model.height,
             stock_thickness=model.thickness, origin_x=min_x, origin_y=min_y,
@@ -108,9 +109,9 @@ class StockModel:
             return stock
         from ..step_geometry import load_step_isolated
         model = load_step_isolated(Path(workpiece.path))
-        unsupported = (model.face_plane != "XY"
+        unsupported = (model.face_plane not in {"XY", "ARBITRARY"}
                        or any(patch.tilted for patch in model.surface_patches)
-                       or not bool(model.surface_patches or model.features))
+                       or (model.face_plane != "ARBITRARY" and not bool(model.surface_patches or model.features)))
         if unsupported:
             stock.workpiece = SimulationWorkpiece(
                 **{**workpiece.__dict__, "collision_only": True})
@@ -123,8 +124,8 @@ class StockModel:
         from ..step_geometry import StepPlanarModel
         if not isinstance(model, StepPlanarModel):
             raise TypeError("Expected a normalized StepPlanarModel")
-        if model.face_plane != "XY" or any(patch.tilted for patch in model.surface_patches):
-            raise ValueError("Only orthogonal planar STEP faces support stock targets")
+        if model.face_plane not in {"XY", "ARBITRARY"} or any(patch.tilted for patch in model.surface_patches):
+            raise ValueError("Only normalized planar STEP faces support stock targets")
         min_x = min(loop.bounds[0] for loop in model.loops)
         min_y = min(loop.bounds[1] for loop in model.loops)
         roles = model.loop_roles

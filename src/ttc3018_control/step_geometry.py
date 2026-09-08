@@ -25,6 +25,7 @@ STEP_PLANES = (
     "XY (top/bottom)",
     "XZ (front/back)",
     "YZ (left/right)",
+    "ARBITRARY (planar face basis)",
 )
 
 
@@ -98,6 +99,13 @@ class StepPlanarModel:
     features: tuple[StepFeature, ...] = ()
     surface_patches: tuple[PlanarSurfacePatch, ...] = ()
     loop_parents: tuple[int | None, ...] = ()
+    face_origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    face_u: tuple[float, float, float] = (1.0, 0.0, 0.0)
+    face_v: tuple[float, float, float] = (0.0, 1.0, 0.0)
+
+    @property
+    def face_basis(self) -> tuple[tuple[float, float, float], ...]:
+        return (self.face_origin, self.face_u, self.face_v, self.face_normal)
 
     @property
     def width(self) -> float:
@@ -237,7 +245,7 @@ def load_step(path: Path, plane: str = STEP_PLANES[0]) -> StepPlanarModel:
 
     path = Path(path)
     if plane not in STEP_PLANES:
-        raise StepImportError("Choose Auto, XY, XZ, or YZ for the STEP face orientation")
+        raise StepImportError("Choose Auto, XY, XZ, or YZ, or ARBITRARY for the STEP face orientation")
     if path.suffix.lower() not in {".step", ".stp"}:
         raise StepImportError("Choose a STEP file with a .step or .stp extension")
     if not path.exists() or not path.is_file():
@@ -276,7 +284,7 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
 
     path = Path(path)
     if plane not in STEP_PLANES:
-        raise StepImportError("Choose Auto, XY, XZ, or YZ for the STEP face orientation")
+        raise StepImportError("Choose Auto, XY, XZ, or YZ, or ARBITRARY for the STEP face orientation")
     environment = os.environ.copy()
     source_root = str(Path(__file__).resolve().parent.parent)
     existing_pythonpath = environment.get("PYTHONPATH")
@@ -352,6 +360,9 @@ def load_step_isolated(path: Path, plane: str = STEP_PLANES[0], timeout: float =
                 None if parent is None else int(parent)
                 for parent in payload.get("loop_parents", [])
             ),
+            tuple(float(value) for value in payload.get("face_origin", (0.0, 0.0, 0.0))),
+            tuple(float(value) for value in payload.get("face_u", (1.0, 0.0, 0.0))),
+            tuple(float(value) for value in payload.get("face_v", (0.0, 1.0, 0.0))),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise StepImportError("STEP importer returned incomplete geometry") from exc
@@ -378,72 +389,98 @@ def _ocp_modules() -> dict[str, Any]:
 
 def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str) -> StepPlanarModel:
     explorer = modules["TopExp_Explorer"](shape, modules["TopAbs_FACE"])
-    candidates: list[tuple[float, str, list[PlanarLoop], tuple[float, float, float], float]] = []
-    planar_faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float, tuple[float, float, float]]] = []
+    candidates: list[tuple[float, str, list[PlanarLoop], tuple[float, float, float], float,
+                        tuple[tuple[float, float, float], ...], Any]] = []
+    planar_faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float,
+                            tuple[float, float, float], tuple[tuple[float, float, float], ...]]] = []
     while explorer.More():
         face = modules["TopoDS"].Face_s(explorer.Current())
         surface = modules["BRepAdaptor_Surface"](face, True)
         if surface.GetType() == modules["GeomAbs_Plane"]:
-            normal = surface.Plane().Axis().Direction()
-            strict_axis = _plane_axis(normal.X(), normal.Y(), normal.Z())
-            axis = strict_axis or _dominant_plane_axis(normal.X(), normal.Y(), normal.Z())
-            if axis is not None:
-                try:
-                    loops = _extract_loops(face, modules, axis)
-                except StepImportError:
-                    loops = []
-                if loops:
-                    location = surface.Plane().Location()
-                    planar_faces.append((face, axis, loops, (float(normal.X()), float(normal.Y()), float(normal.Z())), _plane_coordinate(location, axis), (float(location.X()), float(location.Y()), float(location.Z()))))
-                    if strict_axis is not None:
-                        candidates.append(
-                            (
-                                max(loop.area for loop in loops),
-                                axis,
-                                loops,
-                                (float(normal.X()), float(normal.Y()), float(normal.Z())),
-                                _plane_coordinate(surface.Plane().Location(), axis),
-                            )
-                        )
+            plane_surface = surface.Plane()
+            raw_normal = plane_surface.Axis().Direction()
+            normal_values = (float(raw_normal.X()), float(raw_normal.Y()), float(raw_normal.Z()))
+            location = plane_surface.Location()
+            location_values = (float(location.X()), float(location.Y()), float(location.Z()))
+            strict_axis = _plane_axis(*normal_values)
+            axis = strict_axis or _dominant_plane_axis(*normal_values) or "ARBITRARY"
+            basis = _face_basis(location_values, normal_values, axis)
+            try:
+                loops = _extract_loops(face, modules, axis, basis=basis)
+            except StepImportError:
+                loops = []
+            if loops:
+                raw_length = math.sqrt(sum(value * value for value in normal_values))
+                canonical_normal = (basis[3] if strict_axis is not None
+                                    else tuple(value / raw_length for value in normal_values))
+                coordinate = _plane_coordinate(location, axis) if axis != "ARBITRARY" else 0.0
+                planar_faces.append((face, axis, loops, canonical_normal, coordinate,
+                                     location_values, basis))
+                if strict_axis is not None:
+                    candidates.append((max(loop.area for loop in loops), axis, loops,
+                                       canonical_normal, coordinate, basis, face))
+                elif plane in {STEP_PLANES[0], STEP_PLANES[4]}:
+                    # A tilted face remains an auxiliary surface patch when a
+                    # strict face exists, but is also retained as an
+                    # arbitrary candidate for Auto when no strict face exists.
+                    arbitrary_basis = _face_basis(location_values, normal_values, "ARBITRARY")
+                    arbitrary_loops = _extract_loops(face, modules, "ARBITRARY", basis=arbitrary_basis)
+                    if arbitrary_loops:
+                        candidates.append((max(loop.area for loop in arbitrary_loops), "ARBITRARY",
+                                           arbitrary_loops, arbitrary_basis[3], 0.0, arbitrary_basis, face))
         explorer.Next()
     if not candidates:
-        raise StepImportError("No closed orthogonal planar face was found; tilted or open geometry is not supported")
+        raise StepImportError("No closed planar face with a valid orthonormal basis was found")
 
     box = modules["Bnd_Box"]()
     modules["BRepBndLib"].Add_s(shape, box)
     bounds = box.Get()
     selected = candidates
-    if plane != STEP_PLANES[0]:
+    if plane == STEP_PLANES[4]:
+        selected = [candidate for candidate in candidates if candidate[1] == "ARBITRARY"]
+        if not selected:
+            raise StepImportError("No closed arbitrary planar face was found in this STEP file")
+        chosen = _highest_largest_face(selected)
+    elif plane != STEP_PLANES[0]:
         requested_axis = plane[:2]
         selected = [candidate for candidate in candidates if candidate[1] == requested_axis]
         if not selected:
             raise StepImportError(f"No closed {requested_axis} planar face was found in this STEP file")
         chosen = _highest_largest_face(selected)
     else:
-        # A common extruded 2.5D part can have a long rectangular side whose
-        # area is slightly larger than the actual profile (hooks and brackets
-        # are typical examples).  Largest-face selection then points the tool
-        # through the length of the part and can turn a perfectly machinable
-        # profile into an apparently over-depth model.  The shortest model
-        # dimension is the best deterministic extrusion/tool-axis signal;
-        # face area remains the tie-breaker for near-equal dimensions.
-        axis_thickness = {
-            axis: _plane_thickness(bounds, axis)
-            for axis in {candidate[1] for candidate in selected}
-        }
-        minimum_thickness = min(axis_thickness.values())
-        tolerance = max(1e-6, minimum_thickness * 1e-4)
-        preferred_axes = {
-            axis
-            for axis, thickness in axis_thickness.items()
-            if thickness <= minimum_thickness + tolerance
-        }
-        chosen = _highest_largest_face(
-            [candidate for candidate in selected if candidate[1] in preferred_axes]
-        )
-    _face_area, selected_axis, _chosen_loops, normal, face_coordinate = chosen
-    axis_index = {"YZ": 0, "XZ": 1, "XY": 2}[selected_axis]
-    chosen_sign = 1 if normal[axis_index] >= 0 else -1
+        strict_selected = [candidate for candidate in candidates if candidate[1] != "ARBITRARY"]
+        if strict_selected:
+            selected = strict_selected
+        else:
+            selected = [candidate for candidate in candidates if candidate[1] == "ARBITRARY"]
+            if not selected:
+                raise StepImportError("No closed planar face with a valid basis was found")
+            chosen = _highest_largest_face(selected)
+        if selected and selected[0][1] == "ARBITRARY":
+            chosen = _highest_largest_face(selected)
+        else:
+            # A common extruded 2.5D part can have a long rectangular side
+            # whose area is slightly larger than the actual profile.  Largest
+            # face selection then points the tool through the length of the
+            # part.  The shortest model dimension remains the deterministic
+            # extrusion/tool-axis signal for orthogonal faces.
+            axis_thickness = {
+                axis: _plane_thickness(bounds, axis)
+                for axis in {candidate[1] for candidate in selected}
+            }
+            minimum_thickness = min(axis_thickness.values())
+            tolerance = max(1e-6, minimum_thickness * 1e-4)
+            preferred_axes = {
+                axis
+                for axis, thickness in axis_thickness.items()
+                if thickness <= minimum_thickness + tolerance
+            }
+            chosen = _highest_largest_face(
+                [candidate for candidate in selected if candidate[1] in preferred_axes]
+            )
+    _face_area, selected_axis, _chosen_loops, normal, face_coordinate, basis, _chosen_face = chosen
+    axis_index = {"YZ": 0, "XZ": 1, "XY": 2}.get(selected_axis)
+    chosen_sign = 1 if axis_index is None or normal[axis_index] >= 0 else -1
     # A compound can contain several disconnected solids whose machining
     # faces are coplanar.  Preserve every face on the selected plane and
     # normal orientation instead of silently machining only the largest one.
@@ -451,12 +488,24 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         candidate
         for candidate in selected
         if candidate[1] == selected_axis
-        and abs(candidate[4] - face_coordinate) <= 1e-6
-        and (1 if candidate[3][axis_index] >= 0 else -1) == chosen_sign
+        and (selected_axis == "ARBITRARY"
+             and _same_basis_plane(candidate[5], basis)
+             or selected_axis != "ARBITRARY"
+             and abs(candidate[4] - face_coordinate) <= 1e-6
+             and (1 if candidate[3][axis_index] >= 0 else -1) == chosen_sign)
     ]
-    loops = _merge_coplanar_loops(
-        tuple(candidate[2] for candidate in matching_faces)
-    ) or tuple(_chosen_loops)
+    if selected_axis == "ARBITRARY":
+        # Each OCC face's native plane location is a different origin.  A
+        # compound's coplanar roots must be reprojected into the chosen shared
+        # basis before union/containment, otherwise disconnected faces appear
+        # to overlap at (0, 0).
+        matching_loop_sets = tuple(
+            _extract_loops(candidate[6], modules, "ARBITRARY", basis=basis)
+            for candidate in matching_faces
+        )
+    else:
+        matching_loop_sets = tuple(candidate[2] for candidate in matching_faces)
+    loops = _merge_coplanar_loops(matching_loop_sets) or tuple(_chosen_loops)
 
     all_points = [point for loop in loops for point in loop.points]
     min_x = min(point.x for point in all_points)
@@ -465,29 +514,29 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         PlanarLoop(tuple(Point2D(point.x - min_x, point.y - min_y) for point in loop.points))
         for loop in loops
     )
-    thickness = _plane_thickness(bounds, selected_axis)
+    thickness = (_plane_thickness(bounds, selected_axis)
+                 if selected_axis != "ARBITRARY"
+                 else _basis_thickness(bounds, basis[3], planar_faces))
     loop_parents = loop_containment_parents(normalized)
-    machine_bottom = _machine_axis_min(bounds, selected_axis)
-    features = _detect_axial_features(
-        shape,
-        modules,
-        selected_axis,
-        face_coordinate,
-        normal,
-        normalized,
-        min_x,
-        min_y,
-        loop_parents,
-        machine_bottom,
-    )
-    machine_top = _machine_axis_max(bounds, selected_axis)
-    surface_patches = _surface_patches(
-        planar_faces, selected_axis, machine_top, min_x, min_y, modules
-    )
+    if selected_axis == "ARBITRARY":
+        features = ()
+        surface_patches = ()
+        top_z = 0.0
+    else:
+        machine_bottom = _machine_axis_min(bounds, selected_axis)
+        features = _detect_axial_features(
+            shape, modules, selected_axis, face_coordinate, normal, normalized,
+            min_x, min_y, loop_parents, machine_bottom,
+        )
+        machine_top = _machine_axis_max(bounds, selected_axis)
+        surface_patches = _surface_patches(
+            planar_faces, selected_axis, machine_top, min_x, min_y, modules
+        )
+        top_z = face_coordinate
     return StepPlanarModel(
         path,
         normalized,
-        face_coordinate,
+        top_z,
         thickness,
         bounds,
         selected_axis,
@@ -495,6 +544,9 @@ def _normalize_shape(path: Path, shape: Any, modules: dict[str, Any], plane: str
         features,
         surface_patches,
         loop_parents,
+        basis[0],
+        basis[1],
+        basis[2],
     )
 
 
@@ -508,6 +560,75 @@ def _highest_largest_face(candidates):
         if candidate[0] >= largest_area - area_tolerance
     ]
     return max(largest, key=lambda candidate: candidate[4])
+
+
+def _face_basis(
+    origin: tuple[float, float, float],
+    normal: tuple[float, float, float],
+    plane: str,
+) -> tuple[tuple[float, float, float], ...]:
+    """Return a deterministic orthonormal origin/U/V/N basis for a face."""
+    length = math.sqrt(sum(value * value for value in normal))
+    if length <= 1e-12 or not math.isfinite(length):
+        raise StepImportError("Planar face has an invalid normal")
+    n = tuple(value / length for value in normal)
+    if plane == "XY":
+        return origin, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0 if n[2] >= 0 else -1.0)
+    if plane == "XZ":
+        return origin, (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0 if n[1] >= 0 else -1.0, 0.0)
+    if plane == "YZ":
+        return origin, (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0 if n[0] >= 0 else -1.0, 0.0, 0.0)
+    # Canonicalize the normal sign so repeated imports do not mirror a face
+    # when OCC chooses the opposite face orientation on an equivalent file.
+    dominant = max(range(3), key=lambda index: abs(n[index]))
+    if n[dominant] < 0:
+        n = tuple(-value for value in n)
+    references = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    reference = min(references, key=lambda axis: abs(sum(axis[index] * n[index] for index in range(3))))
+    dot = sum(reference[index] * n[index] for index in range(3))
+    u_raw = tuple(reference[index] - dot * n[index] for index in range(3))
+    u_length = math.sqrt(sum(value * value for value in u_raw))
+    if u_length <= 1e-12:
+        raise StepImportError("Planar face basis is degenerate")
+    u = tuple(value / u_length for value in u_raw)
+    v = (n[1] * u[2] - n[2] * u[1],
+         n[2] * u[0] - n[0] * u[2],
+         n[0] * u[1] - n[1] * u[0])
+    return origin, u, v, n
+
+
+def _same_basis_plane(first: tuple[tuple[float, float, float], ...],
+                      second: tuple[tuple[float, float, float], ...]) -> bool:
+    first_origin, _first_u, _first_v, first_normal = first
+    second_origin, _second_u, _second_v, second_normal = second
+    normal_dot = sum(a * b for a, b in zip(first_normal, second_normal))
+    offset = tuple(a - b for a, b in zip(first_origin, second_origin))
+    return abs(abs(normal_dot) - 1.0) <= 1e-6 and abs(sum(offset[index] * first_normal[index] for index in range(3))) <= 1e-6
+
+
+def _basis_thickness(
+    bounds: tuple[float, ...],
+    normal: tuple[float, float, float],
+    planar_faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float,
+                             tuple[float, float, float], tuple[tuple[float, float, float], ...]]],
+) -> float:
+    face_projections = [
+        sum(location[index] * normal[index] for index in range(3))
+        for _face, _axis, _loops, face_normal, _coordinate, location, _basis in planar_faces
+        if abs(sum(face_normal[index] * normal[index] for index in range(3))) >= 1.0 - 1e-6
+    ]
+    if len(face_projections) >= 2:
+        thickness = max(face_projections) - min(face_projections)
+        if math.isfinite(thickness) and thickness > 1e-9:
+            return thickness
+    corners = ((x, y, z) for x in (bounds[0], bounds[3])
+               for y in (bounds[1], bounds[4])
+               for z in (bounds[2], bounds[5]))
+    projections = [sum(point[index] * normal[index] for index in range(3)) for point in corners]
+    thickness = max(projections) - min(projections)
+    if not math.isfinite(thickness) or thickness <= 1e-9:
+        raise StepImportError("Planar face has no finite solid thickness along its normal")
+    return thickness
 
 
 def _merge_coplanar_loops(
@@ -574,7 +695,8 @@ def _machine_axis_min(bounds: tuple[float, float, float, float, float, float], p
 
 
 def _surface_patches(
-    faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float, tuple[float, float, float]]],
+    faces: list[tuple[Any, str, list[PlanarLoop], tuple[float, float, float], float,
+                      tuple[float, float, float], tuple[tuple[float, float, float], ...]]],
     selected_axis: str,
     machine_top: float,
     origin_u: float,
@@ -584,7 +706,7 @@ def _surface_patches(
     """Normalize planar faces whose normals expose the selected tool axis."""
     axis_index = {"YZ": 0, "XZ": 1, "XY": 2}[selected_axis]
     patches: list[PlanarSurfacePatch] = []
-    for _face, axis, loops, normal, coordinate, location in faces:
+    for _face, axis, loops, normal, coordinate, location, _basis in faces:
         if axis != selected_axis or abs(normal[axis_index]) <= 0.05:
             continue
         normal_u, normal_v, normal_machine = _plane_normal_components(normal, selected_axis)
@@ -815,7 +937,8 @@ def _plane_thickness(bounds: tuple[float, float, float, float, float, float], pl
     return max(0.0, bounds[3] - bounds[0])
 
 
-def _extract_loops(face: Any, modules: dict[str, Any], plane: str) -> list[PlanarLoop]:
+def _extract_loops(face: Any, modules: dict[str, Any], plane: str,
+                   *, basis: tuple[tuple[float, float, float], ...] | None = None) -> list[PlanarLoop]:
     wires = modules["TopExp_Explorer"](face, modules["TopAbs_WIRE"])
     loops: list[PlanarLoop] = []
     while wires.More():
@@ -832,7 +955,7 @@ def _extract_loops(face: Any, modules: dict[str, Any], plane: str) -> list[Plana
         if not segments:
             raise StepImportError("Top-face wire contains no edges")
         loop = _polygonize_segments(
-            [[_project_point(point, plane) for point in segment] for segment in segments]
+            [[_project_point(point, plane, basis=basis) for point in segment] for segment in segments]
         )
         if loop is not None:
             loops.append(loop)
@@ -864,7 +987,15 @@ def _sample_curve(curve: Any, modules: dict[str, Any]) -> list[_Point3D]:
     return points
 
 
-def _project_point(point: _Point3D, plane: str) -> Point2D:
+def _project_point(point: _Point3D, plane: str,
+                   *, basis: tuple[tuple[float, float, float], ...] | None = None) -> Point2D:
+    if plane == "ARBITRARY":
+        if basis is None:
+            raise StepImportError("An arbitrary planar face requires a basis")
+        origin, u, v, _normal = basis
+        vector = (point.x - origin[0], point.y - origin[1], point.z - origin[2])
+        return Point2D(sum(vector[index] * u[index] for index in range(3)),
+                       sum(vector[index] * v[index] for index in range(3)))
     if plane == "XY":
         return Point2D(point.x, point.y)
     if plane == "XZ":
