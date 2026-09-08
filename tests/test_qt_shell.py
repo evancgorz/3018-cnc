@@ -129,6 +129,8 @@ def test_simulation_safety_capabilities_are_public_and_fail_closed(qapp, tmp_pat
     assert "simulation_homing_status" in qml
     assert "simulation_estop_status" in qml
     assert "simulation_auto_xyz_status" in qml
+    assert "Preview Auto XYZ calibration plate (commissioning required)" in qml
+    assert "enabled: appViewModel && appViewModel.simulation_auto_xyz_available" in qml
     assert '"Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}")' in qml
     assert 'text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job()' in qml
     assert 'text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job()' in qml

@@ -224,6 +224,40 @@ def test_application_controller_uses_normal_tcp_event_dispatch_for_twin(tmp_path
     assert not forbidden_calls
 
 
+def test_application_simulation_estop_invalidates_reference_and_work_zero(tmp_path) -> None:
+    from ttc3018_control.application.controller import ApplicationController
+    from ttc3018_control.simulation.runtime import SimulationRuntime
+    from ttc3018_control.simulation.safety import EStopDefinition, EStopMode
+
+    controller = ApplicationController(
+        tmp_path,
+        simulation_factory=lambda: SimulationRuntime(
+            estop_definition=EStopDefinition(mode=EStopMode.RESET_ONLY, reset_pin="R")))
+    assert controller.connect_simulation().accepted
+    try:
+        deadline = time.time() + 3
+        while time.time() < deadline and controller.status is None:
+            while not controller.transport_events().empty():
+                controller.handle_transport_response(controller.transport_events().get_nowait().text)
+            time.sleep(.02)
+        assert controller.establish_reference().accepted
+        controller.session.work_zero_confirmed = True
+        outcome = controller.inject_simulation_estop(reset_asserted=True)
+        assert outcome.accepted
+        deadline = time.time() + 3
+        while time.time() < deadline and controller.reference_trusted:
+            controller.poll_simulation()
+            time.sleep(.02)
+        assert not controller.reference_trusted
+        assert not controller.work_zero_confirmed
+        assert controller.release_simulation_estop().accepted
+        assert not controller.acknowledge_simulation_estop().accepted
+        assert controller.establish_reference().accepted
+        assert controller.acknowledge_simulation_estop().accepted
+    finally:
+        controller.close()
+
+
 def test_trace_round_trip_and_difference(tmp_path) -> None:
     trace = TraceRecorder()
     trace.record(0, "start", {"pid": 42, "port": 1234})

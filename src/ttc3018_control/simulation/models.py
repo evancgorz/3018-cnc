@@ -29,6 +29,7 @@ class HazardKind(StrEnum):
     STALLED_MOTION = "stalled_motion"
     DIVERGENCE = "commanded_executed_divergence"
     SUPERVISOR_UNAVAILABLE = "supervisor_unavailable"
+    ESTOP_LATCHED = "estop_latched"
     PROTOCOL = "protocol"
 
 

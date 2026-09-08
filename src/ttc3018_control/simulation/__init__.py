@@ -7,7 +7,7 @@ from .controller import VirtualGrblController
 from .safety import (
     AxisEnd, AxisSensorDeclaration, HomingLimitProfile, HomingCommissioningRecord,
     HomingSensorBank, EStopMode, EStopDefinition, EStopCommissioningRecord,
-    EStopLatch, CalibrationState, CalibrationPlateDefinition, PlateContact,
+    EStopLatch, CalibrationState, CalibrationPlateDefinition, CalibrationCommissioningRecord, PlateContact,
     CalibrationResult, fit_plate_circle, AutoXYZCalibrationWorkflow,
 )
 
@@ -16,6 +16,6 @@ __all__ = [
     "SimulationClock", "VirtualMachinePlant", "VirtualGrblController",
     "AxisEnd", "AxisSensorDeclaration", "HomingLimitProfile", "HomingCommissioningRecord",
     "HomingSensorBank", "EStopMode", "EStopDefinition", "EStopCommissioningRecord",
-    "EStopLatch", "CalibrationState", "CalibrationPlateDefinition", "PlateContact",
+    "EStopLatch", "CalibrationState", "CalibrationPlateDefinition", "CalibrationCommissioningRecord", "PlateContact",
     "CalibrationResult", "fit_plate_circle", "AutoXYZCalibrationWorkflow",
 ]

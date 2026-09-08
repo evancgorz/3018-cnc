@@ -180,13 +180,22 @@ class HomingSensorBank:
     def active(self, axis: str) -> bool:
         return bool(self._active[axis.upper()])
 
-    def pins(self) -> str:
-        return "".join(axis for axis in "XYZ" if self._active[axis])
+    def pins(self, polarity_inverted: bool = False) -> str:
+        return "".join(axis for axis in "XYZ"
+                       if (not self._active[axis] if polarity_inverted else self._active[axis]))
 
-    def homing_position(self) -> tuple[float, float, float]:
-        return tuple(next(item for item in self.profile.axes if item.axis.upper() == axis).effective_travel
-                     if next(item for item in self.profile.axes if item.axis.upper() == axis).homing_end is AxisEnd.MAX else 0.0
-                     for axis in "XYZ")
+    def homing_position(self, direction_mask: int = 0) -> tuple[float, float, float]:
+        """Return the switch pose, applying GRBL `$23` X/Y/Z inversion bits."""
+        if not isinstance(direction_mask, int) or not 0 <= direction_mask <= 0xFF:
+            raise ValueError("homing direction mask must be an integer from 0 to 255")
+        positions: list[float] = []
+        for index, axis in enumerate("XYZ"):
+            declaration = next(item for item in self.profile.axes if item.axis.upper() == axis)
+            at_max = declaration.homing_end is AxisEnd.MAX
+            if direction_mask & (1 << index):
+                at_max = not at_max
+            positions.append(declaration.effective_travel if at_max else 0.0)
+        return tuple(positions)
 
 
 class EStopMode(StrEnum):
@@ -300,6 +309,18 @@ class CalibrationState(StrEnum):
     FAILED = "failed"
 
 
+class CalibrationFailure(StrEnum):
+    NONE = ""
+    UNCOMMISSIONED = "uncommissioned"
+    SEED_OUTSIDE_CIRCLE = "seed_outside_circle"
+    NO_CONTACT = "no_contact"
+    COLLISION = "collision_interlock"
+    ESTOP = "estop_latched"
+    STALE_WCO = "stale_wco"
+    ENVELOPE = "out_of_envelope"
+    RESIDUAL = "circle_residual"
+
+
 @dataclass(frozen=True)
 class CalibrationPlateDefinition:
     schema_version: int = 1
@@ -315,10 +336,13 @@ class CalibrationPlateDefinition:
     max_search_z: float = 10.0
     input_pin: str = "P"
     active_low: bool = False
+    circle_center_x: float = 20.0
+    circle_center_y: float = 20.0
 
     def validate(self) -> None:
         values = (self.diameter, self.thickness, self.tool_radius, self.safe_z, self.search_margin,
-                  self.fast_feed, self.slow_feed, self.repeatability_tolerance, self.max_search_xy, self.max_search_z)
+                  self.fast_feed, self.slow_feed, self.repeatability_tolerance, self.max_search_xy, self.max_search_z,
+                  self.circle_center_x, self.circle_center_y)
         _finite(values, "calibration plate values")
         if min(self.diameter, self.thickness, self.fast_feed, self.slow_feed, self.repeatability_tolerance,
                self.max_search_xy, self.max_search_z) <= 0:
@@ -331,6 +355,11 @@ class CalibrationPlateDefinition:
         self.validate()
         return self.diameter / 2
 
+    def fingerprint(self) -> str:
+        self.validate()
+        encoded = json.dumps(asdict(self), sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
 
 @dataclass(frozen=True)
 class PlateContact:
@@ -340,11 +369,29 @@ class PlateContact:
 
 
 @dataclass(frozen=True)
+class CalibrationCommissioningRecord:
+    """Machine-scoped proof that the plate geometry and conductive input were tested."""
+
+    schema_version: int = 1
+    plate_fingerprint: str = ""
+    input_tested: bool = False
+    geometry_tested: bool = False
+
+    def valid_for(self, definition: CalibrationPlateDefinition) -> bool:
+        definition.validate()
+        encoded = json.dumps(asdict(definition), sort_keys=True, separators=(",", ":")).encode()
+        fingerprint = hashlib.sha256(encoded).hexdigest()
+        return self.schema_version == 1 and self.plate_fingerprint == fingerprint and self.input_tested and self.geometry_tested
+
+
+@dataclass(frozen=True)
 class CalibrationResult:
     center: tuple[float, float]
     residual: float
     contacts: tuple[PlateContact, ...]
     tool_radius_compensation: float
+    fitted_radius: float = 0.0
+    compensated_radius: float = 0.0
     work_zero: tuple[float, float, float] | None = None
 
 
@@ -378,7 +425,8 @@ def fit_plate_circle(contacts: Iterable[PlateContact], *, tool_radius: float = 0
     residual = max(abs(math.dist((point.x, point.y), center) - radius) for point in points)
     if residual > tolerance:
         raise ValueError(f"circle repeatability residual {residual:.4f} exceeds {tolerance:.4f} mm")
-    return CalibrationResult(center, residual, points, float(tool_radius))
+    return CalibrationResult(center, residual, points, float(tool_radius), radius,
+                             max(0.0, radius - float(tool_radius)))
 
 
 class AutoXYZCalibrationWorkflow:
@@ -389,22 +437,54 @@ class AutoXYZCalibrationWorkflow:
         self.definition.validate()
         self.state = CalibrationState.IDLE
         self.failure_reason = ""
+        self.failure_code = CalibrationFailure.NONE
+        self.plate_center: tuple[float, float] = (self.definition.circle_center_x, self.definition.circle_center_y)
         self.seed: tuple[float, float, float] | None = None
         self.contacts: list[PlateContact] = []
         self.result: CalibrationResult | None = None
         self.commands: list[str] = []
 
     def start(self, *, seed: tuple[float, float, float], reference_trusted: bool,
-              controller_idle: bool, spindle_rpm: float, envelope: tuple[float, float, float]) -> bool:
+              controller_idle: bool, spindle_rpm: float, envelope: tuple[float, float, float],
+              commissioned: bool = False,
+              commissioning_record: CalibrationCommissioningRecord | None = None) -> bool:
+        # Kept as a keyword-only compatibility gate: callers must explicitly
+        # opt into a current, machine-scoped plate/input commissioning record.
+        # (The optional parameter is read below through the public wrapper.)
+        commissioned = commissioned or bool(commissioning_record and commissioning_record.valid_for(self.definition))
+        return self._start(seed=seed, reference_trusted=reference_trusted,
+                           controller_idle=controller_idle, spindle_rpm=spindle_rpm,
+                           envelope=envelope, commissioned=commissioned)
+
+    def _start(self, *, seed: tuple[float, float, float], reference_trusted: bool,
+               controller_idle: bool, spindle_rpm: float, envelope: tuple[float, float, float],
+               commissioned: bool) -> bool:
+        if not commissioned:
+            return self.fail("a current machine-scoped plate/input commissioning record is required",
+                             CalibrationFailure.UNCOMMISSIONED)
         if not reference_trusted or not controller_idle or spindle_rpm > 0:
             return self.fail("trusted reference, Idle controller, and spindle-off are required")
         _finite((*seed, *envelope), "calibration pose")
         if any(value < 0 or value > maximum for value, maximum in zip(seed, envelope)):
-            return self.fail("calibration seed is outside the machine envelope")
+            return self.fail("calibration seed is outside the machine envelope", CalibrationFailure.ENVELOPE)
+        self.plate_center = (self.definition.circle_center_x, self.definition.circle_center_y)
+        if math.dist(seed[:2], self.plate_center) > self.definition.radius - self.definition.search_margin:
+            return self.fail("calibration seed must be inside the commissioned corner circle",
+                             CalibrationFailure.SEED_OUTSIDE_CIRCLE)
         self.seed = seed
         self.contacts.clear()
         self.result = None
         self.commands = [f"G90 G21 G0 Z{self.definition.safe_z:.3f}"]
+        cx, cy = self.plate_center
+        r = self.definition.radius - self.definition.search_margin
+        self.commands.extend((f"G0 X{cx-r:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}",
+                              f"G38.2 X{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 X{cx:.3f} Y{cy+r:.3f} Z{self.definition.safe_z:.3f}",
+                              f"G38.2 Y-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 X{cx+r:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}",
+                              f"G38.2 X-{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}",
+                              f"G0 X{cx:.3f} Y{cy-r:.3f} Z{self.definition.safe_z:.3f}",
+                              f"G38.2 Y{self.definition.max_search_xy:.3f} F{self.definition.slow_feed:.3f}"))
         self.state = CalibrationState.SEARCHING
         return True
 
@@ -417,27 +497,42 @@ class AutoXYZCalibrationWorkflow:
                 self.result = fit_plate_circle(self.contacts, tool_radius=self.definition.tool_radius,
                                                tolerance=self.definition.repeatability_tolerance)
             except ValueError as exc:
-                return self.fail(str(exc))
+                return self.fail(str(exc), CalibrationFailure.RESIDUAL)
             self.state = CalibrationState.FITTED
-            self.commands.append("G0 Z{:.3f}".format(self.definition.safe_z))
+            cx, cy = self.result.center
+            outside = max(self.definition.radius + self.definition.search_margin,
+                          self.definition.radius + self.definition.tool_radius)
+            self.commands.extend(("G0 Z{:.3f}".format(self.definition.safe_z),
+                                  f"G0 X{cx+outside:.3f} Y{cy:.3f} Z{self.definition.safe_z:.3f}"))
         return True
 
     def complete_z_touch(self, z: float, *, wco_fresh: bool, envelope: tuple[float, float, float]) -> bool:
         if self.state is not CalibrationState.FITTED or self.result is None:
             return self.fail("a valid circle fit is required before Z touch")
         if not wco_fresh or not math.isfinite(z) or z < 0 or z > envelope[2]:
-            return self.fail("fresh WCO and in-envelope Z touch are required")
+            return self.fail("fresh WCO and in-envelope Z touch are required", CalibrationFailure.STALE_WCO if not wco_fresh else CalibrationFailure.ENVELOPE)
         self.state = CalibrationState.Z_TOUCH
         self.commands.extend((f"G38.2 Z-{self.definition.max_search_z:.3f} F{self.definition.slow_feed:.3f}",
                               "G10 L20 P1 X0 Y0 Z0", f"G0 Z{self.definition.safe_z:.3f}"))
         self.result = CalibrationResult(self.result.center, self.result.residual, self.result.contacts,
-                                        self.result.tool_radius_compensation,
+                                        self.result.tool_radius_compensation, self.result.fitted_radius,
+                                        self.result.compensated_radius,
                                         (self.result.center[0], self.result.center[1], z))
         self.state = CalibrationState.COMPLETE
         return True
 
-    def fail(self, reason: str) -> bool:
+    def no_contact(self) -> bool:
+        return self.fail("no conductive contact was observed", CalibrationFailure.NO_CONTACT)
+
+    def interlock(self, reason: str = "collision/interlock during calibration") -> bool:
+        return self.fail(reason, CalibrationFailure.COLLISION)
+
+    def estop(self) -> bool:
+        return self.fail("E-stop latched during calibration", CalibrationFailure.ESTOP)
+
+    def fail(self, reason: str, code: CalibrationFailure = CalibrationFailure.NONE) -> bool:
         self.state = CalibrationState.FAILED
         self.failure_reason = str(reason)
+        self.failure_code = code
         self.result = None
         return False

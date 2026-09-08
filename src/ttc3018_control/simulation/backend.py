@@ -17,16 +17,21 @@ from .models import SimulationFault, SimulationProfile
 from .models import SimulationWorkpiece
 from .plant import VirtualMachinePlant
 from .stock import StockModel
+from .safety import EStopDefinition, HomingLimitProfile
 
 
 def backend_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
                 telemetry, profile_data: dict[str, Any], token: str,
                 workpiece_data: dict[str, Any] | None = None, speed: str = "realtime",
-                faults_data: list[dict[str, Any]] | None = None) -> None:
+                faults_data: list[dict[str, Any]] | None = None,
+                homing_data: dict[str, Any] | None = None,
+                estop_data: dict[str, Any] | None = None) -> None:
     profile = SimulationProfile(**profile_data)
     profile.validate()
     plant = VirtualMachinePlant(profile)
     controller = VirtualGrblController(plant)
+    controller.configure_homing(HomingLimitProfile.from_dict(homing_data) if homing_data else HomingLimitProfile.default_3018())
+    controller.configure_estop(EStopDefinition(**(estop_data or {})))
     for data in faults_data or ():
         controller.install_fault(SimulationFault(**data))
     collision_world = CollisionWorld(profile=profile)
@@ -72,6 +77,37 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                     controller.install_fault(SimulationFault(**dict(message.get("fault", {}))))
                 if isinstance(message, dict) and message.get("op") == "clear_faults":
                     controller.clear_faults()
+                if isinstance(message, dict) and message.get("op") == "inject_estop":
+                    controller.inject_estop(reset_asserted=bool(message.get("reset_asserted", False)),
+                                            feedback_electrical=message.get("feedback_electrical"))
+                    try:
+                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                                              "snapshot": controller.plant.snapshot().to_dict()})
+                    except queue.Full:
+                        pass
+                if isinstance(message, dict) and message.get("op") == "release_estop":
+                    controller.release_estop()
+                    try:
+                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                                              "snapshot": controller.plant.snapshot().to_dict()})
+                    except queue.Full:
+                        pass
+                if isinstance(message, dict) and message.get("op") == "ack_estop":
+                    controller.acknowledge_estop(reference_trusted=bool(message.get("reference_trusted", False)))
+                    try:
+                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                                              "snapshot": controller.plant.snapshot().to_dict()})
+                    except queue.Full:
+                        pass
+                if isinstance(message, dict) and message.get("op") == "set_limit_input":
+                    controller.set_limit_input(str(message.get("axis", "")), bool(message.get("electrical_active", False)),
+                                               now_ns=controller.plant.clock.time_ns)
+                    try:
+                        telemetry.put_nowait({"type": "safety", "safety": {"pins": controller.plant.pins,
+                                              "homing_position": controller.sensor_bank.homing_position(int(controller.settings.get(23, 0))) if controller.sensor_bank else ()},
+                                              "snapshot": controller.plant.snapshot().to_dict()})
+                    except queue.Full:
+                        pass
             if client is None:
                 try:
                     client, _address = server.accept()

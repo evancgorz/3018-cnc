@@ -220,6 +220,60 @@ def test_real_backend_and_operator_parity_on_wco_stock_entry():
         runtime.stop()
 
 
+@pytest.mark.skipif(__import__("multiprocessing").get_start_method(allow_none=True) == "fork", reason="requires owned spawn workers")
+def test_production_boundary_homing_pins_and_estop_are_fail_closed():
+    """Homing/limit declarations and E-stop telemetry cross the owned runtime."""
+    from ttc3018_control.simulation.safety import EStopDefinition, EStopMode, HomingLimitProfile
+
+    profile = HomingLimitProfile.default_3018("boundary")
+    runtime = SimulationRuntime(homing_profile=profile,
+                                estop_definition=EStopDefinition(mode=EStopMode.RESET_ONLY, reset_pin="R"))
+    host, port = runtime.start(timeout=8)
+    try:
+        with __import__("socket").create_connection((host, port), timeout=2) as client:
+            client.settimeout(2)
+            client.recv(4096)
+            client.sendall(b"$22=1\n$23=1\n$5=0\n$21=1\n$H\n")
+            response = client.recv(4096)
+            if b"ok" not in response:
+                response += client.recv(4096)
+            assert b"ok" in response
+            runtime.set_limit_input("X", True)
+            runtime.set_limit_input("Y", True)
+            runtime.set_limit_input("Z", True)
+            runtime.inject_estop(reset_asserted=True)
+            deadline = time.monotonic() + 3
+            safety = []
+            while time.monotonic() < deadline and not safety:
+                safety = [item for item in runtime.poll() if item.get("type") == "safety"]
+                if not safety:
+                    time.sleep(.02)
+            assert safety
+            assert runtime.estop_status["interlocked"]
+            assert any(h.kind.value == "estop_latched" for h in runtime.hazards)
+            client.sendall(b"G0 X1\n")
+            assert b"ALARM:1" in client.recv(4096)
+            runtime.release_estop()
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and runtime.estop_status.get("active", True):
+                runtime.poll()
+                time.sleep(.02)
+            client.sendall(b"$X\n")
+            unlock = b""
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and b"ok" not in unlock:
+                unlock += client.recv(4096)
+            assert b"ok" in unlock
+            runtime.acknowledge_estop(reference_trusted=True)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and runtime.estop_status["interlocked"]:
+                runtime.poll()
+                time.sleep(.02)
+            assert not runtime.estop_status["interlocked"]
+    finally:
+        runtime.stop()
+
+
 @pytest.mark.parametrize("mode", ["timeout", "mismatch"])
 def test_runtime_parent_handshake_failures_clean_owned_children(mode):
     runtime = SimulationRuntime()

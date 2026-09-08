@@ -543,6 +543,46 @@ state from the superseded GUI task was not interacted with by this package.
 Generated evidence/config, `%SystemDrive%`, and unrelated dirty files remain
 excluded. This package is ready for its separate safety checkpoint review.
 
+### H1-H4 Sol review correction — production-boundary integration
+
+The follow-up closes the review gaps without touching physical transports. The
+spawned backend now receives the versioned homing profile and E-stop definition
+through `SimulationRuntime`; its control boundary exposes deterministic limit
+input, E-stop injection/release, and explicit Idle/unlock/re-reference
+acknowledgement telemetry. `$23` applies X/Y/Z direction inversion, `$5`
+inverts limit polarity independently of `$21` hard-limit alarming, and each
+configured sensor drives deterministic `Pn` state. The application boundary
+maps a latched twin E-stop to job abort, motion reset, reference/work-zero
+invalidation, and a recovery gate; physical reset/GPIO remains inert.
+
+The automated plate workflow now requires either an explicit commissioning
+flag for simulation fixtures or a current `CalibrationCommissioningRecord`
+fingerprinted to the plate geometry. It validates the interior seed against
+the configured circle, emits four bounded orthogonal `G38.2` searches plus
+safe-Z/retract/outside-circle witness moves, reports fitted and tool-radius-
+compensated radius, and exposes typed `uncommissioned`, `seed_outside_circle`,
+`no_contact`, `collision_interlock`, `estop_latched`, `stale_wco`, envelope,
+and residual failure states. Manual work-zero actions remain separate.
+
+Validation evidence for the correction:
+
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_safety.py -q`
+  → **11 passed in 0.12s**.
+- `.venv\\Scripts\\python.exe -m pytest
+  tests/test_simulation_spawn_workers.py -k production_boundary_homing -q`
+  → **1 passed, 11 deselected in 0.76s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_core.py -k
+  simulation_estop -q` → **1 passed, 21 deselected in 1.14s**.
+- `.venv\\Scripts\\python.exe -m pytest tests/test_simulation_safety.py
+  tests/test_simulation_core.py tests/test_simulation_spawn_workers.py
+  tests/test_qt_shell.py tests/test_application_contracts.py
+  tests/test_homing_service.py tests/test_machine_config.py -q`
+  → **129 passed in 17.61s**.
+
+Compile, diff, loopback-only process cleanup, and physical-factory sentinel
+checks remain green; no GUI, hardware, USB/COM, Wi-Fi, non-loopback endpoint,
+runtime config, generated evidence, or `%SystemDrive%` was accessed.
+
 ## P3 synthetic A/B commissioning plan and fixtures — 2026-09-07
 
 Added a versioned, machine-readable synthetic twin/controller commissioning

@@ -13,6 +13,7 @@ from .backend import backend_main
 from .models import Hazard, HazardKind, SimulationFault, SimulationProfile, SimulationWorkpiece
 from .supervisor import supervisor_main
 from .trace import TraceRecorder
+from .safety import EStopDefinition, HomingLimitProfile
 
 
 class SimulationRuntime:
@@ -25,7 +26,9 @@ class SimulationRuntime:
     def __init__(self, profile: SimulationProfile | None = None,
                  workpiece: SimulationWorkpiece | None = None,
                  speed: str = "realtime",
-                 faults: list[SimulationFault] | None = None) -> None:
+                 faults: list[SimulationFault] | None = None,
+                 homing_profile: HomingLimitProfile | None = None,
+                 estop_definition: EStopDefinition | None = None) -> None:
         self.profile = profile or SimulationProfile.default_3018()
         self.profile.validate()
         self.workpiece = workpiece
@@ -60,6 +63,11 @@ class SimulationRuntime:
         self._supervisor_failure_reported = False
         self._supervisor_overflow_reported = False
         self.faults: list[SimulationFault] = []
+        self.homing_profile = homing_profile or HomingLimitProfile.default_3018()
+        self.homing_profile.validate()
+        self.estop_definition = estop_definition or EStopDefinition()
+        self.estop_definition.validate()
+        self.estop_status: dict[str, Any] = self._default_estop_status()
         for fault in faults or ():
             self.install_fault(fault)
         self._fault_sequence = 0
@@ -76,7 +84,7 @@ class SimulationRuntime:
         self._telemetry = self.ctx.Queue(maxsize=2048)
         workpiece_data = asdict(self.workpiece) if self.workpiece is not None else None
         fault_data = [asdict(fault) for fault in self.faults]
-        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data), name=f"pine-twin-backend-{self.session_token[:6]}")
+        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data, self.homing_profile.to_dict(), asdict(self.estop_definition)), name=f"pine-twin-backend-{self.session_token[:6]}")
         self.backend.start()
         try:
             if not self._backend_ready.poll(timeout):
@@ -133,6 +141,20 @@ class SimulationRuntime:
                     "snapshot": snapshot_data,
                     "backend_hazards": item.get("backend_hazards", []),
                 }, source="backend")
+            if item.get("type") == "safety":
+                self.estop_status = dict(item.get("safety", {}))
+                if self.estop_status.get("interlocked"):
+                    hazard = Hazard(HazardKind.ESTOP_LATCHED,
+                                    "Digital-twin emergency stop latched; re-reference required", 0,
+                                    (0.0, 0.0, 0.0), source="backend")
+                    key = (hazard.kind.value, "", "")
+                    if key not in self._active_hazard_keys:
+                        self._active_hazard_keys.add(key)
+                        self.hazards.append(hazard)
+                        self.trace.record(0, "hazard", {"kind": hazard.kind.value, "message": hazard.message}, source="backend")
+                else:
+                    self._active_hazard_keys.discard((HazardKind.ESTOP_LATCHED.value, "", ""))
+                self.trace.record(0, "safety", self.estop_status, source="backend")
             if self._supervisor_in is not None:
                 try: self._supervisor_in.put_nowait(item)
                 except queue.Full:
@@ -235,6 +257,33 @@ class SimulationRuntime:
                     control.send({"op": "install_fault", "fault": asdict(fault)})
             self.trace.record(0, "fault", {"name": fault.name, "at_sequence": fault.at_sequence,
                                             "at_time_ns": fault.at_time_ns, "value": fault.value}, source="runtime")
+
+    def inject_estop(self, *, reset_asserted: bool = False,
+                     feedback_electrical: bool | None = None) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        self._backend_control.send({"op": "inject_estop", "reset_asserted": reset_asserted,
+                                    "feedback_electrical": feedback_electrical})
+
+    def release_estop(self) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        self._backend_control.send({"op": "release_estop"})
+
+    def acknowledge_estop(self, *, reference_trusted: bool) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        self._backend_control.send({"op": "ack_estop", "reference_trusted": reference_trusted})
+
+    def set_limit_input(self, axis: str, electrical_active: bool) -> None:
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Digital twin is not running")
+        self._backend_control.send({"op": "set_limit_input", "axis": axis,
+                                    "electrical_active": electrical_active})
+
+    def _default_estop_status(self) -> dict[str, Any]:
+        return {"mode": self.estop_definition.mode.value, "active": False, "latched": False,
+                "feedback_confirmed": False, "recovery_authorized": False, "interlocked": False}
 
     def clear_faults(self) -> None:
         """Clear pending injections and cancel delayed controller effects safely."""

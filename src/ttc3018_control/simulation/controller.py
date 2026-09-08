@@ -35,7 +35,7 @@ class VirtualGrblController:
         self._deferred_lines: list[tuple[int, str]] = []
         self._responses: list[str] = []
         self._modal = _Modal()
-        self.settings = {5: 0.0, 6: 0.0, 20: 0.0, 21: 25.0, 22: 0.0, 23: 3.0, 24: 25.0, 25: 500.0, 26: 250.0, 27: 1.0,
+        self.settings = {5: 0.0, 6: 0.0, 20: 0.0, 21: 0.0, 22: 0.0, 23: 0.0, 24: 25.0, 25: 500.0, 26: 250.0, 27: 1.0,
                          130: self.plant.profile.travel_x, 131: self.plant.profile.travel_y,
                          132: self.plant.profile.travel_z}
         self.alarm = False
@@ -120,10 +120,11 @@ class VirtualGrblController:
             raise RuntimeError("Homing switches are not commissioned")
         active = self.sensor_bank.set_input(axis, electrical_active,
                                             self.plant.clock.time_ns if now_ns is None else now_ns)
-        self.plant.pins = self.sensor_bank.pins()
-        if active and self._setting_enabled(21):
+        effective_active = not active if self._setting_enabled(5) else active
+        self.plant.pins = self.sensor_bank.pins(self._setting_enabled(5))
+        if effective_active and self._setting_enabled(21):
             self._limit_alarm(self.plant.machine_position)
-        return active
+        return effective_active
 
     def configure_estop(self, definition: EStopDefinition) -> None:
         definition.validate()
@@ -365,7 +366,7 @@ class VirtualGrblController:
             return
         if line == "$H":
             if self.sensor_bank is not None and self._setting_enabled(22):
-                self.plant.position[:] = list(self.sensor_bank.homing_position())
+                self.plant.position[:] = list(self.sensor_bank.homing_position(int(self.settings.get(23, 0))))
             else:
                 self.plant.position[:] = [0.0, 0.0, 0.0]
             self.plant.state = "Idle"
@@ -532,4 +533,7 @@ class VirtualGrblController:
 
     def _limit_alarm(self, position) -> None:
         self.alarm = True
+        self.plant.state = "Alarm"
+        self.plant.queue.clear()
+        self.plant.active = None
         self._emit("ALARM:1")

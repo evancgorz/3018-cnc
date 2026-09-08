@@ -504,7 +504,42 @@ class ApplicationController:
         runtime = self.simulation_runtime
         if not self.simulation_active or runtime is None:
             return ()
-        return runtime.poll()
+        events = runtime.poll()
+        for item in events:
+            if item.get("type") == "safety" and dict(item.get("safety", {})).get("interlocked"):
+                # E-stop is an application safety boundary: stop the job/jog
+                # lifecycle and invalidate both trust records immediately.
+                self.job.abort("Digital-twin E-stop latched")
+                self.motion.reset()
+                self.session.invalidate_reference("Digital-twin E-stop latched; re-reference required")
+                self._publish_notice("Digital-twin E-stop latched; motion, probing, and homing are blocked until release and re-reference")
+                self._publish_change()
+        return events
+
+    def inject_simulation_estop(self, *, reset_asserted: bool = False,
+                                feedback_electrical: bool | None = None) -> ActionOutcome:
+        """Inject only the twin E-stop path; never emits a physical reset/GPIO."""
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin E-stop is unavailable while disconnected")
+        runtime.inject_estop(reset_asserted=reset_asserted, feedback_electrical=feedback_electrical)
+        return ActionOutcome(True, "Digital-twin E-stop injection requested; safety latch requires release and re-reference")
+
+    def release_simulation_estop(self) -> ActionOutcome:
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin E-stop is unavailable while disconnected")
+        runtime.release_estop()
+        return ActionOutcome(True, "Digital-twin E-stop input released; controller Idle and explicit re-reference are still required")
+
+    def acknowledge_simulation_estop(self) -> ActionOutcome:
+        runtime = self.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return ActionOutcome(False, "Digital-twin E-stop is unavailable while disconnected")
+        if not self.reference_trusted:
+            return ActionOutcome(False, "Re-establish a trusted machine reference before E-stop recovery")
+        runtime.acknowledge_estop(reference_trusted=True)
+        return ActionOutcome(True, "Digital-twin E-stop recovery authorized; keep the machine Idle before motion")
 
     def export_simulation_trace(self, path) -> None:
         """Export canonical evidence from the active digital-twin runtime."""
