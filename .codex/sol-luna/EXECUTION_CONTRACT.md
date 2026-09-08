@@ -1304,3 +1304,33 @@ spawn-worker tests, compileall, and the full suite; record exact evidence in
 separately. Do not launch/relaunch the GUI after source edits, access hardware,
 or stage generated/config/evidence artifacts. A fresh manual GUI relaunch is
 still required later for the native visual/export gate.
+
+## Sol replan delta — public digital-twin E-stop and limit exercises (2026-09-08)
+
+The safety engine and ViewModel already implement simulation E-stop release,
+acknowledgement, and per-axis limit-input injection, but the public simulator
+card currently exposes only status labels. Add the missing test controls so a
+developer can exercise the same fail-closed paths without hardware.
+
+### H7.1 — simulation-only safety exercise controls
+
+Expose guarded controls through ApplicationController/ViewModel/QML for
+asserting the twin E-stop (reset input and/or electrical feedback according to
+the configured mode), releasing the input, acknowledging recovery only after a
+fresh trusted reference, and toggling X/Y/Z limit inputs. Show the latched,
+released, acknowledged, and active-pin states with clear simulation-only
+labels. Controls must be hidden or disabled while disconnected or on a physical
+transport, route only through existing public methods, and never emit physical
+reset/GPIO/transport traffic.
+
+### H7.2 — tests and checkpoint
+
+Add deterministic ViewModel/QML and loopback tests proving E-stop assertion
+aborts/invalidate motion and reference, limit toggles reach the twin sensor
+bank, recovery remains blocked until release plus fresh reference/acknowledge,
+disconnect clears stale UI state, and the physical transport remains untouched.
+Run focused safety/H6/Qt/spawn tests, compileall, and the full suite; append
+exact evidence to `EXECUTION_RESULT.md`, review scope, and commit/push H7.
+Do not launch the GUI after source edits, access hardware, select USB/COM/Wi-Fi,
+or stage generated/config/evidence artifacts. The native visual/export gate
+remains a later manual relaunch requirement.
