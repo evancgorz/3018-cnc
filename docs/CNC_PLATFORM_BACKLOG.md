@@ -85,3 +85,24 @@ was inconclusive because Windows accessibility metadata was stale while other
 controls responded. Reproduce it with Qt `activeFocusItem` and key events
 before changing focus scopes or tab policy. This work is deferred while Pine
 Live is implemented and must not be silently treated as complete.
+
+## Correction — G1–G3 resolved (2026-09-08)
+
+The dated deferred observations above are preserved as historical audit
+evidence. G1–G3 are now resolved at the public application/Qt boundary:
+
+- Valid native picker URLs replace the validated job and update filename,
+  bounds, summary, and preview; invalid, empty, and active-job selections
+  preserve the prior job and emit actionable notices.
+- The accepted QML binding and G-code name filter are covered statically and
+  by the native isolated acceptance for `air-cut-test.gcode`.
+- Offscreen Qt `activeFocusItem` plus synthetic Tab events observe the
+  actionable order `Connect → Prepare → Preview & Run`; no focus-policy source
+  change was needed.
+
+See the [G1–G3 implementation and test evidence](../.codex/sol-luna/EXECUTION_RESULT.md#g1g3-g-code-handoff-and-keyboard-focus-correction-2026-09-08)
+and [native picker evidence](../.codex/sol-luna/EXECUTION_RESULT.md#native-g-code-picker-acceptance-2026-09-08).
+The approximately **1180×720 constrained-layout** and **splash capture**
+observations remain open coverage gaps. Physical commissioning and hardware
+operation remain outside this software-only work and require separate explicit
+authorization and evidence.

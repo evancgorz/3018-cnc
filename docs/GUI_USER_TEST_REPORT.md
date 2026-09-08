@@ -159,3 +159,30 @@ The startup transition completed before a usable live splash capture, and the Co
 ## Final readiness decision
 
 Pine is ready for **offline UX user testing and focused bug-fix iteration**. It is not approved for unattended or hardware-connected operation by this campaign. Fix or reproduce the G-code import defect first, then verify keyboard traversal and complete the constrained-size pass. After those checks, Sol Light should review this report and create the next implementation/retest contract.
+
+## Dated correction — G1–G3 picker and focus verification (2026-09-08)
+
+The historical matrix, findings, screenshots, and recommendations above are
+retained unchanged. Follow-up public-boundary verification resolved the two
+deferred G-code/focus items:
+
+- Offscreen Qt verification using `activeFocusItem` and synthetic Tab events
+  observed the actionable sequence `Connect → Prepare → Preview & Run`, with
+  subsequent labeled controls receiving focus. No QML focus-scope or tab-order
+  policy change was required.
+- The native isolated validator `pine-twin-gui-86b054b39f3d` selected
+  `examples/air-cut-test.gcode` from the **Load existing job** dialog using the
+  G-code filter, and the public UI visibly reported **G-code loaded and
+  validated**. The session used only the loopback digital twin and was
+  disconnected and closed normally; the validator log reported zero physical
+  factory calls.
+- Automated public-boundary tests cover valid replacement, invalid-input
+  preservation, empty URL, active-job refusal, persistent notices, and the
+  accepted QML binding/name filter. The exact commands and counts are recorded
+  in the [G1–G3 result evidence](../.codex/sol-luna/EXECUTION_RESULT.md#g1g3-g-code-handoff-and-keyboard-focus-correction-2026-09-08).
+
+The approximately **1180×720 constrained-layout** pass and **splash capture**
+remain unobserved coverage gaps. This correction does not approve Pine for
+physical commissioning or hardware-connected operation; that boundary remains
+intentionally deferred and requires separate explicit authorization and
+physical evidence.
