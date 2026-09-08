@@ -1228,6 +1228,28 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## P0 native validator evidence — first-contact visualization and export (2026-09-08)
+
+Fresh isolated validator acceptance completed for marker
+`pine-twin-gui-9ba2d70e9e9d` on loopback endpoint `127.0.0.1:55907` only.
+The public UI ran the Digital Twin at 10×, established the virtual machine
+reference and work zero, loaded the STEP job, and started the collision path.
+The validator visibly reached the expected stopped alarm outcome and showed
+the first-contact visualization with labeled hazard details (kind, bodies,
+message, and XYZ point) in the simulator surface.
+
+The public native `Export evidence…` action completed successfully under the
+validator-owned temporary root, producing the JSON evidence file and its
+paired Markdown artifact. The exact tagged validator was then disconnected
+and closed through normal UI shutdown; no physical factory, hardware,
+USB/COM, physical Wi-Fi, GPIO/reset pin, non-loopback endpoint, or unrelated
+Pine instance was accessed.
+
+This closes the previously unobserved native first-contact and GUI evidence
+export observations for the tagged run. Overall status remains **PARTIAL**
+only for any other completion items not observed by this validator and for
+the intentionally deferred physical commissioning boundary.
+
 ## P0 follow-up — valid simulator ScrollView width binding (2026-09-08)
 
 The first fresh validator after the P0 checkpoint exposed a real Qt runtime
