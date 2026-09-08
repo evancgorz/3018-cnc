@@ -1,6 +1,6 @@
 # STEP and 2.5D Machining Progress
 
-Status: Complete for the currently supported bounded 2.5D scope. The former
+Status: Complete for the currently supported bounded STEP/2.5D and visible-surface scope. The former
 detailed production-CAM handoff has been retired; the deferred items below are
 intentional product boundaries, not unfinished work in this release. The
 separate simulation SOW remains pending and is not included here.
