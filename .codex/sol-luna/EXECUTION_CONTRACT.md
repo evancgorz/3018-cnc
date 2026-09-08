@@ -901,6 +901,28 @@ groups. Record exact evidence, review staged scope, and commit/push this
 package as its own checkpoint. Do not launch GUI, access hardware, select
 USB/COM/Wi-Fi, or stage generated/config/evidence artifacts.
 
+## Sol program delta — long-duration randomized/property testing (2026-09-07)
+
+The next backend-first P2 package is long-duration randomized/property
+testing. Luna must build a deterministic seeded scenario corpus (using the
+virtual clock and no external randomness) that exercises mixed XYZ moves,
+arcs, jogs, holds/resumes, resets, spindle/probe transitions, WCO changes,
+fault injections, collision contacts, queue backpressure, disconnects, and
+recovery attempts over long traces. Prefer property-style invariant checks
+that remain valid for every seed: positions stay finite, travel and planner
+capacity are never silently exceeded, FIFO/ack ordering is preserved, status
+coordinates remain internally consistent, hazards latch/clear deterministically,
+stock volume is bounded and monotonic, process/queue cleanup completes, and
+replay digests are stable.
+
+Add a compact CI-friendly seed set plus stress-depth controls, shrinking or
+first-failure reports with seed/step/action context, and replay artifacts for
+any failing case. Run focused randomized/property tests repeatedly, then the
+affected simulation/application/public/spawn gates; record exact seed corpus
+and evidence, review staged scope, and commit/push this package as its own
+checkpoint. Keep all execution headless and simulation-only; do not launch
+GUI, access hardware, select USB/COM/Wi-Fi, or stage generated/config/evidence.
+
 ## Sol program delta — STEP stock-removal fidelity (2026-09-07)
 
 The next backend-first P2 package is executed stock/STEP fidelity. Luna must

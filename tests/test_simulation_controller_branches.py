@@ -259,6 +259,18 @@ def test_fault_sequence_and_virtual_time_matching_is_explicit():
         controller.install_fault(SimulationFault("bad", at_sequence=0))
 
 
+def test_deferred_motion_admission_is_bounded_and_fifo_rejects_overflow():
+    controller = make_controller(planner_capacity=1, rx_capacity=32)
+    assert send(controller, "G1 X1 F60") == ("ok",)
+    responses = tuple(
+        response
+        for index in range(2, 12)
+        for response in send(controller, f"G1 X{index} F60")
+    )
+    assert "error:11" in responses
+    assert len(controller._deferred_lines) <= controller.deferred_capacity
+
+
 def test_frozen_motion_spindle_delay_probe_failure_and_changed_status_fail_truthfully():
     plant = VirtualMachinePlant(SimulationProfile(initial_z=10))
     controller = VirtualGrblController(plant)

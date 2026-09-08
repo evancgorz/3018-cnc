@@ -183,6 +183,9 @@ class VirtualGrblController:
             self._emit("ALARM:1")
             return
         if self._deferred_lines or self._planner_full_for(line):
+            if len(self._deferred_lines) >= self.deferred_capacity:
+                self._emit("error:11")
+                return
             self._deferred_lines.append((sequence, line))
             return
         self._execute_normal(line, sequence)
@@ -230,6 +233,11 @@ class VirtualGrblController:
 
     def _planner_used(self) -> int:
         return len(self.plant.queue) + (1 if self.plant.active is not None else 0)
+
+    @property
+    def deferred_capacity(self) -> int:
+        """Bound accepted planner waiters by the declared serial RX budget."""
+        return max(8, self.plant.profile.rx_capacity // 8)
 
     def _planner_full_for(self, line: str) -> bool:
         if not self._line_uses_planner(line):

@@ -495,6 +495,38 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## P2 long-duration randomized/property testing — 2026-09-07
+
+Added a deterministic seeded property corpus that drives the virtual
+controller/plant with a virtual clock only. Mixed actions cover XYZ motion,
+G17 arc, jog, hold/resume, reset, spindle, probing, WCO changes, injected
+ack/status/probe faults, collision fixtures, planner backpressure, and logical
+disconnect/recovery. Each run records semantic actions/status/motion/hazard
+events and returns seed, step, action, first-failure reason, digest, planner
+and response maxima, hazard count, and monotonic stock volumes. A compact
+replay-artifact writer persists that context for any first failure.
+
+Invariants enforce finite in-envelope machine coordinates, bounded planner and
+deferred FIFO admission, framed status, deterministic hazard latching,
+monotonic bounded stock, deterministic replay digests, and bounded stress
+controls (`1..4096` steps, `1..16` stress depth). The stress run exposed an
+actual unbounded deferred FIFO; controller admission now uses a declared
+RX-tied deferred capacity (`max(8, rx_capacity // 8)`) and returns deterministic
+`error:11` beyond it, preserving normal planner saturation behavior.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_property_scenarios.py
+  tests/test_simulation_controller_branches.py -q` → **25 passed in 1.43s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_property_scenarios.py
+  tests/test_simulation_core.py tests/test_simulation_public_scenarios.py
+  tests/test_simulation_spawn_workers.py tests/test_application_contracts.py
+  -q` → **83 passed in 26.34s**.
+
+No commit or push was made pending Sol review. No GUI, hardware, USB/COM,
+Wi-Fi, non-loopback endpoint, generated evidence/config, `%SystemDrive%`, or
+unrelated user files were accessed or staged.
+
 ## P2 STEP stock-removal fidelity — 2026-09-07
 
 Implemented and validated the bounded STEP/stock package headlessly. The
