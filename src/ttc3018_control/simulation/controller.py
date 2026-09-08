@@ -161,6 +161,27 @@ class VirtualGrblController:
         self.alarm = False
         return True
 
+    def safety_status(self) -> dict[str, object]:
+        """Return one truthful, simulation-only safety snapshot.
+
+        E-stop state and limit-input state travel together so the owner/UI
+        cannot accidentally display stale E-stop pins as the homing/limit
+        ``Pn`` state after a limit exercise.  The values are symbolic twin
+        inputs; this method never reads GPIO or emits reset traffic.
+        """
+        status = dict(self.estop.status())
+        status["pins"] = self.plant.pins
+        status["limit_pins"] = self.sensor_bank.pins(self._setting_enabled(5)) if self.sensor_bank else ""
+        status["limit_states"] = {
+            axis: bool(self.sensor_bank.active(axis)) if self.sensor_bank else False
+            for axis in "XYZ"
+        }
+        status["homing_position"] = (
+            self.sensor_bank.homing_position(int(self.settings.get(23, 0)))
+            if self.sensor_bank else ()
+        )
+        return status
+
     def status_line(self) -> str:
         now_ns = self.plant.clock.time_ns
         if self._fault_active("malformed_status", time_ns=now_ns):

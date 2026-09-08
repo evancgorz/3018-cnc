@@ -25,7 +25,7 @@ from ..tcp_connection import TcpGrblConnection
 from ..simulation.runtime import SimulationRuntime
 from ..simulation.safety import (
     AxisEnd as SafetyAxisEnd, AxisSensorDeclaration, CalibrationCommissioningRecord,
-    CalibrationPlateDefinition, HomingLimitProfile,
+    CalibrationPlateDefinition, EStopDefinition, EStopMode, HomingLimitProfile,
 )
 from ..simulation.plant import ProbeCornerCircle
 from ..simulation.settings import SimulationSettings, SimulationSettingsStore
@@ -157,6 +157,13 @@ class ApplicationController:
                 profile=self.simulation_settings.profile,
                 workpiece=self.simulation_settings.workpiece,
                 speed=self.simulation_settings.speed,
+                # Symbolic pins make the public exercise controls useful in
+                # the twin while remaining completely inert for physical
+                # transports.
+                estop_definition=EStopDefinition(
+                    mode=EStopMode.RESET_PLUS_FEEDBACK,
+                    input_pin="E", reset_pin="R",
+                ),
             )),
             TcpGrblConnection,
         )

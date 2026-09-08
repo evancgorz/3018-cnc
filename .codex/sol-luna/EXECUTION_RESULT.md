@@ -495,6 +495,49 @@ No commit or push was made pending Sol review. Generated evidence/config,
 `%SystemDrive%`, credentials, GUI state, hardware, USB/COM, physical Wi-Fi,
 non-loopback endpoints, and unrelated files remain excluded.
 
+## H7 — public digital-twin E-stop and limit exercises (2026-09-08)
+
+Implemented the public simulation-only safety exercise boundary without GUI
+launch or physical transport access:
+
+- The virtual controller now publishes one merged safety snapshot containing
+  E-stop mode/active/latched/recovery state, symbolic reset/feedback pins,
+  X/Y/Z logical limit states, Pn limit pins, and the `$23` homing position.
+  Backend safety events use this snapshot for E-stop, release, acknowledge,
+  and limit-input controls; a stable injected input is allowed to pass its
+  declared debounce deterministically through the twin sensor bank.
+- The default ApplicationController digital twin is configured with a
+  symbolic reset-plus-feedback E-stop (`E`/`R`) only. Physical transports do
+  not receive reset, GPIO, or limit traffic. Existing custom twin factories
+  remain authoritative for explicit safety definitions.
+- ViewModel exposes latched/released/acknowledged E-stop state, mode/pins,
+  X/Y/Z limit state, Pn status, recovery readiness, and a guarded twin-only
+  E-stop injection slot. Main.qml adds simulation-only reset/feedback assert,
+  release, acknowledge-after-reference, and X/Y/Z limit toggles; all controls
+  are hidden while disconnected and retain the no-physical-GPIO warning.
+- Added loopback regressions proving E-stop assertion aborts/invalidate trust
+  and work zero, release plus fresh reference plus acknowledge is required,
+  X/Y/Z sensor input reaches the twin bank and clears, disconnect clears stale
+  UI state, and forbidden physical factories remain untouched.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h7.py -q`
+  → **3 passed in 2.29s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_simulation_h7.py
+  tests/test_simulation_h6.py tests/test_simulation_safety.py
+  tests/test_qt_shell.py tests/test_simulation_spawn_workers.py -q`
+  → **65 passed in 15.10s**.
+- PowerShell-expanded simulation/application/STEP/job gate → **219 passed in
+  74.49s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q` → **508 passed in 136.53s**.
+
+No GUI was launched or relaunched; no hardware, USB/COM, Wi-Fi, non-loopback
+endpoint, physical GPIO/reset, generated evidence, runtime config, or
+protected `%SystemDrive%` artifact was touched. The native visual/export gate
+remains a later manual relaunch requirement.
+
 ## QML warning audit — undefined STEP palette color (2026-09-07)
 
 Audited the archived tagged-validator logs without launching or interacting

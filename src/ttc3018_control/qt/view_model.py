@@ -849,14 +849,66 @@ class ControllerViewModel(QObject):
         runtime = self.application.simulation_runtime
         if not self.simulation_active or runtime is None:
             return "Limit inputs: unavailable while disconnected"
-        pins = getattr(runtime, "estop_status", {}).get("pins", "")
-        return f"Limit inputs: twin Pn={pins or 'none'}"
+        safety = getattr(runtime, "estop_status", {})
+        states = safety.get("limit_states", {})
+        state_text = ", ".join(
+            f"{axis}={'ACTIVE' if bool(states.get(axis, False)) else 'clear'}"
+            for axis in "XYZ"
+        )
+        pins = safety.get("limit_pins", safety.get("pins", ""))
+        return f"Limit inputs: twin {state_text}; Pn={pins or 'none'}"
+
+    def _simulation_safety_value(self, key: str, default: object = False) -> object:
+        runtime = self.application.simulation_runtime
+        if not self.simulation_active or runtime is None:
+            return default
+        return getattr(runtime, "estop_status", {}).get(key, default)
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_limit_x(self) -> bool:
+        return bool(self._simulation_safety_value("limit_states", {}).get("X", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_limit_y(self) -> bool:
+        return bool(self._simulation_safety_value("limit_states", {}).get("Y", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_limit_z(self) -> bool:
+        return bool(self._simulation_safety_value("limit_states", {}).get("Z", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_estop_active(self) -> bool:
+        return bool(self._simulation_safety_value("active", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_estop_latched(self) -> bool:
+        return bool(self._simulation_safety_value("latched", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_estop_recovery_authorized(self) -> bool:
+        return bool(self._simulation_safety_value("recovery_authorized", False))
+
+    @Property(bool, notify=simulation_changed)
+    def simulation_estop_recovery_ready(self) -> bool:
+        return bool(self.simulation_active and self.simulation_estop_latched
+                    and not self.simulation_estop_active
+                    and self.application.reference_trusted)
 
     @Property(str, notify=simulation_changed)
     def simulation_estop_status(self) -> str:
         if not self.simulation_active:
             return "E-stop: safety-rated physical power cutoff remains primary"
-        return "E-stop: simulation latch available — no physical GPIO/reset"
+        mode = str(self._simulation_safety_value("mode", "configured"))
+        if self.simulation_estop_active:
+            state = "ACTIVE / LATCHED"
+        elif self.simulation_estop_latched:
+            state = "RELEASED / LATCHED — fresh reference + acknowledge required"
+        elif self.simulation_estop_recovery_authorized:
+            state = "RELEASED / ACKNOWLEDGED — recovery authorized"
+        else:
+            state = "RELEASED / CLEAR"
+        pins = str(self._simulation_safety_value("pins", "")) or "none"
+        return f"E-stop: DIGITAL TWIN {state}; mode={mode}; pins={pins}; no physical GPIO/reset"
 
     @Property(bool, notify=simulation_changed)
     def simulation_auto_xyz_available(self) -> bool:
@@ -1744,6 +1796,16 @@ class ControllerViewModel(QObject):
     @Slot()
     def acknowledge_simulation_estop(self) -> None:
         outcome = self.application.acknowledge_simulation_estop()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(bool, bool)
+    def inject_simulation_estop(self, reset_asserted: bool, feedback_electrical: bool) -> None:
+        """Exercise only the owned twin's symbolic reset/feedback inputs."""
+        outcome = self.application.inject_simulation_estop(
+            reset_asserted=bool(reset_asserted),
+            feedback_electrical=bool(feedback_electrical),
+        )
         self._set_notice(outcome.message)
         self._emit_state()
 

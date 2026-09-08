@@ -325,6 +325,21 @@ ApplicationWindow {
                         Label { text: appViewModel ? appViewModel.simulation_homing_status : "Homing switches: not commissioned"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_limit_status : "Limit inputs: unavailable while disconnected"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         Label { text: appViewModel ? appViewModel.simulation_estop_status : "E-stop: external safety cutoff required"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        Label { visible: appViewModel && appViewModel.simulation_active; text: "Simulation-only safety exercise (symbolic pins; no physical GPIO)"; color: window.palette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                        RowLayout { visible: appViewModel && appViewModel.simulation_active; Layout.fillWidth: true; spacing: 5
+                            SecondaryButton { Layout.fillWidth: true; text: "Assert reset E-stop"; onClicked: appViewModel.inject_simulation_estop(true, false) }
+                            SecondaryButton { Layout.fillWidth: true; text: "Assert feedback E-stop"; onClicked: appViewModel.inject_simulation_estop(false, false) }
+                        }
+                        RowLayout { visible: appViewModel && appViewModel.simulation_active; Layout.fillWidth: true; spacing: 5
+                            SecondaryButton { Layout.fillWidth: true; text: "Release E-stop"; onClicked: appViewModel.release_simulation_estop() }
+                            SecondaryButton { Layout.fillWidth: true; text: "Acknowledge after reference"; enabled: appViewModel && appViewModel.simulation_estop_recovery_ready; onClicked: appViewModel.acknowledge_simulation_estop() }
+                        }
+                        RowLayout { visible: appViewModel && appViewModel.simulation_active; Layout.fillWidth: true; spacing: 8
+                            Label { text: "Twin limits:"; color: window.palette.muted }
+                            ModernCheckBox { text: "X"; palette: window.palette; checked: appViewModel && appViewModel.simulation_limit_x; onClicked: appViewModel.inject_simulation_limit("X", checked) }
+                            ModernCheckBox { text: "Y"; palette: window.palette; checked: appViewModel && appViewModel.simulation_limit_y; onClicked: appViewModel.inject_simulation_limit("Y", checked) }
+                            ModernCheckBox { text: "Z"; palette: window.palette; checked: appViewModel && appViewModel.simulation_limit_z; onClicked: appViewModel.inject_simulation_limit("Z", checked) }
+                        }
                         Label { text: appViewModel ? appViewModel.simulation_auto_xyz_status : "Auto XYZ calibration plate: unavailable"; color: window.palette.muted; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         SecondaryButton { Layout.fillWidth: true; visible: appViewModel && appViewModel.simulation_active && !appViewModel.simulation_plate_commissioned; text: "Commission simulation Auto XYZ plate"; onClicked: appViewModel.commission_simulation_calibration_plate() }
                         SecondaryButton { Layout.fillWidth: true; visible: appViewModel && appViewModel.simulation_active; text: "Preview Auto XYZ calibration plate (commissioning required)"; enabled: appViewModel && appViewModel.simulation_auto_xyz_available; onClicked: autoXyzDialog.open() }

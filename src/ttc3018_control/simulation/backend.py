@@ -93,30 +93,42 @@ def backend_main(ready: multiprocessing.connection.Connection, control: multipro
                     controller.inject_estop(reset_asserted=bool(message.get("reset_asserted", False)),
                                             feedback_electrical=message.get("feedback_electrical"))
                     try:
-                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                        telemetry.put_nowait({"type": "safety", "safety": controller.safety_status(),
                                               "snapshot": controller.plant.snapshot().to_dict()})
                     except queue.Full:
                         pass
                 if isinstance(message, dict) and message.get("op") == "release_estop":
                     controller.release_estop()
                     try:
-                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                        telemetry.put_nowait({"type": "safety", "safety": controller.safety_status(),
                                               "snapshot": controller.plant.snapshot().to_dict()})
                     except queue.Full:
                         pass
                 if isinstance(message, dict) and message.get("op") == "ack_estop":
                     controller.acknowledge_estop(reference_trusted=bool(message.get("reference_trusted", False)))
                     try:
-                        telemetry.put_nowait({"type": "safety", "safety": controller.estop.status(),
+                        telemetry.put_nowait({"type": "safety", "safety": controller.safety_status(),
                                               "snapshot": controller.plant.snapshot().to_dict()})
                     except queue.Full:
                         pass
                 if isinstance(message, dict) and message.get("op") == "set_limit_input":
-                    controller.set_limit_input(str(message.get("axis", "")), bool(message.get("electrical_active", False)),
-                                               now_ns=controller.plant.clock.time_ns)
+                    axis = str(message.get("axis", ""))
+                    electrical_active = bool(message.get("electrical_active", False))
+                    now_ns = controller.plant.clock.time_ns
+                    controller.set_limit_input(axis, electrical_active, now_ns=now_ns)
+                    # A UI exercise represents a stable input transition.  A
+                    # second timestamped sample lets the declared debounce
+                    # elapse deterministically without bypassing the sensor
+                    # bank or changing production motion semantics.
+                    declaration = next((item for item in controller.homing_profile.axes
+                                        if item.axis.upper() == axis.upper()), None)
+                    if declaration is not None and declaration.debounce_ms:
+                        controller.set_limit_input(
+                            axis, electrical_active,
+                            now_ns=now_ns + round(declaration.debounce_ms * 1_000_000),
+                        )
                     try:
-                        telemetry.put_nowait({"type": "safety", "safety": {"pins": controller.plant.pins,
-                                              "homing_position": controller.sensor_bank.homing_position(int(controller.settings.get(23, 0))) if controller.sensor_bank else ()},
+                        telemetry.put_nowait({"type": "safety", "safety": controller.safety_status(),
                                               "snapshot": controller.plant.snapshot().to_dict()})
                     except queue.Full:
                         pass

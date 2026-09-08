@@ -309,7 +309,9 @@ class SimulationRuntime:
 
     def _default_estop_status(self) -> dict[str, Any]:
         return {"mode": self.estop_definition.mode.value, "active": False, "latched": False,
-                "feedback_confirmed": False, "recovery_authorized": False, "interlocked": False}
+                "feedback_confirmed": False, "recovery_authorized": False, "interlocked": False,
+                "pins": "", "limit_pins": "",
+                "limit_states": {axis: False for axis in "XYZ"}, "homing_position": ()}
 
     def clear_faults(self) -> None:
         """Clear pending injections and cancel delayed controller effects safely."""
