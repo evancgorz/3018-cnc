@@ -582,6 +582,23 @@ This confirms the H5 changes preserve the original application, protocol,
 simulation, Qt-shell, and commissioning behavior. No physical transport or
 non-loopback endpoint was selected.
 
+## Sol read-only P0 GUI audit — 2026-09-08
+
+No validator process or Pine window was available for observation. The current
+headless/QML surface is ready for one concise manual acceptance: the simulator
+canvas and labels expose the first-contact ring/crosshair, hazard kind/bodies/
+XYZ/message, and the public export path normalizes JSON output and reports the
+JSON/Markdown siblings. Existing Qt/headless tests cover those bindings and
+export paths, but they cannot prove OS-window pixels, the native chooser, or
+post-close process cleanup.
+
+The remaining evidence is therefore unchanged and concrete: manually launch a
+fresh tagged validator, run the collision-only or pocket/island public flow,
+capture first-contact/interlock/alarm plus simulator visualization, export and
+hash both evidence files, disconnect/close normally, and verify only the
+manifest-owned PIDs/loopback endpoint changed while physical factories remain
+unused. The overall status remains **PARTIAL** until those observations exist.
+
 ## H1-H4 homing, E-stop, and automated XYZ datum — 2026-09-07
 
 Implemented the bounded safety-input package headlessly and simulation-only.
