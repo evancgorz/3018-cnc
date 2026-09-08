@@ -1641,3 +1641,39 @@ created, physical-factory calls remained empty, and no hardware or physical
 transport was accessed. Native splash capture remains an honest coverage gap;
 the offscreen constrained-shell regression above is complementary evidence,
 not a substitute for that native observation.
+
+## F1 full-resolution executed-stock collision simulation (2026-09-08)
+
+Implemented the bounded configured-resolution swept-footprint correction. Stock
+removal now visits every bounded cell rectangle intersecting the accepted
+executed cylindrical segment, with inclusive tangent contact and deterministic
+segment/rectangle distance checks instead of center-only samples. Linear ramps
+use the conservative minimum endpoint Z for each intersected cell. The public
+`StockModel` and `StockMetrics` APIs remain unchanged; malformed/nonfinite
+executed points and invalid radii fail closed. Backend and supervisor continue
+to own separate stock instances while consuming the same immutable accepted
+executed path semantics, including multi-segment arc polylines and coordinated
+XYZ/ramp motion. No future, rapid, spindle-off, rejected, or alarmed path is
+introduced into stock removal by this change. Unsupported arbitrary 3D remains
+`collision_only`.
+
+Evidence and validation:
+
+- `.venv\Scripts\python.exe -m pytest -q
+  tests/test_simulation_generated_step.py
+  tests/test_simulation_geometry_and_parity.py` → **30 passed in 14.48s**.
+- `.venv\Scripts\python.exe -m pytest -q
+  tests/test_simulation_spawn_workers.py tests/test_simulation_core.py
+  tests/test_simulation_public_scenarios.py tests/test_step_simulation.py` →
+  **46 passed in 27.42s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **524 passed in 127.97s (0:02:07)**.
+- `git diff --check` → **passed** after documentation updates.
+
+Focused regressions cover thin/tangent contact on adjacent cell boundaries,
+out-of-bounds sweeps, diagonal and varying-Z ramps, multi-segment polyline
+paths, retained untouched cells/islands, deterministic replay grids/metrics,
+and parity of independent backend/supervisor stock instances. No GUI was
+launched, no hardware/USB/COM/Wi-Fi/non-loopback endpoint or runtime config was
+accessed, and protected/generated evidence remains unstaged.

@@ -54,6 +54,24 @@ def test_arc_path_sweep_catches_first_contact_between_safe_endpoints() -> None:
     assert any(item.kind is HazardKind.TOOL_FIXTURE for item in hazards)
 
 
+def test_backend_and_supervisor_stock_paths_have_identical_full_resolution_metrics() -> None:
+    """Independent stock instances consume the same accepted executed path."""
+    profile = SimulationProfile(stock_resolution=0.5)
+    workpiece = SimulationWorkpiece(stock_width=6.0, stock_height=6.0, stock_thickness=3.0)
+    backend_stock = StockModel(workpiece, profile)
+    supervisor_stock = StockModel(workpiece, profile)
+    executed_path = (
+        (0.25, 0.25, 3.0),
+        (2.0, 1.5, 2.0),
+        (3.5, 4.0, 1.0),
+        (5.75, 5.75, 1.5),
+    )
+    backend_stock.remove_swept_path(executed_path, 0.35)
+    supervisor_stock.remove_swept_path(executed_path, 0.35)
+    assert backend_stock.to_render_grid() == supervisor_stock.to_render_grid()
+    assert backend_stock.metrics() == supervisor_stock.metrics()
+
+
 def test_stock_top_contact_is_safe_but_penetration_is_not() -> None:
     profile = SimulationProfile()
     stock = StockModel(SimulationWorkpiece(stock_width=20, stock_height=20, stock_thickness=5), profile)

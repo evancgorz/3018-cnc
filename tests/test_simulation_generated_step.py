@@ -52,6 +52,48 @@ def _stock(job, thickness: float, *, retain_island: bool = True) -> StockModel:
     return stock
 
 
+def _bounded_stock(*, width: float = 6.0, height: float = 6.0,
+                   thickness: float = 3.0, resolution: float = 1.0) -> StockModel:
+    return StockModel(
+        SimulationWorkpiece(stock_width=width, stock_height=height, stock_thickness=thickness),
+        SimulationProfile(stock_resolution=resolution),
+    )
+
+
+def test_executed_cutter_uses_full_cell_rectangle_for_thin_tangent_and_bounds() -> None:
+    stock = _bounded_stock()
+    # The radius is tangent to the x=1 edge of cell (0, 0).  Its center is
+    # outside that cell's center-sample radius, so the old implementation
+    # missed this valid contact.
+    removed = stock.remove_cylinder(1.5, 0.5, 0.5, 0.5)
+    assert removed == pytest.approx(10.0)
+    assert stock.heights[0][0] == pytest.approx(0.5)
+    assert stock.heights[0][1] == pytest.approx(0.5)
+
+    outside = _bounded_stock()
+    assert outside.remove_cylinder(-2.0, -2.0, 0.5, 0.25) == 0.0
+    assert outside.metrics().removed_volume == pytest.approx(0.0)
+
+
+def test_executed_diagonal_ramp_and_polyline_remove_only_swept_cells() -> None:
+    diagonal = _bounded_stock()
+    removed = diagonal.remove_swept_segment((0.0, 0.0, 3.0), (5.0, 5.0, 1.0), 0.2)
+    assert removed > 0.0
+    assert diagonal.heights[0][0] == pytest.approx(1.0)
+    assert diagonal.heights[5][5] == pytest.approx(1.0)
+    assert diagonal.heights[0][5] == pytest.approx(3.0)
+
+    path = ((1.0, 1.0, 3.0), (1.0, 4.0, 1.0), (4.0, 4.0, 2.0), (5.0, 2.0, 2.0))
+    first = _bounded_stock()
+    second = _bounded_stock()
+    first.remove_swept_path(path, 0.25)
+    second.remove_swept_path(tuple(path), 0.25)
+    assert first.to_render_grid() == second.to_render_grid()
+    assert first.metrics() == second.metrics()
+    assert first.heights[2][1] == pytest.approx(1.0)
+    assert first.heights[2][4] == pytest.approx(2.0)
+
+
 def _execute(job, stock: StockModel, *, spindle: bool = True, rapid: bool = False,
              shift_x: float = 0.0):
     profile = stock.profile

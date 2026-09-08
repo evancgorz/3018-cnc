@@ -248,7 +248,7 @@ streaming pipeline.
 - [ ] General-purpose 3D STEP surface machining.
 - [ ] Reliable arbitrary-angle face orientation and complex B-rep topology.
 - [ ] 3D adaptive clearing, waterline, raster, or rest machining.
-- [ ] Full-resolution stock collision simulation for every operation and ramp.
+- [x] Full-resolution swept height-field stock collision simulation at the configured resolution for accepted executed paths, including ramps and multi-segment paths; unsupported arbitrary 3D remains collision-only.
 - [ ] Full CAM-grade cutter compensation and lead-in/lead-out strategies.
 - [ ] Boundary tracing and probing.
 
@@ -307,3 +307,4 @@ streaming pipeline.
 | 2026-08-30 | `ca1858e` | Added validated explicit Slot machining mode for non-circular inner openings. |
 | 2026-08-30 | `eb52002` | Preserved disconnected solids sharing a coplanar machining face during STEP import. |
 | 2026-08-30 | `7094b4f` | United touching coplanar compound faces while retaining disconnected roots. |
+| 2026-09-08 | `F1` | Added configured-resolution swept rectangle/footprint stock removal for accepted executed segments, including tangent, diagonal/ramp, and multi-segment paths; arbitrary 3D remains collision-only. |

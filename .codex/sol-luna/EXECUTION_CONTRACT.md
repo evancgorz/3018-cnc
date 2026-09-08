@@ -1539,3 +1539,40 @@ Place the matrix in `docs/DIGITAL_TWIN_CLOSURE_AUDIT.md`, preserve historical
 reports, run `git diff --check`, commit only the new audit plus this contract
 delta, and push the checkpoint. No GUI, hardware, runtime/protected config, or
 generated evidence may be touched.
+
+## Sol plan — F1 full-resolution executed-stock collision simulation (2026-09-08)
+
+The unchecked STEP progress item for full-resolution stock collision coverage
+is now in scope. Implement the first coherent package without touching real
+hardware or changing the GRBL/public connection contract.
+
+### Required behavior
+
+- Replace center-sample-only stock removal with a deterministic conservative
+  footprint model at the configured stock resolution. A cutter sweep must test
+  every cell whose rectangle intersects the swept cylindrical footprint, not
+  only the cell center; boundary and tangent cases must be explicit.
+- Preserve the existing height-field API and metrics, but make every accepted
+  executed segment authoritative, including multi-segment arcs, coordinated
+  XYZ moves, and varying-Z ramps. Do not remove stock from commanded future
+  paths, rapid moves, spindle-off moves, or rejected/alarmed transitions.
+- Make the backend and independent supervisor use the same immutable path
+  semantics while keeping separate stock state. A mismatch in path, frame, or
+  metrics must become a deterministic safety/evidence failure rather than a
+  silent disagreement.
+- Add deterministic coverage for thin/tangent features, diagonal and ramp
+  sweeps, arc/polyline execution, retained islands, stock bounds, replay
+  stability, and backend/supervisor metric parity. Keep the cell budget and
+  fail-closed validation for non-finite or pathological inputs.
+- Update `docs/STEP_25D_PROGRESS.md` only when the tests demonstrate the
+  acceptance criteria; describe the delivered capability precisely as a
+  full-resolution swept height-field gate at configured resolution, not as a
+  claim of arbitrary 3D material physics.
+
+### Validation and handoff
+
+Luna must run focused stock/simulation tests, affected backend/supervisor
+tests, compileall, diff checks, and the full suite. Record exact counts and
+the parity/replay evidence in `EXECUTION_RESULT.md`. Commit and push this
+package separately. No GUI, hardware, runtime/protected config, generated
+evidence, or unrelated backlog item may be changed.
