@@ -1591,3 +1591,35 @@ with exact `Alt+F4`; no matching validator window or process remained. The
 validator log reported `Simulation GUI validation physical factory calls: []`.
 No production instance, physical controller, hardware, USB/COM, physical
 Wi-Fi, GPIO/reset pin, or non-loopback endpoint was accessed.
+
+## Deterministic constrained-shell verification (2026-09-08)
+
+Added an offscreen regression that builds the real QML shell through
+`build_engine` with an isolated `ApplicationController`, resizes the root to
+`1180×720`, and processes the Prepare/Preview & Run/Machine workspace sequence
+`0 → 1 → 2 → 0`. The root retained declared minimum dimensions of
+`1180×720` and the actual size remained `1180×720` after each transition.
+The test captured the existing `pine.qt` warning logger and observed no QML
+warnings. Sentinel USB and Wi-Fi factories were untouched; no transport or
+simulation runtime was created by workspace navigation.
+
+This is complementary offscreen proof of minimum-size/layout state stability,
+not a native screenshot or a replacement for the still-unobserved native
+1180×720 resize and splash-capture observations. Physical commissioning remains
+outside this software-only validation.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest -q tests/test_qt_shell.py -k
+  "constrained_size" --disable-warnings --maxfail=1` → **1 passed, 45
+  deselected in 1.96s**.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_qt_shell.py
+  --disable-warnings --maxfail=1` → **46 passed in 13.69s**.
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `git diff --check` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **521 passed in 149.62s (0:02:29)**.
+
+No GUI instance was launched or relaunched, no native window was touched, and
+no hardware, USB/COM, Wi-Fi, non-loopback endpoint, runtime configuration,
+generated evidence, or protected untracked artifact was accessed or staged.

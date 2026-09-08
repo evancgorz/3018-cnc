@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 import math
 import os
 import queue
@@ -177,6 +178,50 @@ def test_qml_keyboard_focus_reaches_actionable_controls_offscreen(qapp) -> None:
         focused_labels.append(text)
 
     assert focused_labels[:3] == ["Connect", "Prepare", "Preview & Run"]
+    root.close()
+    view_model.close()
+
+
+def test_real_qml_shell_constrained_size_and_workspace_transitions_offscreen(qapp, tmp_path, caplog) -> None:
+    factory_calls: list[str] = []
+
+    def forbidden_usb():
+        factory_calls.append("usb")
+        raise AssertionError("USB factory must remain untouched")
+
+    def forbidden_wifi():
+        factory_calls.append("wifi")
+        raise AssertionError("Wi-Fi factory must remain untouched")
+
+    controller = ApplicationController(
+        tmp_path,
+        usb_factory=forbidden_usb,
+        wifi_factory=forbidden_wifi,
+    )
+    with caplog.at_level(logging.WARNING, logger="pine.qt"):
+        engine, view_model = build_engine(visible=False, application=controller)
+        root = engine.rootObjects()[0]
+        root.resize(1180, 720)
+        root.show()
+        qapp.processEvents()
+
+        assert root.minimumWidth() == 1180
+        assert root.minimumHeight() == 720
+        assert root.width() == 1180
+        assert root.height() == 720
+
+        for workspace in (0, 1, 2, 0):
+            root.setProperty("workspace", workspace)
+            qapp.processEvents()
+            assert root.property("workspace") == workspace
+            assert root.width() == 1180
+            assert root.height() == 720
+
+        assert not factory_calls
+        assert controller.transport is None
+        assert controller.simulation_runtime is None
+        assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
+
     root.close()
     view_model.close()
 
