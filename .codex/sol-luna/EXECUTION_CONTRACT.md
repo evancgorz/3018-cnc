@@ -1423,3 +1423,43 @@ No hardware, USB/COM, Wi-Fi, GPIO/reset pin, non-loopback endpoint, unrelated
 window, generated repository evidence, or protected config may be accessed or
 staged. Commit and push this package as its own checkpoint; leave overall
 status PARTIAL if any visual/export gate remains unobserved.
+
+## Sol replan delta — close deferred G-code handoff and focus verification (2026-09-08)
+
+The native STEP chooser and digital-twin hazard/evidence gates are now observed.
+The remaining explicitly deferred GUI corrective item is the existing G-code
+picker handoff and keyboard-focus retest from `docs/GUI_USER_TEST_REPORT.md`.
+Handle it as a narrow, hardware-free package without changing the simulation
+architecture or opening a physical transport.
+
+### G1 — deterministic existing-G-code handoff
+
+Exercise the `PlatformDialogs.FileDialog` accepted URL through the public
+`ControllerViewModel.load_gcode_file(QUrl)` boundary. Ensure a valid metric
+program atomically replaces the active job, updates filename/summary/preview,
+and emits a persistent success notice; invalid/unreadable input must preserve
+the previous validated job and emit an actionable rejection notice. Loading is
+forbidden while a job is active. Add focused Qt/application regressions for
+valid replacement, invalid preservation, empty URL, active-job refusal, and
+the QML accepted binding/name filter.
+
+### G2 — keyboard focus evidence
+
+Reproduce the earlier accessibility observation with Qt `activeFocusItem` and
+synthetic key events on an offscreen shell before changing focus policy. If
+focus is already correct, add a regression documenting the observed actionable
+focus order and do not make cosmetic changes. If it is incorrect, make the
+smallest QML focus-scope/tab-order correction and test that enabled controls
+receive focus, dialogs return focus safely, and no transport/plant call is
+reachable through focus alone.
+
+### G3 — validation and evidence
+
+Run focused Qt tests, affected application tests, compileall, and the full
+suite. If a native check is useful, launch one uniquely tagged isolated
+validator only, use repository G-code fixtures, disconnect and close it
+normally, and record the marker/endpoint/process cleanup. No hardware,
+USB/COM/Wi-Fi, non-loopback endpoint, production instance, generated evidence,
+runtime config, or protected untracked file may be accessed or staged. Commit
+and push this package separately; keep overall result PARTIAL for the explicit
+physical-commissioning boundary.
