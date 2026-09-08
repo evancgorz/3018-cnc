@@ -6,8 +6,9 @@ intentional product boundaries, not unfinished work in this release. The
 separate simulation SOW remains pending and is not included here.
 
 This file tracks the bounded STEP-to-G-code expansion for the TTC 3018 app.
-The first release targets simple planar STEP designs and 2.5D machining only.
-It must continue to use the existing validated G-code, preview, envelope, and
+The supported release covers simple planar STEP designs, 2.5D machining, and
+the explicitly bounded tool-axis-visible surface raster added in M1. It must
+continue to use the existing validated G-code, preview, envelope, and
 streaming pipeline.
 
 ## Scope
