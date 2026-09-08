@@ -579,6 +579,37 @@ def test_bundled_showcase_step_uses_shared_async_pipeline_and_reports_errors(qap
     assert qml.count('text: "Load bundled showcase STEP"') == 2
     assert qml.count("load_bundled_showcase_step()") == 2
 
+
+def test_native_step_chooser_uses_real_fixture_and_public_acceptance_binding(qapp, tmp_path) -> None:
+    fixture = Path(__file__).parents[1] / "examples" / "showcase-pocket-island.step"
+    assert fixture.is_file()
+    view_model = ControllerViewModel(ApplicationController(tmp_path))
+    view_model.import_step_file(QUrl.fromLocalFile(str(fixture)))
+    deadline = time.monotonic() + 5
+    while view_model.step_importing and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert not view_model.step_importing
+    assert view_model.step_loaded
+    assert view_model.step_source == fixture.name
+    assert "40.00 × 30.00 mm" in view_model.step_model_summary
+
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert 'id: stepFileDialog' in qml
+    assert 'title: "Import planar STEP model"' in qml
+    assert 'STEP files (*.step *.stp)' in qml
+    assert 'appViewModel.import_step_file(selectedFile)' in qml
+
+
+def test_simulation_first_contact_and_evidence_controls_are_publicly_bound() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert 'ctx.fillText("FIRST CONTACT"' in qml
+    assert 'id: simulationEvidenceDialog' in qml
+    assert 'title: "Export digital-twin evidence"' in qml
+    assert 'fileMode: PlatformDialogs.FileDialog.SaveFile' in qml
+    assert 'JSON evidence (*.json)' in qml
+    assert 'appViewModel.export_simulation_evidence(selectedFile)' in qml
+
 def test_qt_view_model_projects_grbl_status(qapp) -> None:
     _engine, view_model = build_engine()
 

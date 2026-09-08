@@ -1228,6 +1228,36 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## Native STEP chooser / first-contact evidence audit (2026-09-08)
+
+The public bindings are already correctly routed: native `stepFileDialog`
+acceptance calls `ViewModel.import_step_file(selectedFile)`, which uses the
+same async parser/preview pipeline as the bundled fixture; the simulator
+evidence dialog calls `export_simulation_evidence(selectedFile)` and requests
+JSON output while the application writes the paired Markdown artifact. The
+simulator canvas retains the visible `FIRST CONTACT` projection.
+
+Added deterministic headless coverage that imports the real repository
+`showcase-pocket-island.step` through the arbitrary-file ViewModel path and
+asserts parsed provenance/summary, plus static QML checks for chooser filters,
+acceptance routing, first-contact visualization, and evidence export.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py -k
+  "native_step_chooser or first_contact_and_evidence or bundled_showcase" -q`
+  → **3 passed, 36 deselected in 3.87s**.
+- `.venv\Scripts\python.exe -m pytest tests/test_qt_shell.py
+  tests/test_simulation_public_scenarios.py
+  tests/test_simulation_evidence_branches.py -q`
+  → **50 passed in 43.71s**.
+
+Residual blocker: native OS chooser presentation and the end-to-end GUI
+first-contact/export visual interaction remain unproven without a manual or
+isolated GUI acceptance run. No GUI was launched in this audit; no hardware,
+physical transport, non-loopback endpoint, or generated/config artifact was
+touched.
+
 ## Native GUI Auto XYZ acceptance after probe-surface fix (2026-09-08)
 
 Fresh isolated validator marker: `pine-twin-gui-460e14d24671`.
