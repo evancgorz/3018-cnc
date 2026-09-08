@@ -3,10 +3,12 @@
 ## Status
 
 PARTIAL — implementation, automated gates, fresh tagged digital-twin launch,
-and normal cleanup completed. The remaining STEP-run GUI scenarios could not
-be completed because the native file chooser did not surface after the
-observed `Import STEP file…` action; no untrusted or terminal shortcut was
-used to bypass that gate.
+native arbitrary-STEP chooser/import/proposal review, and normal cleanup have
+been observed. The native chooser gate is no longer an open blocker. Overall
+status remains PARTIAL only for any completion item not yet observed and the
+intentionally deferred physical commissioning boundary. Historical audit
+entries below retain their original observed state and are superseded by the
+later correction evidence.
 
 ## Implementation and automated evidence
 
@@ -1501,3 +1503,26 @@ Validation evidence:
 
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
+
+## Native arbitrary STEP chooser acceptance — correction evidence (2026-09-08)
+
+Fresh isolated validator acceptance completed for marker
+`pine-twin-gui-c58e98c9fa7e` under temporary root
+`C:\Users\EVANGO~1\AppData\Local\Temp\pine-twin-gui-c58e98c9fa7e-z0_9b_zg`.
+The Digital Twin used loopback endpoint `127.0.0.1:49423` at 10×. The native
+file dialog titled **Import planar STEP model** was observed with the filter
+`(*.step *.stp)`, and the validator selected
+`examples/showcase-pocket-island.step`.
+
+The ordinary asynchronous import pipeline completed successfully. Automatic
+proposal output visibly reported a `40.00 × 30.00 mm` part, `3 closed loops`,
+recess detection, and the expected STEP analysis. Proposal review then
+completed with **Validated G-code loaded** and
+**Generated generated-step.gcode and loaded it for review**.
+
+The exact isolated session was disconnected and closed normally. Physical
+factory calls remained empty; no production instance, physical controller,
+hardware, USB/COM, physical Wi-Fi, GPIO/reset pin, or non-loopback endpoint
+was accessed. This section corrects the earlier historical chooser audit;
+the older audit remains preserved as historical evidence rather than a current
+residual blocker.
