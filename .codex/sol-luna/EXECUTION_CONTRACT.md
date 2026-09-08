@@ -1508,3 +1508,14 @@ and physical-factory calls in `EXECUTION_RESULT.md`. Do not change splash or
 layout source, do not access hardware or production config, and leave the
 native 1180×720 resize limitation explicitly documented if no resize-capable
 surface is available.
+
+## Sol audit — scheduled software-only backlog coverage (2026-09-08)
+
+The scheduled software-only contract packages through P0/P1/P2/P3, H1–H7,
+and G1–G3 have current implementation, deterministic test, pushed-commit, and
+result evidence. The constrained shell has complementary offscreen proof; the
+native splash and native 1180×720 resize observations remain explicitly
+unproven because the available computer-control surface did not expose those
+windows/actions. Physical commissioning and any hardware A/B run remain
+intentionally outside this contract and require separate authorization and
+physical evidence.
