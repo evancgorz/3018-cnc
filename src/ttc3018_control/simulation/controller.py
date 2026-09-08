@@ -7,7 +7,7 @@ import math
 import re
 from typing import Callable
 
-from .plant import ProbeCornerCircle, VirtualMachinePlant
+from .plant import ProbeBoundary, ProbeCornerCircle, VirtualMachinePlant
 from .models import SimulationFault
 from .protocol import ParsedLine, ProtocolError, parse_line
 from .safety import EStopDefinition, EStopLatch, HomingLimitProfile, HomingSensorBank
@@ -120,6 +120,12 @@ class VirtualGrblController:
         if circle is not None:
             circle.validate()
         self.plant.probe_corner_circle = circle
+
+    def configure_probe_boundary(self, boundary: ProbeBoundary | None) -> None:
+        """Configure optional simulation-only conductive polygon geometry."""
+        if boundary is not None:
+            boundary.validate()
+        self.plant.probe_boundary = boundary
 
     def set_limit_input(self, axis: str, electrical_active: bool, *, now_ns: int | None = None) -> bool:
         if self.sensor_bank is None:
@@ -555,6 +561,15 @@ class VirtualGrblController:
             self._last_probe = self.plant.probe_contact or self.plant.machine_position
             success = (self.plant.probe_active
                        and not self._fault_active("probe_failure", time_ns=self.plant.clock.time_ns))
+            if not success:
+                # GRBL's probe-failure alarm is fail-closed: a report with
+                # ``:0`` is retained for correlation, then motion is blocked
+                # until the ordinary unlock/reset path is used.
+                self.alarm = True
+                self.plant.state = "Alarm"
+                self.plant.queue.clear()
+                self.plant.active = None
+                self._emit("ALARM:5")
             self._emit(f"[PRB:{','.join(f'{v:.3f}' for v in self._last_probe)}:{1 if success else 0}]")
             self.plant.probe_active = False
 

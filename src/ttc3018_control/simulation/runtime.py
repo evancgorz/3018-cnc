@@ -15,7 +15,7 @@ from .models import Hazard, HazardKind, SimulationFault, SimulationProfile, Simu
 from .supervisor import supervisor_main
 from .trace import TraceRecorder
 from .safety import EStopDefinition, HomingLimitProfile
-from .plant import ProbeCornerCircle
+from .plant import ProbeBoundary, ProbeCornerCircle
 
 
 class SimulationRuntime:
@@ -32,7 +32,8 @@ class SimulationRuntime:
                  homing_profile: HomingLimitProfile | None = None,
                  estop_definition: EStopDefinition | None = None,
                  probe_corner_circle: ProbeCornerCircle | None = None,
-                 probe_surface_z: float | None = None) -> None:
+                 probe_surface_z: float | None = None,
+                 probe_boundary: ProbeBoundary | None = None) -> None:
         self.profile = profile or SimulationProfile.default_3018()
         self.profile.validate()
         self.workpiece = workpiece
@@ -75,6 +76,9 @@ class SimulationRuntime:
         if probe_corner_circle is not None:
             probe_corner_circle.validate()
         self.probe_corner_circle = probe_corner_circle
+        if probe_boundary is not None:
+            probe_boundary.validate()
+        self.probe_boundary = probe_boundary
         if probe_surface_z is not None:
             if not isinstance(probe_surface_z, (int, float)) or not float(probe_surface_z) == float(probe_surface_z):
                 raise ValueError("Probe surface Z must be finite")
@@ -95,7 +99,7 @@ class SimulationRuntime:
         self._telemetry = self.ctx.Queue(maxsize=2048)
         workpiece_data = asdict(self.workpiece) if self.workpiece is not None else None
         fault_data = [asdict(fault) for fault in self.faults]
-        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data, self.homing_profile.to_dict(), asdict(self.estop_definition), self.probe_corner_circle.to_dict() if self.probe_corner_circle else None, self.probe_surface_z), name=f"pine-twin-backend-{self.session_token[:6]}")
+        self.backend = self.ctx.Process(target=backend_main, args=(backend_child, backend_parent, self._telemetry, self.profile.to_dict(), self.session_token, workpiece_data, self.speed, fault_data, self.homing_profile.to_dict(), asdict(self.estop_definition), self.probe_corner_circle.to_dict() if self.probe_corner_circle else None, self.probe_surface_z, self.probe_boundary.to_dict() if self.probe_boundary else None), name=f"pine-twin-backend-{self.session_token[:6]}")
         self.backend.start()
         try:
             if not self._backend_ready.poll(timeout):
@@ -108,7 +112,7 @@ class SimulationRuntime:
             self._supervisor_control, supervisor_parent = self.ctx.Pipe(True)
             self._supervisor_in = self.ctx.Queue(maxsize=2048)
             self._supervisor_out = self.ctx.Queue(maxsize=2048)
-            self.supervisor = self.ctx.Process(target=supervisor_main, args=(supervisor_child, supervisor_parent, self._supervisor_in, self._supervisor_out, self.profile.to_dict(), self.session_token, workpiece_data, fault_data), name=f"pine-twin-supervisor-{self.session_token[:6]}")
+            self.supervisor = self.ctx.Process(target=supervisor_main, args=(supervisor_child, supervisor_parent, self._supervisor_in, self._supervisor_out, self.profile.to_dict(), self.session_token, workpiece_data, fault_data, self.probe_boundary.to_dict() if self.probe_boundary else None), name=f"pine-twin-supervisor-{self.session_token[:6]}")
             self.supervisor.start()
             if not self._supervisor_ready.poll(timeout):
                 raise RuntimeError("Digital twin supervisor handshake timed out")
@@ -307,6 +311,15 @@ class SimulationRuntime:
         self.probe_corner_circle = circle
         self._backend_control.send({"op": "configure_probe_corner_circle",
                                     "circle": circle.to_dict() if circle else None})
+
+    def configure_probe_boundary(self, boundary: ProbeBoundary | None) -> None:
+        if boundary is not None:
+            boundary.validate()
+        if not self.started or self._backend_control is None:
+            raise RuntimeError("Simulation runtime is not started")
+        self.probe_boundary = boundary
+        self._backend_control.send({"op": "configure_probe_boundary",
+                                    "boundary": boundary.to_dict() if boundary else None})
 
     def configure_probe_surface(self, z: float | None) -> None:
         """Configure the simulation-only conductive Z surface via backend control."""

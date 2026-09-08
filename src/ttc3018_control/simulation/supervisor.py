@@ -10,6 +10,7 @@ from .models import Hazard, HazardKind, PlantSnapshot, SimulationFault, Simulati
 from .operator import IndependentVirtualOperator
 from .geometry import CoordinateFrame, executed_path
 from .stock import StockModel
+from .plant import ProbeBoundary
 
 
 def _snapshot(data: dict[str, Any], fallback_sequence: int = 0) -> PlantSnapshot:
@@ -41,13 +42,18 @@ def _emit_assessment(outgoing, assessment) -> None:
 def supervisor_main(ready: multiprocessing.connection.Connection, control: multiprocessing.connection.Connection,
                     incoming, outgoing, profile_data: dict[str, Any], token: str,
                     workpiece_data: dict[str, Any] | None = None,
-                    faults_data: list[dict[str, Any]] | None = None) -> None:
+                    faults_data: list[dict[str, Any]] | None = None,
+                    probe_boundary_data: dict[str, Any] | None = None) -> None:
     """Run the actor without importing application, transport, or backend code."""
     profile = SimulationProfile(**profile_data)
     profile.validate()
     workpiece = SimulationWorkpiece(**workpiece_data) if workpiece_data else None
     if workpiece is not None:
         workpiece.validate()
+    # Keep the supervisor's geometry configuration independently validated;
+    # it never calls the backend probe implementation or mutates plant state.
+    if probe_boundary_data:
+        ProbeBoundary.from_dict(probe_boundary_data)
     operator = IndependentVirtualOperator(profile, workpiece=workpiece)
     faults = [SimulationFault(**data) for data in faults_data or ()]
     for fault in faults:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Callable
+from typing import Callable, Iterable
 
 from .clock import SimulationClock
 from .models import MotionSnapshot, PlantSnapshot, SimulationProfile
@@ -57,6 +57,153 @@ class ProbeCornerCircle:
         return circle
 
 
+@dataclass(frozen=True)
+class ProbeBoundary:
+    """Validated conductive closed XY polygon for simulation probing.
+
+    Vertices are machine-frame XY coordinates.  The geometry is observation
+    configuration only; it cannot acknowledge a command or mutate controller
+    state.  A probe move intersects the closed edge continuously and reports
+    the first contact along the executed segment.
+    """
+
+    vertices: tuple[tuple[float, float], ...]
+
+    def validate(self) -> None:
+        points = tuple((float(x), float(y)) for x, y in self.vertices)
+        if len(points) < 3 or any(not math.isfinite(value) for point in points for value in point):
+            raise ValueError("Probe boundary must contain at least three finite vertices")
+        if any(math.dist(first, second) <= 1e-12 for first, second in zip(points, points[1:] + points[:1])):
+            raise ValueError("Probe boundary has a zero-length edge")
+        area = abs(sum(a[0] * b[1] - b[0] * a[1]
+                       for a, b in zip(points, points[1:] + points[:1]))) / 2.0
+        if area <= 1e-9:
+            raise ValueError("Probe boundary must enclose a nonzero area")
+        for first_index, first_start in enumerate(points):
+            first_end = points[(first_index + 1) % len(points)]
+            for second_index in range(first_index + 1, len(points)):
+                if second_index in {first_index, (first_index - 1) % len(points),
+                                     (first_index + 1) % len(points)}:
+                    continue
+                second_start = points[second_index]
+                second_end = points[(second_index + 1) % len(points)]
+                if _segments_intersect_2d(first_start, first_end, second_start, second_end):
+                    raise ValueError("Probe boundary edges must not self-intersect")
+
+    def to_dict(self) -> dict[str, list[list[float]]]:
+        self.validate()
+        return {"vertices": [[float(x), float(y)] for x, y in self.vertices]}
+
+    @classmethod
+    def from_dict(cls, value: dict[str, object]) -> "ProbeBoundary":
+        raw = value.get("vertices")
+        if not isinstance(raw, (list, tuple)):
+            raise ValueError("Probe boundary vertices are required")
+        try:
+            boundary = cls(tuple((float(item[0]), float(item[1])) for item in raw))
+        except (TypeError, IndexError, ValueError) as exc:
+            raise ValueError("Probe boundary vertices must be finite XY pairs") from exc
+        boundary.validate()
+        return boundary
+
+    @property
+    def bounds(self) -> tuple[float, float, float, float]:
+        self.validate()
+        xs = [point[0] for point in self.vertices]
+        ys = [point[1] for point in self.vertices]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def contains(self, point: tuple[float, float], *, include_boundary: bool = False) -> bool:
+        self.validate()
+        x, y = (float(point[0]), float(point[1]))
+        if not all(math.isfinite(value) for value in (x, y)):
+            return False
+        inside = False
+        for start, end in zip(self.vertices, self.vertices[1:] + self.vertices[:1]):
+            if _point_on_segment_2d(start, end, (x, y)):
+                return include_boundary
+            if (start[1] > y) != (end[1] > y):
+                crossing = start[0] + (y - start[1]) * (end[0] - start[0]) / (end[1] - start[1])
+                if x < crossing:
+                    inside = not inside
+        return inside
+
+    def distance_to_boundary(self, point: tuple[float, float]) -> float:
+        self.validate()
+        return min(_point_segment_distance_2d(point, start, end)
+                   for start, end in zip(self.vertices, self.vertices[1:] + self.vertices[:1]))
+
+    def first_contact(self, start: tuple[float, float, float],
+                      end: tuple[float, float, float]) -> tuple[float, float, float] | None:
+        self.validate()
+        start = tuple(float(value) for value in start)
+        end = tuple(float(value) for value in end)
+        if len(start) != 3 or len(end) != 3 or not all(math.isfinite(value) for value in (*start, *end)):
+            raise ValueError("Probe path must contain six finite coordinates")
+        candidates: list[float] = []
+        for edge_start, edge_end in zip(self.vertices, self.vertices[1:] + self.vertices[:1]):
+            candidates.extend(_segment_intersection_parameters(start[:2], end[:2], edge_start, edge_end))
+        if not candidates:
+            return None
+        t = max(0.0, min(1.0, min(candidates)))
+        return tuple(start[index] + (end[index] - start[index]) * t for index in range(3))
+
+
+def _point_on_segment_2d(start: tuple[float, float], end: tuple[float, float],
+                         point: tuple[float, float], epsilon: float = 1e-9) -> bool:
+    cross = ((end[0] - start[0]) * (point[1] - start[1])
+             - (end[1] - start[1]) * (point[0] - start[0]))
+    if abs(cross) > epsilon:
+        return False
+    return (min(start[0], end[0]) - epsilon <= point[0] <= max(start[0], end[0]) + epsilon
+            and min(start[1], end[1]) - epsilon <= point[1] <= max(start[1], end[1]) + epsilon)
+
+
+def _segments_intersect_2d(first_start: tuple[float, float], first_end: tuple[float, float],
+                           second_start: tuple[float, float], second_end: tuple[float, float]) -> bool:
+    return bool(_segment_intersection_parameters(first_start, first_end, second_start, second_end))
+
+
+def _segment_intersection_parameters(first_start: tuple[float, float], first_end: tuple[float, float],
+                                     second_start: tuple[float, float], second_end: tuple[float, float]) -> tuple[float, ...]:
+    dx, dy = first_end[0] - first_start[0], first_end[1] - first_start[1]
+    ex, ey = second_end[0] - second_start[0], second_end[1] - second_start[1]
+    denominator = dx * ey - dy * ex
+    epsilon = 1e-10
+    if abs(denominator) > epsilon:
+        qx, qy = second_start[0] - first_start[0], second_start[1] - first_start[1]
+        t = (qx * ey - qy * ex) / denominator
+        u = (qx * dy - qy * dx) / denominator
+        if -epsilon <= t <= 1.0 + epsilon and -epsilon <= u <= 1.0 + epsilon:
+            return (max(0.0, min(1.0, t)),)
+        return ()
+    if abs((second_start[0] - first_start[0]) * dy
+           - (second_start[1] - first_start[1]) * dx) > epsilon:
+        return ()
+    length_squared = dx * dx + dy * dy
+    if length_squared <= epsilon * epsilon:
+        return (0.0,) if _point_on_segment_2d(second_start, second_end, first_start) else ()
+    parameters = []
+    for point in (second_start, second_end):
+        t = ((point[0] - first_start[0]) * dx + (point[1] - first_start[1]) * dy) / length_squared
+        if -epsilon <= t <= 1.0 + epsilon:
+            parameters.append(max(0.0, min(1.0, t)))
+    if parameters:
+        return tuple(parameters)
+    return ()
+
+
+def _point_segment_distance_2d(point: tuple[float, float], start: tuple[float, float],
+                               end: tuple[float, float]) -> float:
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared <= 1e-24:
+        return math.dist(point, start)
+    ratio = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_squared
+    ratio = max(0.0, min(1.0, ratio))
+    return math.dist(point, (start[0] + ratio * dx, start[1] + ratio * dy))
+
+
 class VirtualMachinePlant:
     """Continuous pose source used by both protocol and visual/collision layers."""
 
@@ -77,6 +224,7 @@ class VirtualMachinePlant:
         self.hold_requested = False
         self.probe_surface_z: float | None = None
         self.probe_corner_circle: ProbeCornerCircle | None = None
+        self.probe_boundary: ProbeBoundary | None = None
         self.probe_active = False
         self.probe_contact: tuple[float, float, float] | None = None
         self.pins = ""
@@ -219,6 +367,14 @@ class VirtualMachinePlant:
 
     def _check_corner_probe(self, start: tuple[float, float, float],
                             end: tuple[float, float, float], block: MotionBlock) -> bool:
+        boundary = self.probe_boundary
+        if block.probing and boundary is not None:
+            contact = boundary.first_contact(start, end)
+            if contact is not None:
+                self.position[:] = contact
+                self.probe_active = True
+                self.probe_contact = contact
+                return True
         circle = self.probe_corner_circle
         if not block.probing or circle is None:
             return False

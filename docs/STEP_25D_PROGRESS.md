@@ -250,7 +250,7 @@ streaming pipeline.
 - [ ] 3D adaptive clearing, waterline, raster, or rest machining.
 - [x] Full-resolution swept height-field stock collision simulation at the configured resolution for accepted executed paths, including ramps and multi-segment paths; unsupported arbitrary 3D remains collision-only.
 - [ ] Full CAM-grade cutter compensation and lead-in/lead-out strategies.
-- [ ] Boundary tracing and probing.
+- [x] Deterministic simulation polygon boundary probing with bounded four-direction traces and fail-closed report/safety guards; real probe repeatability and arbitrary 3D tracing remain outside scope.
 
 ## Working rules
 
@@ -308,3 +308,4 @@ streaming pipeline.
 | 2026-08-30 | `eb52002` | Preserved disconnected solids sharing a coplanar machining face during STEP import. |
 | 2026-08-30 | `7094b4f` | United touching coplanar compound faces while retaining disconnected roots. |
 | 2026-09-08 | `F1` | Added configured-resolution swept rectangle/footprint stock removal for accepted executed segments, including tangent, diagonal/ramp, and multi-segment paths; arbitrary 3D remains collision-only. |
+| 2026-09-08 | `B1` | Added validated simulation polygon boundary probing through loopback G38.2 first-contact reports and a bounded four-direction trace orchestrator; physical probe repeatability remains unclaimed. |

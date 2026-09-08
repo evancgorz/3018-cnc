@@ -1576,3 +1576,39 @@ tests, compileall, diff checks, and the full suite. Record exact counts and
 the parity/replay evidence in `EXECUTION_RESULT.md`. Commit and push this
 package separately. No GUI, hardware, runtime/protected config, generated
 evidence, or unrelated backlog item may be changed.
+
+## Sol plan — B1 boundary tracing and probing (2026-09-08)
+
+Implement the unchecked STEP/CAM boundary-tracing-and-probing item as a
+bounded, hardware-free public simulation capability. Preserve the existing
+Z-surface and Auto XYZ workflows.
+
+### Required behavior
+
+- Add a validated simulation probe-boundary definition representing a closed
+  XY polygon in work/machine coordinates. Keep it isolated from application
+  state and default it to absent so ordinary digital-twin sessions are
+  unchanged.
+- Extend the virtual plant/controller/runtime configuration through the same
+  loopback GRBL boundary so a `G38.2` X/Y probe move stops at the first swept
+  polygon-edge contact and emits the ordinary fresh `[PRB:…:1]` report. The
+  intersection must be continuous and deterministic (no endpoint-only or
+  sampled-center shortcut); no-contact, malformed, or out-of-envelope moves
+  must fail closed with the normal alarm/error path.
+- Add a small reusable boundary-trace orchestrator that starts from a trusted
+  interior seed, performs bounded outward probes in deterministic directions,
+  collects at least four contacts, validates closure/order/finite geometry,
+  and never applies a work offset from an incomplete or contradictory trace.
+  It must require Idle, spindle-off, fresh reference, open probe input, and
+  abort on collision, limit, E-stop, stale report, or supervisor failure.
+- Add backend and independent-supervisor tests for first contact, reverse and
+  diagonal edges, no-contact, malformed polygons, probe-report correlation,
+  replay stability, and no-offset-on-failure. Do not introduce physical GPIO,
+  USB/COM, Wi-Fi, or GUI behavior in this package.
+- Update `docs/STEP_25D_PROGRESS.md` and `EXECUTION_RESULT.md` only after the
+  focused, affected, compileall, and full-suite gates pass. State precisely
+  that this is deterministic polygon boundary probing, not a claim of real
+  probe repeatability or arbitrary 3D surface tracing.
+
+Commit and push this package separately; leave all other unchecked backlog
+items untouched.

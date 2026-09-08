@@ -13,7 +13,10 @@ from enum import StrEnum
 import hashlib
 import json
 import math
+import re
 from typing import Any, Iterable
+
+from .plant import ProbeBoundary
 
 
 def _finite(values: Iterable[float], label: str) -> None:
@@ -319,6 +322,195 @@ class CalibrationFailure(StrEnum):
     STALE_WCO = "stale_wco"
     ENVELOPE = "out_of_envelope"
     RESIDUAL = "circle_residual"
+
+
+class BoundaryTraceState(StrEnum):
+    IDLE = "idle"
+    SEARCHING = "searching"
+    COMPLETE = "complete"
+    FAILED = "failed"
+
+
+class BoundaryTraceFailure(StrEnum):
+    NONE = ""
+    INVALID_BOUNDARY = "invalid_boundary"
+    SEED_OUTSIDE = "seed_outside_boundary"
+    GUARD = "safety_guard"
+    NO_CONTACT = "no_contact"
+    MALFORMED_REPORT = "malformed_probe_report"
+    STALE_REPORT = "stale_probe_report"
+    CONTRADICTORY = "contradictory_trace"
+    ENVELOPE = "out_of_envelope"
+
+
+@dataclass(frozen=True)
+class BoundaryTraceResult:
+    contacts: tuple[tuple[float, float, float], ...]
+
+
+class ProbeBoundaryTraceWorkflow:
+    """Bounded four-direction polygon edge trace over ordinary GRBL replies.
+
+    This is a pure application-boundary orchestrator.  It emits commands for
+    the caller to send through the existing transport and accepts only the
+    matching ``ok`` then fresh ``[PRB:...:1]`` response for each probe.  It
+    never mutates a plant or applies a work offset; a result exists only after
+    all four validated contacts are complete.
+    """
+
+    _REPORT = re.compile(r"^\[PRB:([^,]+),([^,]+),([^:]+):([01])\]$")
+
+    def __init__(self, *, tolerance: float = 0.1, slow_feed: float = 25.0) -> None:
+        if not math.isfinite(tolerance) or tolerance <= 0 or not math.isfinite(slow_feed) or slow_feed <= 0:
+            raise ValueError("Trace tolerance/feed must be finite and positive")
+        self.tolerance = float(tolerance)
+        self.slow_feed = float(slow_feed)
+        self.state = BoundaryTraceState.IDLE
+        self.failure_code = BoundaryTraceFailure.NONE
+        self.failure_reason = ""
+        self.boundary: ProbeBoundary | None = None
+        self.seed: tuple[float, float, float] | None = None
+        self.commands: tuple[str, ...] = ()
+        self.contacts: list[tuple[float, float, float]] = []
+        self.result: BoundaryTraceResult | None = None
+        self._command_index = 0
+        self._awaiting_ack = False
+        self._awaiting_report = False
+
+    def start(self, *, boundary: ProbeBoundary, seed: tuple[float, float, float],
+              envelope: tuple[float, float, float], reference_trusted: bool,
+              controller_idle: bool, spindle_rpm: float, probe_input_open: bool,
+              collision_clear: bool = True, limits_clear: bool = True,
+              estop_clear: bool = True, supervisor_healthy: bool = True,
+              status_fresh: bool = True) -> bool:
+        try:
+            boundary.validate()
+            values = tuple(float(value) for value in (*seed, *envelope))
+            if len(values) != 6 or not all(math.isfinite(value) for value in values):
+                raise ValueError("trace pose/envelope must be finite")
+            if any(value < 0 or value > maximum for value, maximum in zip(seed, envelope)):
+                return self.fail("seed is outside the machine envelope", BoundaryTraceFailure.ENVELOPE)
+        except (TypeError, ValueError) as exc:
+            return self.fail(str(exc), BoundaryTraceFailure.INVALID_BOUNDARY)
+        if not (reference_trusted and controller_idle and spindle_rpm == 0 and probe_input_open
+                and collision_clear and limits_clear and estop_clear and supervisor_healthy and status_fresh):
+            return self.fail("Idle, spindle-off, trusted reference, open probe, fresh status, and clear safety are required",
+                             BoundaryTraceFailure.GUARD)
+        if not boundary.contains((seed[0], seed[1])):
+            return self.fail("trace seed must be strictly inside the boundary", BoundaryTraceFailure.SEED_OUTSIDE)
+        min_x, min_y, max_x, max_y = boundary.bounds
+        distances = (envelope[0] - seed[0], seed[1], envelope[1] - seed[1], seed[1])
+        if any(distance <= 0 for distance in distances):
+            return self.fail("seed leaves no bounded outward probe distance", BoundaryTraceFailure.ENVELOPE)
+        directions = (f"X{distances[0]:.3f}", f"Y{distances[2]:.3f}",
+                      f"X-{distances[1]:.3f}", f"Y-{distances[3]:.3f}")
+        self.boundary = boundary
+        self.seed = tuple(float(value) for value in seed)
+        self.contacts.clear()
+        self.result = None
+        self.failure_code = BoundaryTraceFailure.NONE
+        self.failure_reason = ""
+        self.commands = tuple(
+            command
+            for direction in directions
+            for command in (
+                f"G90 G21 G0 X{seed[0]:.3f} Y{seed[1]:.3f} Z{seed[2]:.3f}",
+                "G91",
+                f"G38.2 {direction} F{self.slow_feed:.3f}",
+            )
+        )
+        self._command_index = 0
+        self._awaiting_ack = False
+        self._awaiting_report = False
+        self.state = BoundaryTraceState.SEARCHING
+        return True
+
+    def next_command(self) -> str | None:
+        if self.state is not BoundaryTraceState.SEARCHING or self._awaiting_ack or self._awaiting_report:
+            return None
+        if self._command_index >= len(self.commands):
+            return None
+        command = self.commands[self._command_index]
+        self._awaiting_ack = True
+        self._awaiting_report = command.upper().startswith("G38.2")
+        return command
+
+    def handle_response(self, line: str) -> bool:
+        if self.state is not BoundaryTraceState.SEARCHING:
+            return self.fail("probe response arrived outside an active trace", BoundaryTraceFailure.STALE_REPORT)
+        normalized = str(line).strip()
+        if normalized == "ok":
+            if not self._awaiting_ack:
+                return self.fail("unexpected acknowledgement", BoundaryTraceFailure.STALE_REPORT)
+            self._awaiting_ack = False
+            if not self._awaiting_report:
+                self._command_index += 1
+            return True
+        match = self._REPORT.fullmatch(normalized)
+        if match is None:
+            return self.fail("malformed or unexpected probe report", BoundaryTraceFailure.MALFORMED_REPORT)
+        if not self._awaiting_report or self._awaiting_ack:
+            return self.fail("stale or uncorrelated probe report", BoundaryTraceFailure.STALE_REPORT)
+        try:
+            point = tuple(float(match.group(index)) for index in (1, 2, 3))
+        except ValueError:
+            return self.fail("probe report coordinates are malformed", BoundaryTraceFailure.MALFORMED_REPORT)
+        if match.group(4) != "1":
+            return self.fail("probe reported no contact", BoundaryTraceFailure.NO_CONTACT)
+        if self.boundary is None or self.boundary.distance_to_boundary(point[:2]) > self.tolerance:
+            return self.fail("probe contact contradicts the commissioned boundary", BoundaryTraceFailure.CONTRADICTORY)
+        if any(math.dist(point, previous) <= self.tolerance for previous in self.contacts):
+            return self.fail("duplicate/contradictory probe contact", BoundaryTraceFailure.CONTRADICTORY)
+        if not self._direction_is_valid(point, len(self.contacts)):
+            return self.fail("probe contact is out of deterministic outward order",
+                             BoundaryTraceFailure.CONTRADICTORY)
+        self.contacts.append(point)
+        self._awaiting_report = False
+        self._command_index += 1
+        if len(self.contacts) == 4:
+            if not self._validate_contacts():
+                return self.fail("probe contacts do not form the ordered closed trace",
+                                 BoundaryTraceFailure.CONTRADICTORY)
+            self.result = BoundaryTraceResult(tuple(self.contacts))
+            self.state = BoundaryTraceState.COMPLETE
+        return True
+
+    def _validate_contacts(self) -> bool:
+        if self.boundary is None or self.seed is None or len(self.contacts) != 4:
+            return False
+        if any(not all(math.isfinite(value) for value in point) for point in self.contacts):
+            return False
+        if any(math.dist(first[:2], second[:2]) <= self.tolerance
+               for index, first in enumerate(self.contacts)
+               for second in self.contacts[index + 1:]):
+            return False
+        for index, point in enumerate(self.contacts):
+            if not self._direction_is_valid(point, index):
+                return False
+        area = abs(sum(first[0] * second[1] - second[0] * first[1]
+                       for first, second in zip(self.contacts, self.contacts[1:] + self.contacts[:1]))) / 2.0
+        return area > self.tolerance * self.tolerance
+
+    def _direction_is_valid(self, point: tuple[float, float, float], index: int) -> bool:
+        if self.seed is None or index >= 4:
+            return False
+        direction = ((1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0))[index]
+        delta = (point[0] - self.seed[0], point[1] - self.seed[1])
+        forward = delta[0] * direction[0] + delta[1] * direction[1]
+        lateral = abs(delta[0] * direction[1] - delta[1] * direction[0])
+        return forward > self.tolerance and lateral <= self.tolerance
+
+    def fail(self, reason: str, code: BoundaryTraceFailure) -> bool:
+        self.state = BoundaryTraceState.FAILED
+        self.failure_reason = str(reason)
+        self.failure_code = code
+        self.result = None
+        self._awaiting_ack = False
+        self._awaiting_report = False
+        return False
+
+    def abort_for_safety(self, reason: str = "safety state changed") -> bool:
+        return self.fail(reason, BoundaryTraceFailure.GUARD)
 
 
 @dataclass(frozen=True)

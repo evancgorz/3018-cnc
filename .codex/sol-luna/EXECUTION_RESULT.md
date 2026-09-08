@@ -1677,3 +1677,49 @@ paths, retained untouched cells/islands, deterministic replay grids/metrics,
 and parity of independent backend/supervisor stock instances. No GUI was
 launched, no hardware/USB/COM/Wi-Fi/non-loopback endpoint or runtime config was
 accessed, and protected/generated evidence remains unstaged.
+
+## B1 deterministic polygon boundary tracing and probing (2026-09-08)
+
+Added validated simulation-only `ProbeBoundary` geometry with finite,
+nondegenerate, non-self-intersecting closed XY vertices. The virtual plant
+tests each executed probing segment against every polygon edge continuously and
+stops at the earliest intersection, including reverse and diagonal moves. The
+ordinary controller emits its existing ordered `ok` then fresh `[PRB:x,y,z:1]`
+report at contact. No-contact emits `[PRB:...:0]` and fail-closed `ALARM:5`;
+out-of-envelope motion remains the existing limit alarm path. Malformed
+boundaries and reports are rejected without mutating plant or application
+state. Runtime/backend/supervisor startup and live backend-control paths carry
+the same validated boundary record while the supervisor validates its own copy
+and remains independent of the backend probe implementation.
+
+Added `ProbeBoundaryTraceWorkflow`, a reusable pure public-boundary
+orchestrator. It requires a strictly interior trusted seed, Idle,
+spindle-off, open probe input, fresh status, clear collision/limits/E-stop, and
+healthy supervision. It emits four bounded deterministic outward probe plans,
+correlates each `ok` with the following fresh PRB report, validates finite edge
+contacts/order, and leaves `result` unset on no-contact, stale/malformed,
+contradictory, or safety failure. It never applies a work offset from an
+incomplete trace. Existing Z probing and Auto XYZ remain unchanged.
+
+Validation evidence:
+
+- `.venv\Scripts\python.exe -m pytest -q tests/test_simulation_b1.py` →
+  **5 passed in 0.70s**.
+- `.venv\Scripts\python.exe -m pytest -q tests/test_simulation_b1.py
+  tests/test_simulation_h5.py tests/test_simulation_core.py
+  tests/test_simulation_controller_branches.py tests/test_simulation_spawn_workers.py
+  tests/test_simulation_safety.py tests/test_simulation_public_scenarios.py` →
+  **78 passed in 30.92s** (including ordered/closure contradiction rejection).
+- `.venv\Scripts\python.exe -m compileall -q src tests` → **passed**.
+- `.venv\Scripts\python.exe -m pytest -q --disable-warnings --maxfail=1` →
+  **529 passed in 126.43s (0:02:06)**.
+- `git diff --check` → **passed**.
+
+Focused coverage includes first forward/reverse/diagonal polygon contact,
+no-contact/alarm, malformed/self-intersecting polygons, report correlation and
+replay-stable command plans, seed/guard failures, no-result-on-failure, and a
+real loopback backend plus independently spawned supervisor with exact cleanup.
+This is deterministic polygon boundary probing only; it makes no claim about
+physical probe repeatability, GPIO/USB/COM/Wi-Fi, non-loopback access, or
+arbitrary 3D surface tracing. Protected runtime/config/generated artifacts
+remain unstaged.

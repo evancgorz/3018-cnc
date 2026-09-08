@@ -9,8 +9,9 @@ from .safety import (
     HomingSensorBank, EStopMode, EStopDefinition, EStopCommissioningRecord,
     EStopLatch, CalibrationState, CalibrationPlateDefinition, CalibrationCommissioningRecord, PlateContact,
     CalibrationResult, fit_plate_circle, AutoXYZCalibrationWorkflow,
+    BoundaryTraceState, BoundaryTraceFailure, BoundaryTraceResult, ProbeBoundaryTraceWorkflow,
 )
-from .plant import ProbeCornerCircle
+from .plant import ProbeBoundary, ProbeCornerCircle
 
 __all__ = [
     "SimulationProfile", "PlantSnapshot", "Hazard", "HazardKind",
@@ -19,5 +20,7 @@ __all__ = [
     "HomingSensorBank", "EStopMode", "EStopDefinition", "EStopCommissioningRecord",
     "EStopLatch", "CalibrationState", "CalibrationPlateDefinition", "CalibrationCommissioningRecord", "PlateContact",
     "CalibrationResult", "fit_plate_circle", "AutoXYZCalibrationWorkflow",
+    "BoundaryTraceState", "BoundaryTraceFailure", "BoundaryTraceResult", "ProbeBoundaryTraceWorkflow",
     "ProbeCornerCircle",
+    "ProbeBoundary",
 ]
