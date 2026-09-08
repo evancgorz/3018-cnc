@@ -1348,3 +1348,17 @@ controller reports the same ends/polarity/pins without any physical factory
 call. Run the focused H7/loopback/spawn tests and full suite, append evidence,
 commit, and push this correction. No GUI relaunch, hardware, physical
 transport, or generated/config/evidence staging is allowed.
+
+## Sol replan delta — deterministic bundled STEP fixture action (2026-09-08)
+
+The last native acceptance run could not complete because the platform file
+chooser did not surface after the normal `Import STEP` action. Preserve that
+arbitrary-file path, but add a public `Load bundled showcase STEP` action that
+resolves the versioned `examples/showcase-pocket-island.step` fixture through
+the ApplicationController/ViewModel boundary. It must use the same asynchronous
+import/parser/preview pipeline as a user-selected file, remain read-only, and
+never bypass stock, envelope, collision, or job validation. Add focused
+headless/Qt regressions for path provenance, import completion/error feedback,
+and QML binding. Run affected tests and the full suite, record evidence, and
+commit/push the correction. No GUI relaunch after edits, hardware, physical
+transport, or generated/config/evidence staging.
