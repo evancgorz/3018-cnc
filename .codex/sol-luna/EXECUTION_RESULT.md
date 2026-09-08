@@ -1228,6 +1228,32 @@ Validation evidence:
 No GUI was launched or relaunched; no hardware, physical transport,
 non-loopback endpoint, generated evidence, or runtime config was touched.
 
+## Native GUI Auto XYZ acceptance after probe-surface fix (2026-09-08)
+
+Fresh isolated validator marker: `pine-twin-gui-460e14d24671`.
+Manifest: `C:\\Users\\EVANGO~1\\AppData\\Local\\Temp\\pine-twin-gui-460e14d24671-kpg_s8qx\\gui-validation-manifest.json`.
+
+The public UI connected to **Virtual Machine (Digital Twin)** at loopback
+`127.0.0.1:62948` (10x speed), with the UI’s explicit “no physical machine”
+boundary visible. The native flow then visibly completed:
+
+- simulator window opened and the new **Hide simulator** action exposed the
+  main workflow;
+- trusted reference established (`Reference ✓`);
+- simulation-only conductive corner-circle fixture commissioned;
+- bounded Auto XYZ plan started from the default `(20, 20, 30)` seed;
+- four XY probe contacts and the bounded Z touch completed without a hazard;
+- dialog reported **`Auto XYZ calibration complete` / `State: complete`**;
+- main status reported **`Work zero ✓` / `Confirmed`**, while simulator safety
+  state remained **Clear**.
+
+The exact validator instance was disconnected/closed cleanly; no physical
+transport, USB/COM port, network controller, GPIO, reset pin, or unrelated
+window was accessed. The remaining overall status stays PARTIAL solely because
+the arbitrary native STEP-file chooser/run acceptance remains blocked; the
+bundled STEP path is covered by automated backend/UI tests and is recorded
+above.
+
 ## Simulator hide affordance (2026-09-08)
 
 Added a clearly visible `Hide simulator` button near the top of the simulator
