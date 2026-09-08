@@ -1463,3 +1463,19 @@ USB/COM/Wi-Fi, non-loopback endpoint, production instance, generated evidence,
 runtime config, or protected untracked file may be accessed or staged. Commit
 and push this package separately; keep overall result PARTIAL for the explicit
 physical-commissioning boundary.
+
+## Sol cleanup delta — reconcile superseded GUI backlog evidence (2026-09-08)
+
+The G1–G3 implementation and native picker acceptance are now complete, but
+`docs/CNC_PLATFORM_BACKLOG.md` and `docs/GUI_USER_TEST_REPORT.md` still present
+the earlier G-code import and keyboard-focus observations as current unresolved
+failures. Preserve those dated observations as historical audit evidence, then
+add a dated correction section that links the current implementation/result
+evidence and clearly separates what is resolved from the still-unobserved
+1180×720/splash observations and the intentionally deferred physical boundary.
+
+This is a docs-only reconciliation package. Do not alter source/tests, do not
+delete historical screenshots or report rows, and do not touch hardware,
+runtime configuration, protected untracked files, or generated evidence. Run
+`git diff --check`, commit only the two documentation files plus this contract
+delta if needed, and push the checkpoint.
