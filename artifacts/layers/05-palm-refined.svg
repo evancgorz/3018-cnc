@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 1000 1000">
+  <title>Layer 5: patch-scale palm and island</title>
+  <defs>
+    <clipPath id="palm-outer-edge">
+      <circle cx="500" cy="500" r="495"/>
+    </clipPath>
+  </defs>
+  <g id="palm" clip-path="url(#palm-outer-edge)">
+    <g transform="translate(-22 -60) translate(7.25 7.25) scale(1.565)" fill="#171717">
+      <path id="trunk" d="M75 310 Q77 330 81 349 C85 370 90 393 95 414 L105 416 C99 391 94 369 90 348 Q86 327 84 309 Z"/>
+      <path id="frond-upper-left" d="M79 313 C71 299 63 286 56 281 Q53 279 56 288 C61 300 68 309 76 317 Z"/>
+      <path id="frond-upper-right" d="M77 313 C79 296 85 285 92 281 Q97 278 94 286 C90 298 85 308 83 318 Z"/>
+      <path id="frond-left" d="M79 309 C64 298 50 299 40 310 Q37 315 42 315 C53 309 64 310 76 319 Z"/>
+      <path id="frond-lower-left" d="M79 311 C62 312 49 324 42 340 Q40 346 45 343 C54 336 63 325 80 320 Z"/>
+      <path id="frond-drooping-left" d="M79 312 C66 322 59 339 57 354 Q57 361 61 357 C65 344 72 330 83 319 Z"/>
+      <path id="frond-right" d="M79 309 C91 298 103 298 112 306 Q116 311 110 311 C99 307 91 312 83 319 Z"/>
+      <path id="frond-lower-right" d="M80 312 C95 313 105 326 110 340 Q112 346 107 343 C100 333 90 324 79 320 Z"/>
+      <path id="frond-drooping-right" d="M80 314 C91 321 98 336 100 350 Q100 357 96 352 C89 340 83 328 77 320 Z"/>
+      <path id="island" d="M59 414 Q72 408 87 411 Q96 405 106 409 Q117 408 127 416 L130 425 Q99 428 61 427 Z"/>
+    </g>
+  </g>
+</svg>

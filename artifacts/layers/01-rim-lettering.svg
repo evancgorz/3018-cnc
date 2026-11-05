@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 1000 1000">
+  <title>Layer 1: rim and lettering</title>
+  <defs>
+    <path id="top-text" d="M 143,500 A 357,357 0 0 1 857,500"/>
+    <path id="bottom-text" d="M 82,500 A 418,418 0 0 0 918,500"/>
+  </defs>
+  <rect width="1000" height="1000" fill="#fff"/>
+
+  <g id="outer-rim" fill="#171717">
+    <circle cx="500" cy="500" r="495"/>
+    <circle cx="500" cy="500" r="461" fill="#fff"/>
+  </g>
+
+  <g id="inner-rim" fill="#171717">
+    <circle cx="500" cy="500" r="329"/>
+    <circle cx="500" cy="500" r="313" fill="#fff"/>
+  </g>
+
+  <g id="lettering" fill="#171717" font-family="Arial Black, Arial, sans-serif" font-weight="900" text-anchor="middle">
+    <text font-size="104" letter-spacing="8">
+      <textPath href="#top-text" startOffset="50%">DOME RIDERS</textPath>
+    </text>
+    <text font-size="64" letter-spacing="5">
+      <textPath href="#bottom-text" startOffset="50%">VAW-120 Key West det</textPath>
+    </text>
+  </g>
+</svg>

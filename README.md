@@ -74,6 +74,19 @@ the local desktop deployment simple while leaving a clean seam for a future CLI
 or API adapter if headless or remote control becomes a real requirement. See
 [`docs/ARCHITECTURE_DECISION_RECORD.md`](docs/ARCHITECTURE_DECISION_RECORD.md).
 
+### Agent-assisted design-to-job direction
+
+The reusable agent workflow is the primary route for turning an idea, image, or
+drawing into CNC-ready design files and toolpaths. It iterates on the design,
+accounts for the selected stock and cutter geometry, presents a realistic
+tool-aware cut preview, and requires explicit approval of that exact preview
+before generating job files. The desktop app remains the machine-facing tool:
+the operator sets up the workpiece and machine, loads and reviews the jobs,
+completes preflight, and explicitly starts, pauses, resumes, or aborts execution.
+This keeps design/CAM iteration out of the machine-control interface without
+removing its guarded operation and monitoring responsibilities. See
+[`.github/skills/design-to-cnc/SKILL.md`](.github/skills/design-to-cnc/SKILL.md).
+
 ## Manual setup and engraving workflow
 
 With no home switches or probe installed, machine reference and work zero are
@@ -161,6 +174,9 @@ persist between application sessions. Model-specific stock width, height, and
 thickness are suggested from each newly imported STEP file and are deliberately
 not reused for the next part. **Advanced STEP / 2.5D** exposes the same planner
 in one detailed dialog when direct control is preferable.
+
+Operator-supplied cutter details are documented in
+[Cutter reference](docs/TOOL_REFERENCE.md); this is not an automatic tool library.
 
 The bounded workflow imports a `.step` or `.stp` file, selects the largest usable
 orthogonal planar face by default, normalizes its closed loops, and shows a

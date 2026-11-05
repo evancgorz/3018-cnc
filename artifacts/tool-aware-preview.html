@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Dome Riders cutter-sweep study</title>
+<style>body{font:16px Segoe UI,sans-serif;background:#f2f4f6;color:#17212b;margin:1.2rem}
+main{max-width:1050px;margin:auto}img{width:min(100%,780px);display:block;background:white}
+.warning{background:#fff1cf;padding:1rem;border-left:5px solid #aa6700}li{margin:.4rem 0}
+code{font-size:.9em}</style><main><h1>Cutter-sweep study</h1>
+<p class="warning"><b>Provisional preview, not a CNC job.</b> This raster study depicts candidate
+cutter sweeps, not a validated machining plan. Do not cut from it or approve it as machine-ready.</p>
+<img src="tool-aware-depth-study.png" alt="Top view of simulated depth from cutter sweeps">
+<p>Light wood = uncut; brown = up to 0.5 mm engraving; dark = deeper removal,
+including the hole and cutout. Blue circles mark the four holding-tab locations.
+The view is a 130 mm square, not the entire stock.</p>
+<ul><li>100 mm body, rounded hanging tab and 4 mm hole; 152.4 × 203.2 × 3.25 mm plywood.</li>
+<li>Sequence: flat-bit engraving, V-bit detail, then flat-bit hole and cutout.
+Use separate tool setups with a common XY origin and re-zero Z after each change.</li>
+<li>Black artwork is the engraving target. Flat 3.175 mm bit, then 30° V-bit
+(0.1 mm tip), at up to 0.5 mm depth. V-bit width at 0.5 mm: 0.368 mm;
+the candidate V-bit strokes use shallower depths where the raster feature is too narrow.</li>
+<li>Flat-bit hole and outside profile: 3.35 mm depth, including 0.1 mm breakthrough;
+four 4 mm holding tabs leave 1 mm stock thickness.</li>
+<li>0.1 mm pixel resolution; conservative raster scanline centers at 0.7 mm for the
+flat bit and 0.1 mm for the V-bit. Sampled center-point sweeps estimate that
+82.6% of the raster engraving target reaches within 0.01 mm of full depth;
+94.6% sees any cut. This display does not show the exact continuous sweep.
+Tiny retained gaps and
+partial-depth V-bit edges require review. The study contains 11,000
+separate original V-bit strokes, including 181 single-point strokes,
+joined into 7,686 routes spanning 13.4 m before
+retractions or additional passes; 181 are isolated points.
+The flat-bit candidate joins 795 original strokes
+(644 single-point strokes) into 293 connected
+routes spanning 1.06 m, including 203
+isolated points. Raster-cell geometry bounds these joins, but entry, retracts
+and passes remain unplanned; isolated cuts are not production-ready plunges.
+Continuous engraving clearance is bounded against the raster target; the raster
+is not an exact vector or physical safety check.
+Entry, retraction, tool changes and the full pass-by-pass motion are not planned.</li></ul>
+<h2>Pass schedule for discussion only</h2>
+<p class="warning"><b>Not verified or approved.</b> This is a proposed pass
+structure for review, not a CNC program or a recommendation to start the machine.
+Feeds, stepdowns, safe Z, clamp and holder clearances, stock placement and
+the machine's measured envelope still need operator confirmation.</p>
+<ul><li>Flat engraving: one 0.5 mm pass. Flat-bit hole and profile: depth caps
+0.75, 1.5, 2.25, 3, 3.35 mm, with the four holding
+tabs capped at 2.25 mm.</li>
+<li>V-bit engraving: depth caps 0.2, 0.4, 0.5
+mm; shallower features retain their individual target depth. This comparison
+repeats only routes with remaining depth on later passes.</li>
+<li>Historical ornament prototype reference: 300 mm/min cut and 100 mm/min
+plunge for the flat bit; a <a href="https://github.com/m-anish/cnc3018-settings/blob/main/cnc_feed_rates_table.md">community 3018 softwood/MDF table</a> lists 50 mm/min
+cut, 30 mm/min plunge and 0.2 mm depth for a 0.1 mm V-bit tip at a different,
+unverified spindle setting. Neither reference is validated for this plywood
+or the operator-reported 1,000 RPM spindle.</li>
+<li>At 50 mm/min the proposed V-bit passes alone would require at least
+13.2 hours of cutting movement. Retractions, plunges,
+acceleration, tool changes and the flat-bit work would add time.</li>
+<li>Work XY zero was reported at the lower-left stock corner, with the 8-inch side
+along X; Z0 was set at the stock top with the V-bit installed. Preserve XY and
+re-establish Z after each tool change. Position within the stock is not yet fixed.</li></ul>
+<p>For comparison only, doubling V-bit row spacing to 0.2 mm reduces the candidate
+cutting length to 6.5 m, but sampled near-full-depth coverage
+falls to 69.1% and any-depth coverage to
+93.3%. This alternative is not shown in the
+image or selected for machining.</p>
+<p class="warning"><b>Not yet validated:</b> the 99 mm artwork rim versus 100 mm
+cutout leaves approximately 0.5 mm outside the engraved rim. The palm-to-ring gaps
+are about 0.24 mm. The cutout, hole, tabs, all tool sweeps, thin plywood flex,
+fixture clearance, cut order, tool reach, and edge strength require independent CAM
+verification. Feeds, spindle speed, pass depths, safe Z, stock placement and
+machine envelope remain unconfirmed. The vector profile sweep intersects the
+modeled part by 0.0014 mm². The display's rasterized sweep overlaps
+9.70 mm² at pixel edges (overlap more than 0.1 mm
+inside: 0.21 mm²); both remain approximations.
+Placement and work zero are not specified.
+This image is not a guarantee of surface finish, workholding, or safety.</p>
+<p>The operator reports the plywood will be clamped and suspended 4 mm above the
+workbed. Actual clamp, cutter and workbed clearances, stock support and material
+flex remain to be checked. Work zero will be set by the operator in the GUI.</p>
+<p>The hole and outer tab outline are cut features, not engraving targets.
+The JSON is candidate centerline data for inspection only, not G-code. Regenerate
+this study if the artwork changes.</p></main></html>
