@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Tool-aware preview artwork rasterization</title>
+<script>
+async function load(src) {
+  const image = new Image();
+  image.src = src;
+  await image.decode();
+  return image;
+}
+async function render() {
+  const layers = await Promise.all([
+    'layers/01-rim-lettering.svg', 'layers/02-sun-rays.svg',
+    'layers/03-water.svg', 'layers/04-aircraft-refined.svg',
+    'layers/05-palm-refined.svg', 'layers/06-sailboat-refined.svg',
+    'layers/07-hanging-tab.svg'
+  ].map(load));
+  const svg = new DOMParser().parseFromString(await (await fetch('layers/07-hanging-tab.svg')).text(), 'image/svg+xml');
+  if (svg.querySelector('parsererror')) throw new Error('Invalid hanging tab SVG');
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1200;
+  const ctx = canvas.getContext('2d');
+  for (const layer of layers.slice(0, 6)) ctx.drawImage(layer, 100, 100, 1000, 1000);
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#fff';
+  ctx.fill(new Path2D(svg.querySelector('#tab-fill').getAttribute('d')));
+  const edge = svg.querySelector('#tab-edge');
+  ctx.lineWidth = Number(edge.getAttribute('stroke-width'));
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke(new Path2D(edge.getAttribute('d')));
+  document.getElementById('engraving').textContent = canvas.toDataURL('image/png');
+  ctx.clearRect(0, 0, 1200, 1200);
+  ctx.drawImage(layers[6], 0, 0, 1200, 1200);
+  document.getElementById('tab').textContent = canvas.toDataURL('image/png');
+  document.body.dataset.ready = 'true';
+}
+window.addEventListener('load', () => render().catch(error => {
+  document.body.dataset.error = String(error);
+}));
+</script>
+<body><pre id="engraving"></pre><pre id="tab"></pre></body>

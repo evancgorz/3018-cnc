@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 1000 1000">
+  <title>Layer 6: patch-scale sailboat</title>
+  <defs>
+    <clipPath id="boat-outer-edge">
+      <circle cx="500" cy="500" r="495"/>
+    </clipPath>
+  </defs>
+  <g id="sailboat" clip-path="url(#boat-outer-edge)">
+    <g transform="translate(34 -40) translate(7.25 7.25) scale(1.565)" fill="#171717">
+      <path id="mast" d="M545 305 L554 305 L552 316 L547 316 Z"/>
+      <path id="main-sail" d="M548 310 L552 310 L550 338 L543 358 L524 358 Z"/>
+      <path id="small-sail" d="M550 310 L553 315 L566 358 L553 358 L550 338 Z"/>
+      <path id="hull" d="M518 362 Q544 367 572 362 Q568 371 557 375 Q540 378 529 374 Q521 371 518 362 Z"/>
+    </g>
+  </g>
+</svg>

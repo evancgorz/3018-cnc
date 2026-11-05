@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="120mm" viewBox="0 0 1200 1200">
+  <title>Layer 7: hanging tab with 4 mm hole</title>
+  <g id="hanging-tab">
+    <path id="tab-fill" d="M509 124 C535 121 544 108 544 92 L544 66 C544 35 566 20 600 20 C634 20 656 35 656 66 L656 92 C656 108 665 121 691 124 Z" fill="#fff"/>
+    <path id="tab-edge" d="M509 124 C535 121 544 108 544 92 L544 66 C544 35 566 20 600 20 C634 20 656 35 656 66 L656 92 C656 108 665 121 691 124" fill="none" stroke="#171717" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle id="hanging-hole" cx="600" cy="65" r="20" fill="#171717"/>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 1000 1000">
+  <title>Layer 3: monochrome spectrum-like waves centered and tapering downward</title>
+  <defs>
+    <clipPath id="water-scene">
+      <circle cx="500" cy="500" r="313"/>
+    </clipPath>
+  </defs>
+  <g id="water" clip-path="url(#water-scene)" fill="#171717">
+    <path id="wave-1" d="M280 630 C350 617 425 640 500 630 C575 620 650 643 720 630 L720 648 C650 661 575 638 500 648 C425 658 350 635 280 648 Z"/>
+    <path id="wave-2" d="M330 658 C380 647 445 670 500 659 C555 648 620 671 670 659 L670 677 C620 689 555 667 500 677 C445 687 380 665 330 677 Z"/>
+    <path id="wave-3" d="M370 686 C410 676 460 698 500 687 C540 676 590 699 630 687 L630 705 C590 717 540 695 500 705 C460 715 410 693 370 705 Z"/>
+    <path id="wave-4" d="M410 714 C440 705 470 726 500 715 C530 704 560 727 590 715 L590 733 C560 745 530 722 500 733 C470 744 440 722 410 733 Z"/>
+    <path id="wave-5" d="M440 742 C460 734 480 753 500 743 C520 733 540 753 560 743 L560 761 C540 770 520 751 500 761 C480 771 460 752 440 761 Z"/>
+  </g>
+</svg>

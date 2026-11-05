@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 1000 1000">
+  <title>Layer 4: E-2D Hawkeye, traced from the patch</title>
+  <defs>
+    <clipPath id="aircraft-scene">
+      <circle cx="500" cy="500" r="313"/>
+    </clipPath>
+    <path id="propeller-blade" d="M-2.5 -3 C-4.8 -8 -8.8 -13 -10.7 -19 Q-10.7 -22.5 -6.5 -21 C-2.2 -19 0.8 -12 3.8 -4 Z"/>
+    <g id="aircraft-silhouette">
+      <path id="tailplane" d="M417 281 Q442 271 465 273 L496 281 Q503 284 502 291 L495 299 L463 297 L432 308 Z"/>
+      <path id="tail-fin-inner" d="M426 284 L437 246 Q440 240 446 244 L449 284 Z"/>
+      <path id="tail-fin-middle" d="M450 286 L459 250 Q462 244 468 248 L472 290 Z"/>
+      <path id="tail-fin-outer" d="M476 292 L480 253 Q481 247 488 250 L498 258 L500 310 Q499 320 489 323 Q481 324 478 316 Z"/>
+      <path id="main-wing" transform="translate(0 -5)" d="M181 246 Q187 238 199 244 L283 269 Q320 281 361 294 L478 328 Q491 332 494 341 Q495 349 483 351 L358 328 Q316 320 280 305 L196 270 Q181 264 181 253 Z"/>
+      <path id="far-wing" transform="translate(0 -5)" d="M185 315 Q207 306 236 303 L318 293 L400 276 Q416 272 431 277 L435 285 L366 312 Q326 328 277 337 L207 349 Q183 352 171 344 Z"/>
+      <path id="fuselage" d="M129 349 Q130 339 145 336 L162 333 L175 322 Q184 316 200 317 L242 311 Q291 301 340 290 L410 277 Q441 272 469 278 L492 284 Q500 287 495 294 Q491 300 477 301 L451 302 Q435 303 419 309 L365 326 Q322 338 280 343 L229 354 Q190 365 153 369 Q135 370 129 362 Q125 355 129 349 Z"/>
+    </g>
+  </defs>
+  <g id="aircraft" clip-path="url(#aircraft-scene)">
+    <g transform="translate(7.25 7.25) scale(1.565)" fill="#171717">
+      <use href="#aircraft-silhouette" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/>
+      <use href="#aircraft-silhouette"/>
+      <g id="cockpit-windows" fill="#fff">
+        <path d="M171 334 L177 325 L181 325 L180 334 Z"/>
+        <path d="M184 333 L190 324 L194 324 L193 332 Z"/>
+        <path d="M197 331 L203 322 L207 322 L206 330 Z"/>
+      </g>
+      <ellipse id="radar-dome" cx="328" cy="247" rx="72" ry="15" fill="#171717" stroke="#fff" stroke-width="3"/>
+      <path id="radar-support" d="M318 258 L338 258 L341 297 L321 297 Z"/>
+      <g id="propeller-a" transform="translate(212 287) rotate(-18)">
+        <use href="#propeller-blade"/>
+        <use href="#propeller-blade" transform="rotate(90)"/>
+        <use href="#propeller-blade" transform="rotate(180)"/>
+        <use href="#propeller-blade" transform="rotate(270)"/>
+        <circle r="3" fill="#171717"/>
+      </g>
+      <g id="propeller-b" transform="translate(307 329) rotate(-18) scale(1.4)">
+        <use href="#propeller-blade"/>
+        <use href="#propeller-blade" transform="rotate(90)"/>
+        <use href="#propeller-blade" transform="rotate(180)"/>
+        <use href="#propeller-blade" transform="rotate(270)"/>
+        <circle r="3" fill="#171717"/>
+      </g>
+    </g>
+  </g>
+</svg>
