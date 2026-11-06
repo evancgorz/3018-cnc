@@ -44,7 +44,7 @@ underlying CAM tools and the review checklist below.
 
 ## Backend API and CLI
 
-The GUI and CLI share an authenticated, versioned JSON API over local TCP.
+The GUI and CLI share an authenticated, versioned JSON API over loopback HTTP.
 The GUI and standalone `pine-backend` keep their current launch default: their
 data root is the process working directory. The backend also registers only its
 root, PID, and session ID in a per-user locator; that locator never contains the
@@ -52,7 +52,7 @@ authentication token. `pine-cli` and `BackendClient()` first use a valid
 `pine-backend.json` in the current directory, then a unique registered backend,
 and otherwise retain the current-directory default. If multiple registered
 backends are active, select one explicitly with `--root` or
-`BackendClient(Path(data_root))`. There is no fixed HTTP URL or port. Keep the
+`BackendClient(Path(data_root))`. The backend selects its port at startup. Keep the
 root-local `pine-backend.json` private; it contains the authentication token.
 
 Discover commands offline:
@@ -92,8 +92,8 @@ and starting it requires separate authorization and physical checks.
 For an isolated machine data root, launch the GUI with
 `run.bat --data-root <path>`; the default remains the launch working directory.
 To copy durable machine settings and review-only recovery context to a new root,
-use ` .\.venv\Scripts\pine-migrate-data.exe migrate <source-root> <new-root>`
-and verify it with ` .\.venv\Scripts\pine-migrate-data.exe verify <new-root>`.
+use `.\.venv\Scripts\pine-migrate-data.exe migrate <source-root> <new-root>`
+and verify it with `.\.venv\Scripts\pine-migrate-data.exe verify <new-root>`.
 The source stays intact for rollback;
 backend discovery/owner records and connection credentials are not migrated.
 See [backend recovery](BACKEND_RECOVERY.md#selecting-or-migrating-a-data-root)

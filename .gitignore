@@ -9,3 +9,12 @@ config/connection.json
 config/commissioning.json
 config/step-prepare.json
 config/live.json
+
+# Local jobs and private machine runtime data
+/artifacts/
+/pine-backend.json
+/pine-backend.owner
+/.pine-data-migration.lock
+/job-recovery.json
+/config/*.json
+!/config/*.example.json

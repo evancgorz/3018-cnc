@@ -14,8 +14,8 @@ pine-cnc = "ttc3018_control.qt.main:main"
 pine-backend = "ttc3018_control.backend.main:main"
 pine-cli = "ttc3018_control.backend.cli:main"
 pine-migrate-data = "ttc3018_control.backend.data_migration:main"
-pine-cam = "ttc3018_control.agent_cam:main"
-pine-cam-worker = "ttc3018_control.cam_worker:main"
+pine-cam = "ttc3018_control.cam.build:main"
+pine-cam-worker = "ttc3018_control.cam.worker:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -27,3 +27,6 @@ source = ["ttc3018_control.simulation"]
 concurrency = ["multiprocessing"]
 parallel = true
 
+
+[tool.setuptools.package-data]
+"ttc3018_control.qt" = ["assets/*", "qml/*.qml", "qml/components/*.qml"]

@@ -9,72 +9,26 @@ targets the Two Trees TTC 3018 and its MKS DLC32 GRBL-compatible motion
 controller while its machine-profile architecture expands toward custom hobby
 CNC hardware.
 
-## Interface tour
+## Start here
 
-<p align="center">
-  <img src="docs/images/ux-machine-workspace.png" width="49%" alt="Machine workspace with guarded jog and reference controls">
-  <img src="docs/images/ux-engraving-designer.png" width="49%" alt="Live text engraving designer">
-</p>
-<p align="center">
-  <img src="docs/images/ux-guided-step.png" width="49%" alt="Guided STEP import workflow">
-  <img src="docs/images/ux-preview-run.png" width="49%" alt="Preview and guarded preflight workspace">
-</p>
-
-The three workspaces follow the normal job sequence: prepare a validated
-toolpath, review the run and physical preflight, then operate the machine with
-guarded motion controls. Long-running preparation work reports progress without
-blocking navigation or machine status updates.
-
-## Current capabilities
-
-- Keeps one persistent USB serial connection open.
-- Connects through either USB serial or the DLC32's raw Wi-Fi TCP stream.
-- Automatically retries the last successful USB or Wi-Fi connection after startup.
-- Detects Windows COM ports and defaults to the detected COM3 controller.
-- Polls and displays live GRBL state and reported XYZ position.
-- Provides guarded incremental X, Y, and Z jogging.
-- Labels positive Z as up, based on the tested machine direction.
-- Sends jogs only while GRBL reports `Idle`.
-- Provides feed hold, resume, jog cancel, and confirmed soft reset.
-- Records every transmitted and received message in `logs/`.
-- Saves a versioned machine profile with measured X/Y/Z travel, safe Z, and optional hardware declarations; multiple profiles are supported.
-- Establishes a session-only machine reference from a successful guarded home
-  cycle and displays the resulting coordinates.
-- Checks referenced jog endpoints against the configured virtual envelope.
-- Accepts virtual XYZ targets, rejects coordinates outside the configured travel,
-  and reaches them by raising to safe Z before lateral motion.
-- After a successful job, waits for spindle stop and GRBL Idle, then returns through
-  safe Z to the confirmed GRBL work X0 Y0 Z0 when it remains inside the trusted envelope.
-- Invalidates position trust after disconnect, serial error, startup, or an uncontrolled reset; a confirmed operator abort retains references while the controller remains powered and connected.
-- Sets GRBL work zero for individual axes or XYZ using `G10 L20`.
-- Retracts Z to a configured safe height at no more than 100 mm/min.
-- Loads and validates pre-sliced metric G-code files.
-- Rejects probing, reference-changing commands, tool changes, inch-mode jobs, and unsupported commands.
-- Calculates XYZ job bounds and checks them against the session's virtual machine envelope and current GRBL work offset.
-- Persists a confirmed XYZ work zero and restores it only after a fresh GRBL report matches the saved work offset.
-- Displays a lightweight XY toolpath preview with rapid and cutting moves distinguished.
-- Streams one G-code command at a time and waits for GRBL acknowledgement before continuing.
-- Provides guarded spindle start/stop plus job start, pause, resume, abort, and progress controls.
-- Provides a plaque builder with title/subtitle layouts, six centerline border styles, and a live preview.
-- Stops sending on GRBL errors or alarms and requests spindle stop on completion or failure.
-
-This version deliberately has no arbitrary command box, manual Set Reference
-route, or automatic probe motion. `$H` homing and probing are capability-gated:
-homing appears only after all X/Y/Z switches are declared, commissioned, and
-supported by the selected controller. Incomplete switch configuration blocks
-homing, work-zero changes, and jobs; it never falls back to trusting a manually
-selected position.
+- **Operate Pine.** Run `.\setup.ps1` from PowerShell, then open the Pine
+  shortcut. Use Machine for connection, homing and work zero. Use Job to open
+  G-code or a CAM `report.json`, review the exact program, and run it through
+  preflight. See [operator setup](#manual-setup-and-engraving-workflow).
+- **Prepare a job.** Choose an [example design](examples/agent-cam/), fill in
+  machining facts or reference a [saved setup](docs/HARDWARE_SETUP_RECORDS.md),
+  and use the [offline agent workflow](docs/AGENT_CNC_JOB_WORKFLOW.md).
+- **Develop Pine.** Start with the [repository layout](projects/README.md)
+  and the [development checks](#tests). Use isolated data roots and the
+  digital twin when testing machine behavior.
 
 ## Application architecture
 
-The production app is a modular monolith: Qt Quick/QML is the presentation
-layer, `ControllerViewModel` is a thin Qt adapter, and the Qt-independent
-`ApplicationController` coordinates connection, motion, job, generation, and
-machine-session services. The controller owns transport access and command
-ordering; QML never sends GRBL commands or makes safety decisions. This keeps
-the local desktop deployment simple while leaving a clean seam for a future CLI
-or API adapter if headless or remote control becomes a real requirement. See
-[`docs/ARCHITECTURE_DECISION_RECORD.md`](docs/ARCHITECTURE_DECISION_RECORD.md).
+Pine uses a Qt Quick desktop and an independent local Python backend.
+The backend owns machine state, transport, job execution, and safety checks.
+The GUI and CLI share its authenticated loopback API. The offline CAM worker
+generates review bundles without a backend connection. See the
+[architecture record](docs/ARCHITECTURE_DECISION_RECORD.md).
 
 ### Agent-assisted design-to-job direction
 
@@ -91,11 +45,9 @@ removing its guarded operation and monitoring responsibilities. See
 
 ## Manual setup and engraving workflow
 
-For normal operation, start in the **Machine** workspace. The compact primary
-navigation contains only **Machine**, **Prepare**, **Review**, and **Run**. Machine
-contains connection recovery, contextual safety, homing, jog, work-zero, and the
-supported probe/calibration controls; Configure and the expert Console are small
-bottom utilities. The guarded workflow model remains state-gated internally, and
+Start in **Machine** for connection recovery, safety status, homing, jog,
+work zero, probing, and calibration. Open a program or review bundle in **Job**.
+Configure, CAM tools, and the expert Console are available from the utilities. The guarded workflow model remains state-gated internally, and
 all motion and spindle actions remain explicit operator actions.
 
 1. Save a valid machine profile containing measured X/Y/Z usable travel and a
@@ -471,7 +423,9 @@ work-zero buttons remain separate from the capability-gated automated workflow.
 
 Use the [agent CNC workflow](docs/AGENT_CNC_JOB_WORKFLOW.md) to turn a saved
 design into review-only G-code, a cutter sweep SVG, and a report. The offline
-command covers text plaques, filled raster engraving, and shallow STEP pockets.
+command covers text plaques, filled raster engraving, shallow STEP pockets,
+and tabbed STEP profiles. The background worker, fidelity comparison, and
+ordered passes are covered in the [bundle guide](docs/CNC_REVIEW_BUNDLES.md).
 See the [example designs](examples/agent-cam/).
 
 ## Headless backend and CLI
@@ -522,6 +476,12 @@ spindle. The E-stop remains `installed_uncommissioned`; saving declarations
 never commissions physical homing, hard limits, reset, or power removal.
 
 ## Tests
+
+Run the offscreen GUI, CAM, migration, and digital twin tests from a checkout
+with the development dependencies installed. Keep simulator data in a test root.
+See [backend recovery](docs/BACKEND_RECOVERY.md#selecting-or-migrating-a-data-root)
+for the root override and migration commands. The Windows standalone build
+entry point is [packaging/build.ps1](packaging/build.ps1).
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest

@@ -1,12 +1,12 @@
 # Current Status
 
-Updated: 2026-11-05
+Updated: 2026-11-06
 
 ## Active
 
-User-requested Codex takeover: C-088 is signed off. Luna generated the offline review-only five-rung fine-residual fidelity/runtime ladder; independent review verified all five NC/preview hashes against the report, zero added omission on the full-fidelity rung, and monotonically increasing omitted artwork across coarser rungs. Run F (C-018 to C-020) reached its checkpoint after C-020; all three tasks are implemented pending planning review. Keep all artifacts offline/review-only and preserve unknown machining facts as release blockers. C-110 remains owned by /root and C-111 by /root/audit; do not overlap active ownership or physical work.
+User-requested Codex takeover: C-088 is signed off. Luna generated the offline review-only five-rung fine-residual fidelity/runtime ladder; independent review verified all five NC/preview hashes against the report, zero added omission on the full-fidelity rung, and monotonically increasing omitted artwork across coarser rungs. Run F (C-018 to C-020) reached its checkpoint after C-020; all three tasks are implemented pending planning review. Keep all artifacts offline/review-only and preserve unknown machining facts as release blockers. C-110 through C-112 are signed off.
 
-Planning run C-097 closed. C-098 through C-112 define the machine-first Pine and background CAM initiative. Run A (C-098–C-101) authorized by the active goal. Run A signed off. /root/audit owns C-111 in the parallel migration workstream. C-113 closed. Hardware records workstream C-114–C-116 signed off. Parallel runs B and C are authorized as dependencies clear. Run B reached its checkpoint with C-102 through C-104 signed off. C-105 signed off. C-106 and C-107 signed off. Run D parity is authorized; C-108 and C-109 signed off; /root owns C-110. C checkpoint: offline worker, fidelity comparison, and ordered passes. Checkpoint: portable bundle handoff through guarded job loading and isolated discovery verification.
+Machine-first Pine and background CAM (C-098–C-112) and the instruction and hardware records work (C-113–C-116) are signed off. Evidence includes offline CAM, offscreen desktop and isolated simulator tests, and the packaged Python entry-point smoke check. Real machine data cutover remains an operator maintenance action.
 
 Run C-096 reached its review checkpoint: /root implemented and verified the offline design-to-CAM workflow and backend API discovery. All three bundles replay byte-for-byte; 145 focused tests passed. See HANDOFFS.md. No live application or hardware interaction.
 
@@ -251,7 +251,7 @@ is authorized in this run.
 
 ## Next
 
-Machine-first Pine: begin milestone A with C-098. Its checkpoint is a portable bundle that opens through the guarded loader and a tested backend discovery contract (C-098 through C-101). See [initiative details](BACKLOG.md#machine-first-pine-and-background-cam).
+Machine-first Pine and hardware records reached their software checkpoint. See [initiative details](BACKLOG.md#machine-first-pine-and-background-cam) and the C-112 handoff.
 
 Complete `C-015` before returning the accumulated diff and evidence for combined
 planning review/sign-off. The physical portion of C-013 can resume only after

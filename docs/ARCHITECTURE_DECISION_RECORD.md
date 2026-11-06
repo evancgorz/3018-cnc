@@ -44,7 +44,7 @@ The controller is the only application-facing owner of the active transport
 and command ordering. QML receives display properties and invokes intention-
 level slots; it does not construct GRBL commands or perform envelope checks.
 
-## Why this fits the product
+## Historical rationale for the superseded decision
 
 - The app controls one locally attached 3018, so an HTTP server or daemon adds
   deployment and security surface without solving a current requirement.
@@ -55,7 +55,7 @@ level slots; it does not construct GRBL commands or perform envelope checks.
 - The native STEP/OpenCASCADE import remains isolated because that boundary is
   about crash containment, not frontend/backend separation.
 
-## Alternatives considered
+## Historical alternatives considered
 
 ### Separate HTTP/API backend
 
@@ -78,7 +78,7 @@ This was the starting shape. It made the ViewModel responsible for transport,
 motion state machines, job sequencing, persistence, and UI presentation at
 once. It is retained only for display projection and Qt-specific dialogs/files.
 
-## Revisit triggers
+## Historical revisit triggers
 
 Reconsider a separate process or API only for one of these concrete needs:
 

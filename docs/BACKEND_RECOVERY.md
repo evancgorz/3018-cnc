@@ -43,7 +43,7 @@ desktop shortcut use a selected root, run `setup.ps1 -ShortcutOnly -DataRoot
 <path>`. Omitting these options preserves the current shortcut and launcher
 behavior.
 
-` .\.venv\Scripts\pine-migrate-data.exe migrate <source-root> <new-root>`
+`.\.venv\Scripts\pine-migrate-data.exe migrate <source-root> <new-root>`
 copies only known durable machine settings and recovery records to a destination
 that does not yet exist. The normal `setup.ps1` install registers the command in
 the project virtual environment.
@@ -55,7 +55,7 @@ from supported host/port/transport fields; unknown fields such as tokens or
 passwords are discarded. Project files, generated jobs, logs, the backend
 discovery record, and the backend owner marker are not copied. The migration
 manifest records source and destination SHA-256 values (and notes transformed
-files); run ` .\.venv\Scripts\pine-migrate-data.exe verify <new-root>` to check
+files); run `.\.venv\Scripts\pine-migrate-data.exe verify <new-root>` to check
 the destination.
 
 Migration leaves the source untouched for rollback. It refuses a live backend

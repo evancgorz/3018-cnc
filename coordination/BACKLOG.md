@@ -116,9 +116,9 @@ This is the authoritative execution queue. Priority is `P0` (urgent) through `P3
 | C-107 | P1 | done | /root | Validate ordered multi-tool bundles with a shared XY frame and tool-specific setup | C-100, C-105 | C |
 | C-108 | P1 | done | /root/parity | Verify equivalent job handoffs and guarded operation across GUI, CLI, and simulation | C-104, C-106, C-107 | D |
 | C-109 | P2 | done | /root | Move CAM authoring out of primary desktop navigation after replacement workflows pass | C-108 | D |
-| C-110 | P2 | in-progress | /root | Organize the repo around product code, project inputs, generated runs, and retained cut records | C-099, C-109 | D |
-| C-111 | P2 | in-progress | /root/audit | Provide a reversible migration for local machine state outside the checkout | C-101 | D |
-| C-112 | P2 | ready | — | Publish and verify the operator, agent, and contributor start paths | C-110, C-111 | D |
+| C-110 | P2 | done | /root | Organize the repo around product code, project inputs, generated runs, and retained cut records | C-099, C-109 | D |
+| C-111 | P2 | done | /root | Provide a reversible migration for local machine state outside the checkout | C-101 | D |
+| C-112 | P2 | done | /root | Publish and verify the operator, agent, and contributor start paths | C-110, C-111 | D |
 | C-113 | P1 | done | /root | Remove mandatory delegation from repo agent instructions | — | User request |
 | C-114 | P1 | done | /root/cam_worker | Add portable named stock, cutter, and fixture setup records | — | E |
 | C-115 | P1 | done | /root | Resolve and snapshot named setup records for offline CAM and review | C-114 | E |
