@@ -24,9 +24,9 @@ This is the authoritative execution queue. Priority is `P0` (urgent) through `P3
 | C-015 | P0 | in-progress | codex-execution | Simplify the shell around an auto-connected, unified Machine workspace | C-014 | [Unified Machine UX](#c-015--unified-machine-workspace-and-automatic-connection) |
 | C-016 | P1 | done | codex-ornament-planning | Audit ornament capability gaps and define a bounded implementation backlog | — | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
 | C-017 | P1 | done | codex-ornament-cam | Add offline, depth-limited ornament CAM export with review evidence | — | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
-| C-018 | P1 | ready | — | Store a reproducible ornament project with measured tool and stock inputs | C-017 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
-| C-019 | P1 | ready | — | Verify physical-size artwork, minimum features and hanger wood reserve | C-018 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
-| C-020 | P1 | ready | — | Export aligned engraving and tabbed disc/hole programs with shared XY | C-018, C-019 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
+| C-018 | P1 | implemented | luna-execution | Store a reproducible ornament project with measured tool and stock inputs | C-017 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
+| C-019 | P1 | implemented | luna-execution | Verify physical-size artwork, minimum features and hanger wood reserve | C-018 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
+| C-020 | P1 | implemented | luna-execution | Export aligned engraving and tabbed disc/hole programs with shared XY | C-018, C-019 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
 | C-021 | P2 | ready | — | Guide backend-owned manual tool changes with renewed Z trust and authorization | C-020 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
 | C-022 | P2 | ready | — | Add artwork preparation and cutter-sweep review to Prepare/Review | C-020 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
 | C-023 | P1 | blocked | — | Validate scrap coupon then ornament after separate physical-test authorization | C-020 | [Ornament plan](../docs/ORNAMENT_CAM_PLAN.md) |
@@ -94,7 +94,7 @@ This is the authoritative execution queue. Priority is `P0` (urgent) through `P3
 | C-085 | P0 | implemented | codex-runtime-diagnostics | Analyze controller throughput and estimate model against observed run telemetry | C-084 | Prefix timing shows ~4.8–5.1× idealized slowdown; physical telemetry and source analysis point to short blocks, sharp junctions, and retracts rather than a simple sender bottleneck; see HANDOFFS |
 | C-086 | P0 | implemented | /root/performance_workflow | Make future CNC CAM preparation performance-aware by default | C-084, C-085 | Analyzer reports short-block/junction/retract rates and conservative profile-matched runtime projections; optional target comparison is informational and never blocks execution; workflow docs updated; 3 focused tests pass |
 | C-087 | P0 | implemented | codex-hybrid-pocket | Evaluate a fast hybrid engraving strategy using the existing 1/8 in endmill for broad deep pocketing and the 0.1 mm V-bit only where needed | C-084, C-085 | Infeasible at nominal 3.175 mm: conservative source-art inset is empty; no endmill file emitted. Evidence in artifacts/ornaments/hawkeye/two-bit/c087-hybrid-pocket/ |
-| C-088 | P1 | in-progress | codex-primary | Produce a general, review-only fidelity/runtime ladder by progressively coarsening the fine residual pass | C-084, C-086 | Preserve the full broad pass and enumerate exact tool-sweep, command, junction, retract and estimate tradeoffs rather than only broad-only versus full-detail extremes |
+| C-088 | P1 | done | codex-takeover | Produce a general, review-only fidelity/runtime ladder by progressively coarsening the fine residual pass | C-084, C-086 | Signed off after independent exact-output/hash review; full-fidelity rung adds zero omission and coarser omissions increase monotonically |
 | C-089 | P0 | implemented | codex-primary | Add and compare localized adaptive concentric engraving regions for Hawkeye | C-084, C-086 | Offline-only C-089 candidate completes localized regions with verified concentric offsets and comparable exact G-code/report evidence; no running job interaction |
 | C-090 | P0 | implemented | codex-primary | Prepare the aligned full-fidelity fine-residual completion for the active C-084 broad pass | C-084 | Offline-only fine-residual companion restores the approved detail after C-084; exact combined sweep/coverage and source/output hashes recorded; no live job interaction |
 | C-091 | P0 | implemented | /root/approved_design_geometry | Convert approved raised-aircraft concept into verified offline full-detail depth CAM | C-089 | Approved concept threshold geometry, local concentric broad clearing plus fine residual; exact file verification and preview complete; primary owns physical execution |
@@ -527,12 +527,6 @@ persistent backend.
 - Use temporary roots, fake transports, and the digital twin for implementation
   tests. This task does not authorize GUI interaction or new physical motion;
   optional hardware testing remains governed by C-014 and AGENTS.md.
-
-
-
-
-
-
 
 
 

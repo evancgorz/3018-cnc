@@ -46,18 +46,52 @@ machine. Separate files are the first multi-bit workflow.
 | C-016 | Audit existing capabilities and record this bounded plan | — | Code-backed reuse/gap audit; concrete task order and physical unknowns |
 | C-017 | Offline black-artwork to shallow engraving G-code, without a GUI rewrite | — | Explicit crop/physical placement, V-bit footprint compensation, retained white counters, parser/rapid checks, swept preview, report and isolated tests |
 | C-018 | A reproducible ornament project describes geometry, stock, tools and operation order | C-017 | Versioned project; source/art hashes; separate artwork and part sizes; units/origin; measured vs provisional values; unknown dimensions block production export; output hashes tie review to exact files |
-| C-019 | Finish and verify the physical-size artwork and hanger reserve | C-018 | Reviewable vector geometry at 100 mm; remove tracing artifacts; counters remain open; minimum feature/spacing report; hanger/edge ligament and no-engrave keepout checked against cutter sweep; distinguish engrave/pocket/through-cut layers; resolve unreachable fine detail through shallower/variable-depth or centerline paths rather than silent omission |
-| C-020 | Export aligned engraving and tabbed disc/hole programs as one reviewed bundle | C-018, C-019 | Reuse STEP profile engine; exactly one hole plus one outside through contour; hole first; tabs only outside; common explicit stock XY transform across tools; compensate cutter radius without shifting artwork; depths and tool identity in per-file report; clamp/stock/spoilboard clearance checks; reduce raster retracts only through verified in-region stay-down links and compare runtime/coverage against baseline |
+| C-019 | Finish and verify the physical-size artwork and hanger reserve | C-018 | Reviewable threshold-derived vector geometry for the 100 mm part; preserve source and report detail/residual loss; counters and minimum feature/spacing measures; hanger/edge ligament and no-engrave keepout checked against cutter sweep; physical/tool limitations explicit |
+| C-020 | Export aligned engraving and tabbed disc/hole programs as one reviewed bundle | C-018, C-019 | Reuse STEP profile engine; exactly one hole plus one outside through contour; hole first; tabs only outside; common explicit stock XY transform across tools; compensate cutter radius without shifting artwork; depths and tool identity in per-file report; exact emitted sweep and candidate stock-bound checks; keep review-only while actual fixture/clearance data is unknown |
 | C-021 | Guide manual tool changes through persistent backend state | C-020 | Confirm prior operation complete with fresh Idle, safe clearance and spindle off before tool-change prompt; retain XY reference; re-establish tool-specific Z; invalidate old run authorization; separate review/start for next tool; reconnect reconstructs state; abort/reset/reference loss fails closed; fake/twin tests before hardware |
 | C-022 | Expose ornament preparation and material-removal review in Prepare/Review | C-020 | Select artwork/project, crop/scale preview, operation/tool table, depth-limited engraving controls, actual swept-width preview plus stock/hole/tabs preview, visible unresolved measurements and detail loss; no generated-image appearance presented as machining verification |
 | C-023 | Validate a scrap coupon and then the ornament with operator-authorized hardware work | C-020 | First complete isolated export/parser/profile tests; separately authorize physical test; check plywood thickness/flatness, engraving width/depth, veneer tear-out, hold-down and tab retention; revise settings from measurements; only then release ornament files |
 | C-024 | Correct inefficient air moves and measure runtime before further CAM work | C-017 | Retain compensated cutting primitives; bounded path scheduling; cost-aware, footprint-checked stay-down links; optional explicit vertical approach above stock; same-settings and changed-setting estimates distinguished; parser and retained-white tests |
 
-C-018 through C-023 are planned work, not part of this execution run. C-021 and
-C-022 can be deferred: an operator can use separately reviewed files and manually
-change/re-zero tools without adding a new backend protocol. C-023 needs separate
-current-request hardware authorization. Physical readiness remains governed by
-the existing commissioned-machine and safety gates.
+Run F executes C-018 through C-020, then stops at the planning-review checkpoint.
+C-021 and C-022 are not part of that run and can be deferred: an operator can use
+separately reviewed files and manually change/re-zero tools without adding a new
+backend protocol. C-023 needs separate current-request hardware authorization.
+Physical readiness remains governed by the existing commissioned-machine and
+safety gates.
+
+### C-018 through C-020 review bundle (2026-11-05)
+
+The reproducible artifact is
+`artifacts/ornaments/hawkeye/two-bit/c018-reproducible-project/`. It retains the
+approved PNG and records a 90 mm artwork field on a 100 mm analytic disc in a
+lower-left 110 x 110 mm candidate frame. The named hardware setup examples both
+record 100 x 100 mm stock; the candidate frame is explicitly unverified rather
+than silently substituted for that measured setup. The project manifest and
+review report bind source, setup and output hashes and retain provenance for
+reported/measured inputs versus provisional settings.
+
+The exact emitted V-bit sweep uses the setup's reported 30-degree angle and
+0.1 mm tip at a provisional 0.25 mm depth (0.23397 mm effective diameter).
+105.3887 mm2 (4.3665%) of thresholded black source remains unengraved: 18.3324
+mm2 is the explicit hanger keepout and 87.0563 mm2 is outside cutter reach.
+Feature proxies report 47 connected dark components, 2 with no center position
+at the selected cutter width, 125 source counters (55 narrower than that width),
+and exact-sweep residual area; these losses are visible, not cosmetically
+discarded. The hanger hole center is (55,100) mm, its 5 mm radius engraving
+keepout leaves a 3 mm theoretical wood ligament to the 100 mm disc edge, and
+the emitted engraving sweep clears the keepout. The SVG is a thresholded raster
+trace, not independently cleaned or approved vector artwork.
+
+The two review-only programs share that XY frame. The profile report verifies
+one 4 mm inner hole before one compensated 100 mm outside profile, four 3 mm x
+0.7 mm tabs on the outside path, 3.25 mm measured-record stock plus provisional
+0.2 mm breakthrough, five passes, zero simulated retained gouge, exact
+centerline radii, and cutter sweep bounds within the candidate 110 mm stock.
+Spindle startup and M6 are absent. Feeds, safe Z, breakthrough/tab behavior,
+actual fixture/clamp clearance, plywood flatness/material response, endmill
+flute length/holder clearance, and the 110 mm blank remain unverified; none of
+these outputs is production released.
 
 ## Engraving strategy and its limits
 
@@ -79,8 +113,10 @@ machinability.
 The first real-artwork example with explicitly assumed 0.10 mm tip, 0.25 mm
 depth, 0.15 mm stepover and two passes produces 6,259 paths per pass and a
 rough 626-minute estimate. Morphological inaccessibility is about 9.34% of
-black area. This demonstrates the need for C-019 fine-detail refinement and
-C-020 path optimization; it is not a suitable released production strategy.
+black area. This historical baseline motivated the C-019 feature/sweep review
+and C-020 separate-program bundle; it is not a suitable released production
+strategy. The current Run F candidate and its distinct measured residual are
+documented above.
 The runtime estimate assumes nominal feed and 3,000 mm/min rapids and excludes
 real acceleration/controller overhead. Raster V-bit floors are scalloped,
 unlike the idealized flat recesses in the photographic mockup.
@@ -106,19 +142,21 @@ not selected implicitly for the operator.
 | Single-pass timing projection with that approach | 75.74 | Also assumes a 0.25 mm depth pass instead of two 0.125 mm passes; untested |
 
 These are engraving-only nominal estimates, not promised cycle times. No
-physical settings were verified or run. The same 9.34% inaccessibility remains;
-none of these files is production released. C-019/C-020 must prioritize actual
-vector/variable-depth engraving, appropriate filled-area clearing and contour
-simplification over further polishing the fine-raster baseline. Preserve the
-approved engraved appearance when evaluating strategies; do not silently switch
-to outline-only lettering or reduce artwork coverage to obtain a faster number.
+physical settings were verified or run. These earlier variants retain the same
+9.34% inaccessibility; the Run F candidate has a separately measured 4.3665%
+unengraved black-area fraction at its provisional depth and bit parameters.
+Neither is production released. Future refinement may evaluate vector,
+variable-depth or centerline strategies, but must preserve the approved source
+and report changed coverage rather than silently switching to outline-only
+lettering or reducing artwork coverage to obtain a faster number.
 The reproducible comparison is `artifacts/ornaments/hawkeye/compare_runtime.py`.
 
-The current illustration needs deliberate cleanup before production: some wing
-lines extend beyond the inner ring, the tail/propeller fine gaps need a minimum
-width check, and the hanging hole must receive a reserved wood margin. Do not
-auto-detect a photographic circle and call it an exact 100 mm cut boundary.
-Define the outside circle analytically, independent of the image pixels.
+The source PNG remains unchanged. Its thresholded raster-to-vector trace has
+not been independently cleaned or approved as artwork; the Run F report measures
+component/counter limitations and hanger reserve but does not certify visual
+fidelity. Do not auto-detect a photographic circle and call it an exact 100 mm
+cut boundary. Define the outside circle analytically, independent of image
+pixels.
 
 ## Review checkpoint and release facts
 

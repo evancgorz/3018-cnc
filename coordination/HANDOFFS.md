@@ -875,3 +875,45 @@ Verified repeat exact-byte loads and direct report loading from the offscreen Pi
 
 ## C-109 — desktop CAM compatibility — 2026-11-05
 Primary desktop navigation is Machine and Job. Existing text/plaque/STEP authoring remains reachable from CAM tools and is excluded from the normal progression after work-zero setup. C-096/C-105/C-107 provide offline plaque, raster, pocket and tabbed cutout examples. Broad offscreen run had 125 passes and one keyboard assertion still expecting Configure first. The updated keyboard test passed (1 passed, 61 deselected). Compatibility map is in docs/MACHINE_FIRST_JOURNEYS.md.
+
+## C-088 — fine-residual fidelity/runtime ladder — 2026-11-05
+Planning sign-off: independently checked report SHA-256 values against all five exact NC files and all five SVG previews. Confirmed the 0.04 mm reference rung adds zero omitted artwork relative to itself and measured omissions rise monotonically with coarser tolerances. The exact C-084 broad paths, conservative sweep fences, same setup, and nominal-only runtime caveat are documented. Accepted and marked C-088 done. Artifacts remain review-only; this is not physical readiness or cutting authorization.
+Owner: luna-execution. The pre-existing `artifacts/ornaments/hawkeye/two-bit/c088-detail-ladder/` was empty (no files); consolidated the completed artifact there rather than leaving a duplicate sibling directory. The reproducible generator keeps exact C-084 broad paths at Z−0.6/−1.2/−1.625 mm (input SHA `60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718`) unchanged and uses exact C-069 Z−0.04 mm residual source paths for the 0.04 mm full-fidelity rung (C-069 SHA `f38e959b21c83df37ca339e011a7d347516e2d3acccf41299060352bd2fa730b`); the 0.08/0.12/0.20/0.32 mm rungs progressively simplify only those fine paths.
+
+| Tolerance mm | Commands | Nominal min | Cut segments | ≥90° junctions | Retracts | Omitted art mm² | Additional omission vs 0.04 mm mm² |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.04 | 105,231 | 79.28 | 89,366 | 88.6% | 3,948 | 23.74 | 0.00 |
+| 0.08 | 78,514 | 77.08 | 62,649 | 77.8% | 3,948 | 56.15 | 32.44 |
+| 0.12 | 68,380 | 75.79 | 52,515 | 75.5% | 3,948 | 69.60 | 45.89 |
+| 0.20 | 63,848 | 74.42 | 47,983 | 74.1% | 3,948 | 82.69 | 58.99 |
+| 0.32 | 60,631 | 73.00 | 44,766 | 72.8% | 3,948 | 103.70 | 79.99 |
+
+Verification: `.venv\Scripts\python.exe artifacts\ornaments\hawkeye\two-bit\c088-detail-ladder\prepare-c088-fine-ladder.py` completed all five exact output parses, nonnegative-XY and safe-Z rapid checks, terminal M5/M2 checks, equality of C-084 paths at every broad depth, candidate fine-path identity, stock bounds, and conservative full-width cutter containment in approved artwork/keepout. The report binds exact NC and SVG SHA-256 values; a separate hash check matched all five NC files. `.venv\Scripts\python.exe -m py_compile artifacts\ornaments\hawkeye\two-bit\c088-detail-ladder\prepare-c088-fine-ladder.py` and `git diff --check` passed. Runtime projections are nominal feed-based only (no completed-run calibration); 45 minutes remains aspirational. No machine/backend/GUI/hardware interaction and no job load/start. C-088 is implemented pending planning sign-off, not marked done.
+
+
+## C-018 - reproducible ornament project - 2026-11-05
+
+Added `artifacts/ornaments/hawkeye/two-bit/c018-reproducible-project/` with a versioned project manifest, rebuild instructions, exact approved-artwork source/setup hashes, vectorized source geometry, and output hashes for two separate review-only programs. The manifest distinguishes setup-derived measured/reported values from provisional settings and explicitly identifies that the recorded setups specify 100 x 100 mm stock while a 100 mm disc plus outside-cutter clearance needs an unverified 110 x 110 mm candidate blank. The original approved PNG remains unchanged.
+
+Verification: `.venv\Scripts\python.exe artifacts\ornaments\hawkeye\two-bit\c018-reproducible-project\prepare.py` completed offline. `.venv\Scripts\python.exe -m pytest -q tests\test_ornament_project_bundle.py` - 2 passed. `git diff --check` passed. C-018 is implemented pending planning sign-off; no GUI/backend/hardware interaction, load, or start.
+
+
+## C-019 - physical artwork and hanger review - 2026-11-05
+
+Kept the approved PNG as input; the retained 90 mm artwork field is centered on the analytic 100 mm disc in a 110 mm review-frame candidate. The report measures exact emitted 30-degree/0.1 mm V-bit sweeps at the provisional 0.25 mm depth, black component/counter feature proxies, hanger keepout, and disc/stock ligaments. Source black area is 2413.5900 mm2; 105.3887 mm2 (4.3665%) remains unengraved (18.3324 mm2 intentionally reserved by hanger keepout; 87.0563 mm2 cutter-inaccessible outside it). Minimum connected-component/counter max-inscribed diameter is 0.07177 mm; 2 of 47 components and 55 of 125 counters are narrower than the 0.23397 mm cutter footprint. Exact sweep stays inside engravable approved art and clear of the 5 mm-radius hanger reserve. Hanger-to-disc-edge ligament is 3 mm.
+
+Verification: `.venv\Scripts\python.exe artifacts\ornaments\hawkeye\two-bit\c018-reproducible-project\prepare.py` passed exact sweep, XY, rapid, artwork placement, keepout, and geometry checks. `.venv\Scripts\python.exe -m pytest -q tests\test_ornament_project_bundle.py` - 2 passed. `git diff --check` passed. Named setup stock is only 100 x 100 mm, not the candidate 110 x 110 mm; no production readiness claimed. C-019 implemented pending planning sign-off.
+
+
+## C-020 - aligned two-tool review bundle - 2026-11-05
+
+Generated separate engraving and tabbed disc/hole NC programs in `artifacts/ornaments/hawkeye/two-bit/c018-reproducible-project/`. Both explicitly select G54 P1 and share the same lower-left 110 x 110 mm candidate stock frame. The V-bit file is the approved source art at 90 mm on the 100 mm analytic part; the endmill file contains exactly one 4 mm hanger hole before one compensated 100 mm outside profile, with four 3 x 0.7 mm tabs on the outer contour only. The profile uses recorded 3.25 mm thickness plus explicitly provisional 0.2 mm breakthrough (Z-3.45); 5 passes, simulation gouge 0. Exact emitted V-bit sweep stays within artwork, stock and hanger keepout; exact profile sweep bounds are X/Y 1.8245 to 108.1755 mm within the candidate stock. No M6 or spindle start is present.
+
+Exact output SHA-256: engraving `644b04cac6f869f3a28e18b8921ae7d676c7df59689fe255c888db1fab9ec23e`; profile `9652c1569e2b0f8f4321ffd504e94d5b38262f5ecdfd345bf032d208c292a612`; engraving preview `7dcdee4f9ce7fb787cedc09a207226ba88b83e13760a7595b162fe01079df870`. The manifest and report bind the source, both setup records, vector geometry and exact outputs. Rebuilding produced identical program/preview hashes.
+
+Verification: `.venv\Scripts\python.exe artifacts\ornaments\hawkeye\two-bit\c018-reproducible-project\prepare.py` passed. `.venv\Scripts\python.exe -m pytest -q tests\test_ornament_cam.py tests\test_step_engraver.py tests\test_step_operations.py tests\test_step_simulation.py tests\test_ornament_project_bundle.py` - 127 passed. `.venv\Scripts\python.exe -m py_compile artifacts\ornaments\hawkeye\two-bit\c018-reproducible-project\prepare.py` and `git diff --check` passed.
+
+Production release remains blocked: each named setup records 100 x 100 mm stock but the candidate uses an unverified 110 x 110 mm blank; actual fixture/clamp/safe-Z clearance, endmill flute/holder clearance, feeds/RPM/material response, breakthrough/tab retention and plywood flatness remain unknown. The source vector is a thresholded raster trace, with 4.3665% of black area unengraved and documented feature/counter limits. Candidates remain review-only. No application/backend/GUI/hardware interaction, load, or start. C-020 implemented pending planning sign-off; Run F stopped at its authorized checkpoint.
+
+
+C-020 review-asset correction: XML validation caught a duplicate `cy` attribute in the engraving preview; fixed the SVG generator and rebuilt. Final `approved-artwork-geometry.svg`, `engraving-preview.svg`, and `profile-preview.svg` all parse as valid SVG. The corrected engraving preview SHA-256 is `8a7ded1ff3d8da50758f8406aa3a2a8ab0c2917d1d35c76e11f7394f3ec3ac65`; profile preview SHA-256 is `5f111b6081918b534f7441d892e7281210e2e223451cd5b1fe5a0a0c61dd7912`. NC hashes are unchanged. Final verification rerun: the five targeted CAM/profile/bundle suites passed (127 tests); SVG XML parsing, py_compile, and `git diff --check` passed.

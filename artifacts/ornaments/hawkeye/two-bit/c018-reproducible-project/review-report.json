@@ -1,0 +1,300 @@
+{
+  "engraving": {
+    "checks": {
+      "exact_vbit_sweep_inside_art": true,
+      "exact_vbit_sweep_outside_hanger_keepout": true,
+      "nonnegative_work_xy": true,
+      "parse": true,
+      "rapid_xy_at_safe_z": true
+    },
+    "exact_emitted_bounds_mm": {
+      "max": [
+        98.878,
+        97.945,
+        3.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        -0.25
+      ]
+    },
+    "motion_metrics": {
+      "cut_junctions": 88560,
+      "cut_junctions_at_least_135_degrees": 12920,
+      "cut_junctions_at_least_90_degrees": 87788,
+      "cut_segments_at_most_0_1mm": 42374,
+      "cut_segments_at_most_0_25mm": 62540,
+      "cutting_distance_mm": 53455.21170566624,
+      "cutting_minutes": 178.18403901888746,
+      "depth_passes": 2,
+      "estimated_minutes": 253.21674751581065,
+      "median_cut_segment_mm": 0.12000000000000455,
+      "nonzero_cut_segments": 90334,
+      "p95_cut_segment_mm": 2.492900000000006,
+      "paths_per_pass": 887,
+      "plunge_count": 1774,
+      "plunge_distance_mm": 5654.625,
+      "plunge_minutes": 70.6828125,
+      "primitive_paths_before": 887,
+      "rapid_distance_mm": 13049.687990769518,
+      "rapid_minutes": 4.3498959969231725,
+      "rapid_xy_distance_mm": 7392.062990769519,
+      "rapid_z_distance_mm": 5657.625,
+      "retract_count": 1774,
+      "reversed_primitive_paths": 0,
+      "scheduled_chains_per_pass": 887,
+      "scheduled_order_changed": false,
+      "stay_down_link_count": 0,
+      "stay_down_link_distance_mm": 0.0,
+      "stay_down_link_max_mm": 0.0
+    },
+    "operation_id": "engrave-approved-artwork",
+    "placement_and_features": {
+      "black_components_with_no_tool-center_at_final_depth": 2,
+      "cutter_inaccessible_black_area_outside_keepout_mm2": 87.05630464645549,
+      "exact_emitted_sweep_area_mm2": 2308.2013438249437,
+      "exact_emitted_sweep_bounds_xy_mm": [
+        10.502577456890112,
+        10.717877456890111,
+        98.99502254310988,
+        98.06202254310988
+      ],
+      "exact_sweep_within_candidate_110mm_stock": true,
+      "feature_floor": "The 0.234 mm V-bit footprint is the minimum full-width cutting feature at the selected depth. Exact emitted sweeps preserve all white counters; unengraved black area is measured and is not silently discarded.",
+      "feature_spacing_method": "Raster-vector connected-component maximum-inscribed-circle diameter, minimum separation between disconnected black components, and minimum enclosed-counter maximum-inscribed-circle diameter. These are geometric proxies; exact emitted sweep/unengraved-area checks remain the machining reachability result.",
+      "hanger": {
+        "cut_sweep_clear_of_hanger_keepout": true,
+        "engraving_keepout_radius_mm": 5.0,
+        "hole_center_stock_xy_mm": [
+          55.0,
+          100.0
+        ],
+        "hole_diameter_mm": 4.0,
+        "minimum_blank_edge_ligament_mm": 8.0,
+        "nearest_part_edge_wood_ligament_mm": 3.0
+      },
+      "hanger_keepout_black_area_mm2": 18.33235633622997,
+      "minimum_connected_black_component_max_inscribed_diameter_mm": 0.0717703349282175,
+      "minimum_gap_between_distinct_black_components_mm": 0.0,
+      "part": {
+        "artwork_circular_margin_mm": 5.0,
+        "center_stock_xy_mm": [
+          55.0,
+          55.0
+        ],
+        "diameter_mm": 100.0,
+        "source_artwork_diameter_mm": 90.0,
+        "stock_geometry_note": "The example setup records a 100 x 100 mm blank, which is not large enough for a 100 mm finished disc plus outside-cutter clearance. This review bundle uses a distinct, explicitly unverified 110 x 110 mm blank; do not treat it as the recorded setup.",
+        "within_100_mm_stock_example": false
+      },
+      "resolution_mm_per_pixel": 0.07177033492822966,
+      "smallest_source_counter_max_inscribed_diameter_mm": 0.0717703349282175,
+      "source_black_area_mm2": 2413.5900048076214,
+      "source_connected_black_components": 47,
+      "source_counter_count_measured": 125,
+      "source_counters_narrower_than_final_cutter_mm": 55,
+      "tool_diameter_at_final_depth_mm": 0.23397459621556135,
+      "unengraved_black_area_mm2": 105.38866098280494,
+      "unengraved_black_fraction": 0.04366469067773799
+    },
+    "runtime_assumption": "Feed-based projection only; assumes 3000 mm/min rapid and excludes acceleration, junction slowing, material response and physical setup.",
+    "stock_dimensions_mm": [
+      110.0,
+      110.0
+    ],
+    "stock_thickness_mm": 3.25,
+    "stock_xy_origin": "lower-left; candidate 110 x 110 mm frame",
+    "target_depth_mm": 0.25,
+    "tool_id": "vbit-30deg-0p1"
+  },
+  "inputs_sha256": {
+    "approved_artwork_reference_png": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "endmill_setup_json": "df5c3b3d4b6eacf7b009ffebb21660491704af6e2f54c9a6bbecb003b5d7bdd7",
+    "vbit_setup_json": "eda5a8bcead015684bc0a80e0cbc77c0b2e9de0dfba30bd7f0f128212fdef13e",
+    "vectorized_artwork_svg": "78744dedd3ece360727bef33ec709435d9a9936140c0b55c9e0e7712e0dadf4c"
+  },
+  "operations": [
+    {
+      "depth_mm": 0.25,
+      "file": "engraving-review.nc",
+      "id": "engrave-approved-artwork",
+      "status": "review only",
+      "strategy": "fixed-depth raster clearing from thresholded black source pixels",
+      "tool_id": "vbit-30deg-0p1"
+    },
+    {
+      "depends_on": [],
+      "depth_mm": 3.45,
+      "file": "disc-hole-profile-review.nc",
+      "id": "hanger-hole-through",
+      "status": "review only; emitted before outer profile",
+      "tool_id": "endmill-3p175"
+    },
+    {
+      "depends_on": [
+        "hanger-hole-through"
+      ],
+      "depth_mm": 3.45,
+      "file": "disc-hole-profile-review.nc",
+      "id": "tabbed-outside-through",
+      "status": "review only; four outer tabs",
+      "tool_id": "endmill-3p175"
+    }
+  ],
+  "outputs_sha256": {
+    "disc-hole-profile-review.nc": "9652c1569e2b0f8f4321ffd504e94d5b38262f5ecdfd345bf032d208c292a612",
+    "engraving-preview.svg": "8a7ded1ff3d8da50758f8406aa3a2a8ab0c2917d1d35c76e11f7394f3ec3ac65",
+    "engraving-review.nc": "644b04cac6f869f3a28e18b8921ae7d676c7df59689fe255c888db1fab9ec23e",
+    "profile-preview.svg": "5f111b6081918b534f7441d892e7281210e2e223451cd5b1fe5a0a0c61dd7912"
+  },
+  "production_release_blockers": [
+    "The named setup records 100 x 100 mm stock; the candidate 100 mm disc needs a distinct 110 x 110 mm blank to retain cutter clearance.",
+    "The actual fixture/clamp layout and safe Z clearance are unknown.",
+    "The endmill flute length, usable cutting length, and holder clearance are unknown.",
+    "Feeds, plunge feeds, spindle speed, actual material response, breakthrough, tab retention and plywood flatness are unverified.",
+    "The setup provenance describes measured/reported inputs but does not independently verify them in this run.",
+    "The retained artwork is a thresholded raster conversion; the report quantifies sweep-inaccessible black detail and makes no aesthetic approval claim."
+  ],
+  "profile": {
+    "bounds_mm": {
+      "max": [
+        106.5875,
+        106.5875,
+        3.0
+      ],
+      "min": [
+        0.0,
+        0.0,
+        -3.45
+      ]
+    },
+    "breakthrough_mm": 0.2,
+    "compensated_contours": [
+      {
+        "center_stock_xy_mm": [
+          55.0,
+          100.0
+        ],
+        "emitted_centerline_radius_max_mm": 0.41249252888754806,
+        "emitted_centerline_radius_mean_mm": 0.41247020203018886,
+        "emitted_centerline_radius_min_mm": 0.4124701151985458,
+        "expected_centerline_radius_mm": 0.4125000000000001,
+        "id": "hanger-hole"
+      },
+      {
+        "center_stock_xy_mm": [
+          55.0,
+          55.0
+        ],
+        "emitted_centerline_radius_max_mm": 51.58750747111248,
+        "emitted_centerline_radius_mean_mm": 51.58750747111245,
+        "emitted_centerline_radius_min_mm": 51.58750747111244,
+        "expected_centerline_radius_mm": 51.5875,
+        "id": "outside-profile"
+      }
+    ],
+    "cut_feed_mm_min": 180.0,
+    "exact_sweep_within_candidate_110mm_stock": true,
+    "exact_tool_sweep_bounds_xy_mm": [
+      1.8245296568134906,
+      1.8245296568134906,
+      108.17547034318652,
+      108.17547034318652
+    ],
+    "inner_cut_count": 1,
+    "operation_depth_mm": 3.45,
+    "operation_order": [
+      "internal-through",
+      "outer-profile"
+    ],
+    "outer_cut_count": 1,
+    "plunge_feed_mm_min": 65.0,
+    "runtime": {
+      "assumption": "Feed-based projection only; excludes acceleration, junction slowing, material response and physical setup.",
+      "cutting_distance_mm": 1633.6248538332736,
+      "nominal_estimated_minutes": 9.929678415865071,
+      "rapid_xy_distance_mm": 939.6466580662919,
+      "retract_count": 10
+    },
+    "safe_z_mm": 3.0,
+    "simulation": {
+      "allowed_gouge_area_mm2": 0.02,
+      "checked_paths": 2,
+      "cutting_segments": 1536,
+      "depth_passes": 5,
+      "passed": true,
+      "retained_gouge_area_mm2": 0.0,
+      "swept_area_mm2": 1041.6891026910214
+    },
+    "spindle_rpm": null,
+    "stock_dimensions_mm": [
+      110.0,
+      110.0
+    ],
+    "stock_thickness_mm": 3.25,
+    "tabs": {
+      "count": 4,
+      "height_mm": 0.7,
+      "only_outer_profile": true,
+      "tab_floor_transition_count_in_exact_nc": 8,
+      "tab_floor_z_mm": -2.55,
+      "tabbed_deep_passes": 2,
+      "width_mm": 3.0
+    },
+    "tool_diameter_mm": 3.175,
+    "tool_id": "endmill-3p175",
+    "xy_frame": {
+      "hole_center_mm": [
+        55.0,
+        100.0
+      ],
+      "origin": "lower-left stock corner (candidate frame; fixture not verified)",
+      "part_center_mm": [
+        55.0,
+        55.0
+      ],
+      "stock_dimensions_mm": [
+        110.0,
+        110.0
+      ],
+      "work_coordinate_system": "G54 P1 (named setup slot; physical zero not verified)"
+    }
+  },
+  "project_id": "hawkeye-approved-100mm-ornament",
+  "provisional_settings": {
+    "candidate_stock_dimensions_mm": [
+      110.0,
+      110.0
+    ],
+    "endmill_cut_feed_mm_min": 180.0,
+    "endmill_plunge_feed_mm_min": 65.0,
+    "engraving_depth_mm": 0.25,
+    "engraving_max_stepdown_mm": 0.125,
+    "engraving_stepover_mm": 0.12,
+    "profile_breakthrough_mm": 0.2,
+    "safe_z_mm": 3.0,
+    "tab_count": 4,
+    "tab_height_mm": 0.7,
+    "tab_width_mm": 3.0,
+    "vbit_cut_feed_mm_min": 300.0,
+    "vbit_plunge_feed_mm_min": 80.0
+  },
+  "schema_version": 1,
+  "shared_xy_frame": "lower-left candidate stock corner; XY frame shared by both programs",
+  "status": "review_only_candidate_not_production_released",
+  "tools": [
+    {
+      "angle_deg": 30.0,
+      "id": "vbit-30deg-0p1",
+      "setup_id": "plywood-vbit-engraving",
+      "tip_diameter_mm": 0.1
+    },
+    {
+      "diameter_mm": 3.175,
+      "flute_length_mm": null,
+      "id": "endmill-3p175",
+      "setup_id": "plywood-endmill-profile"
+    }
+  ]
+}

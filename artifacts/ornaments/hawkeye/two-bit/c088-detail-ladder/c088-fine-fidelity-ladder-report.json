@@ -1,0 +1,442 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; no machine interaction or cutting authorization",
+  "inputs": {
+    "fullFidelityFineSource": "artifacts\\ornaments\\hawkeye\\two-bit\\c069-flow\\01-detail-c069-flow-675-120-review-only.nc",
+    "fullFidelityFineSourceSha256": "f38e959b21c83df37ca339e011a7d347516e2d3acccf41299060352bd2fa730b",
+    "fixedBroadProgram": "artifacts\\ornaments\\hawkeye\\two-bit\\c084-runtime-45m\\01-detail-c084-broad-only-008-review-only.nc",
+    "fixedBroadProgramSha256": "60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718",
+    "sourceArtworkSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "sourcePixelSizeMm": 0.07177033492822966
+  },
+  "fixedSetup": {
+    "stockMm": [
+      110.0,
+      110.0
+    ],
+    "measuredThicknessMm": 3.25,
+    "ornamentDiameterMm": 100.0,
+    "workOrigin": "lower-left; same C-069/C-084 110 mm stock frame",
+    "tool": {
+      "includedAngleDeg": 30.0,
+      "tipDiameterMm": 0.1,
+      "conditionVerified": false
+    },
+    "spindleCommandRpm": 1000,
+    "cutFeedMmPerMin": 675.0,
+    "plungeFeedMmPerMin": 120.0,
+    "fixedBroadPassesMm": [
+      -1.625,
+      -1.2,
+      -0.6
+    ],
+    "fineDepthMm": -0.04
+  },
+  "method": {
+    "changedParameter": "fine-path guarded chord simplification tolerance only",
+    "tolerancesMm": [
+      0.04,
+      0.08,
+      0.12,
+      0.2,
+      0.32
+    ],
+    "broadGeometry": "Exact emitted C-084 0.08 mm broad paths reused at all three depths",
+    "fineGeometry": "The 0.04 mm rung reuses the exact C-069 residual path; later rungs apply greater chord simplification with full-width conservative cutter containment in approved thresholded art",
+    "coverageMetric": "Exact parsed-path full-diameter sweeps; omissions and sweep differences are relative to the 0.04 mm full-fidelity reference",
+    "runtimeTargetMinutes": 45.0,
+    "runtimeCaveat": "Nominal feed-based estimates exclude acceleration, junction slowing, controller streaming, setup, material and physical calibration; 45 minutes is aspirational only."
+  },
+  "variants": [
+    {
+      "file": "01-fine-tolerance-040-review-only.nc",
+      "sha256": "4bbde344db482d5455f6b1000fa2f2a44abac1d7ce284218739d74a540113980",
+      "preview": {
+        "file": "fine-tolerance-040.svg",
+        "sha256": "13e45015a76c6b0a485891e575a8e4f82c3891c4299fc24db4fe08d464b19bc6"
+      },
+      "fineChordToleranceMm": 0.04,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "broadEffectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "fineEffectiveDiameterMm": 0.12143593539448982,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -1.625,
+        -1.2,
+        -0.6,
+        -0.04
+      ],
+      "motion": {
+        "commands": 105231,
+        "feedBasedEstimateMinutes": 79.28376319860219,
+        "nominalRuntimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 4757.025791916131,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutSegments": 89366,
+        "cutDistanceMm": 34917.55333106105,
+        "medianCutSegmentMm": 0.14350000000000307,
+        "p95CutSegmentMm": 1.3969000000000023,
+        "cutSegmentsAtMost0p1Mm": 35039,
+        "cutSegmentsAtMost0p1MmPercent": 39.20842378533223,
+        "cutJunctions": 85382,
+        "cutJunctionsAtLeast90Deg": 75655,
+        "cutJunctionsAtLeast90DegPercent": 88.60766906373709,
+        "cutJunctionsAtLeast135Deg": 20554,
+        "retractCount": 3948,
+        "rapidXYDistanceMm": 27135.913680036683,
+        "estimateLimit": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min."
+      },
+      "coverage": {
+        "availableArtworkMm2": 2409.2226060195076,
+        "fullDiameterCombinedSweepMm2": 2385.483699557841,
+        "omittedArtworkMm2": 23.738906461678305,
+        "omittedArtworkFraction": 0.009853347051603288,
+        "omittedIncreaseVersusFullFidelityMm2": 0.0,
+        "additionalSweepVersusFullFidelityMm2": 0.0,
+        "combinedSweepSymmetricDifferenceVersusFullFidelityMm2": 0.0,
+        "conservativeFullWidthSweepContainedInApprovedArtAndStock": true
+      },
+      "deltaVersusFullFidelity": {
+        "commands": 0,
+        "feedBasedEstimateMinutes": 0.0,
+        "cutSegments": 0,
+        "cutJunctions": 0,
+        "retracts": 0
+      },
+      "checks": {
+        "exactFileParses": true,
+        "nonnegativeWorkXY": true,
+        "rapidXYAtSafeZ": true,
+        "C084BroadPassGeometryUnchangedAtEveryDepth": true,
+        "finePassMatchesReportedCandidateGeometry": true,
+        "conservativeFullWidthSweepContained": true,
+        "stockBoundsContained": true,
+        "terminalM5AndM2Preserved": true
+      }
+    },
+    {
+      "file": "02-fine-tolerance-080-review-only.nc",
+      "sha256": "89f67ef65b7cc198162ca8604e36c005aef034b60e1791b81dae6fd3bf79d7cc",
+      "preview": {
+        "file": "fine-tolerance-080.svg",
+        "sha256": "f719ece88726fb1a7594e6cfaf8fbbd766760d48bcf7ce036d220b06b5437311"
+      },
+      "fineChordToleranceMm": 0.08,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "broadEffectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "fineEffectiveDiameterMm": 0.12143593539448982,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -1.625,
+        -1.2,
+        -0.6,
+        -0.04
+      ],
+      "motion": {
+        "commands": 78514,
+        "feedBasedEstimateMinutes": 77.07761707669933,
+        "nominalRuntimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 4624.657024601959,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutSegments": 62649,
+        "cutDistanceMm": 33428.404698774124,
+        "medianCutSegmentMm": 0.23818112855555587,
+        "p95CutSegmentMm": 1.7055075490891236,
+        "cutSegmentsAtMost0p1Mm": 12896,
+        "cutSegmentsAtMost0p1MmPercent": 20.58452648885058,
+        "cutJunctions": 58665,
+        "cutJunctionsAtLeast90Deg": 45646,
+        "cutJunctionsAtLeast90DegPercent": 77.80789226966675,
+        "cutJunctionsAtLeast135Deg": 19042,
+        "retractCount": 3948,
+        "rapidXYDistanceMm": 27135.913680036683,
+        "estimateLimit": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min."
+      },
+      "coverage": {
+        "availableArtworkMm2": 2409.2226060195076,
+        "fullDiameterCombinedSweepMm2": 2353.072533295457,
+        "omittedArtworkMm2": 56.15007272405724,
+        "omittedArtworkFraction": 0.023306303279640814,
+        "omittedIncreaseVersusFullFidelityMm2": 32.439545473799605,
+        "additionalSweepVersusFullFidelityMm2": 0.028379211544719035,
+        "combinedSweepSymmetricDifferenceVersusFullFidelityMm2": 32.4679246853432,
+        "conservativeFullWidthSweepContainedInApprovedArtAndStock": true
+      },
+      "deltaVersusFullFidelity": {
+        "commands": -26717,
+        "feedBasedEstimateMinutes": -2.2061461219028615,
+        "cutSegments": -26717,
+        "cutJunctions": -26717,
+        "retracts": 0
+      },
+      "checks": {
+        "exactFileParses": true,
+        "nonnegativeWorkXY": true,
+        "rapidXYAtSafeZ": true,
+        "C084BroadPassGeometryUnchangedAtEveryDepth": true,
+        "finePassMatchesReportedCandidateGeometry": true,
+        "conservativeFullWidthSweepContained": true,
+        "stockBoundsContained": true,
+        "terminalM5AndM2Preserved": true
+      }
+    },
+    {
+      "file": "03-fine-tolerance-120-review-only.nc",
+      "sha256": "5d7eb03b445c42f010f63330bc7bc6beb3e6943bba6ef9a7e7246c78cec52495",
+      "preview": {
+        "file": "fine-tolerance-120.svg",
+        "sha256": "9f6aa31c4af10212c00f36661f69afb7f6a02f34d7668f9213cdbb21bfb4936c"
+      },
+      "fineChordToleranceMm": 0.12,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "broadEffectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "fineEffectiveDiameterMm": 0.12143593539448982,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -1.625,
+        -1.2,
+        -0.6,
+        -0.04
+      ],
+      "motion": {
+        "commands": 68380,
+        "feedBasedEstimateMinutes": 75.79202350504444,
+        "nominalRuntimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 4547.5214103026665,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutSegments": 52515,
+        "cutDistanceMm": 32560.629037905208,
+        "medianCutSegmentMm": 0.31447685129433695,
+        "p95CutSegmentMm": 1.97078484112295,
+        "cutSegmentsAtMost0p1Mm": 10001,
+        "cutSegmentsAtMost0p1MmPercent": 19.044082643054367,
+        "cutJunctions": 48531,
+        "cutJunctionsAtLeast90Deg": 36650,
+        "cutJunctionsAtLeast90DegPercent": 75.51874059879252,
+        "cutJunctionsAtLeast135Deg": 15166,
+        "retractCount": 3948,
+        "rapidXYDistanceMm": 27135.913680036683,
+        "estimateLimit": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min."
+      },
+      "coverage": {
+        "availableArtworkMm2": 2409.2226060195076,
+        "fullDiameterCombinedSweepMm2": 2339.625679203012,
+        "omittedArtworkMm2": 69.59692681652905,
+        "omittedArtworkFraction": 0.028887711182287286,
+        "omittedIncreaseVersusFullFidelityMm2": 45.88880286435437,
+        "additionalSweepVersusFullFidelityMm2": 0.030782509640479357,
+        "combinedSweepSymmetricDifferenceVersusFullFidelityMm2": 45.919585373993264,
+        "conservativeFullWidthSweepContainedInApprovedArtAndStock": true
+      },
+      "deltaVersusFullFidelity": {
+        "commands": -36851,
+        "feedBasedEstimateMinutes": -3.491739693557747,
+        "cutSegments": -36851,
+        "cutJunctions": -36851,
+        "retracts": 0
+      },
+      "checks": {
+        "exactFileParses": true,
+        "nonnegativeWorkXY": true,
+        "rapidXYAtSafeZ": true,
+        "C084BroadPassGeometryUnchangedAtEveryDepth": true,
+        "finePassMatchesReportedCandidateGeometry": true,
+        "conservativeFullWidthSweepContained": true,
+        "stockBoundsContained": true,
+        "terminalM5AndM2Preserved": true
+      }
+    },
+    {
+      "file": "04-fine-tolerance-200-review-only.nc",
+      "sha256": "c47137e599c44287c4ac2a0e185abb2322eddb9979272924e03e46ae022e9895",
+      "preview": {
+        "file": "fine-tolerance-200.svg",
+        "sha256": "59f369fcaf47b9baa26c7177f33275d1a282fc776870e1514b8a55ede39c7d64"
+      },
+      "fineChordToleranceMm": 0.2,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "broadEffectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "fineEffectiveDiameterMm": 0.12143593539448982,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -1.625,
+        -1.2,
+        -0.6,
+        -0.04
+      ],
+      "motion": {
+        "commands": 63848,
+        "feedBasedEstimateMinutes": 74.41796819261832,
+        "nominalRuntimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 4465.0780915570995,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutSegments": 47983,
+        "cutDistanceMm": 31633.141702016048,
+        "medianCutSegmentMm": 0.32273555738405985,
+        "p95CutSegmentMm": 2.114599999999996,
+        "cutSegmentsAtMost0p1Mm": 9851,
+        "cutSegmentsAtMost0p1MmPercent": 20.53018777483692,
+        "cutJunctions": 43999,
+        "cutJunctionsAtLeast90Deg": 32606,
+        "cutJunctionsAtLeast90DegPercent": 74.10622968703834,
+        "cutJunctionsAtLeast135Deg": 12501,
+        "retractCount": 3948,
+        "rapidXYDistanceMm": 27135.913680036683,
+        "estimateLimit": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min."
+      },
+      "coverage": {
+        "availableArtworkMm2": 2409.2226060195076,
+        "fullDiameterCombinedSweepMm2": 2326.5290074020786,
+        "omittedArtworkMm2": 82.69359861745095,
+        "omittedArtworkFraction": 0.03432376834371335,
+        "omittedIncreaseVersusFullFidelityMm2": 58.990960724309325,
+        "additionalSweepVersusFullFidelityMm2": 0.03626856866396101,
+        "combinedSweepSymmetricDifferenceVersusFullFidelityMm2": 59.02722929297169,
+        "conservativeFullWidthSweepContainedInApprovedArtAndStock": true
+      },
+      "deltaVersusFullFidelity": {
+        "commands": -41383,
+        "feedBasedEstimateMinutes": -4.86579500598387,
+        "cutSegments": -41383,
+        "cutJunctions": -41383,
+        "retracts": 0
+      },
+      "checks": {
+        "exactFileParses": true,
+        "nonnegativeWorkXY": true,
+        "rapidXYAtSafeZ": true,
+        "C084BroadPassGeometryUnchangedAtEveryDepth": true,
+        "finePassMatchesReportedCandidateGeometry": true,
+        "conservativeFullWidthSweepContained": true,
+        "stockBoundsContained": true,
+        "terminalM5AndM2Preserved": true
+      }
+    },
+    {
+      "file": "05-fine-tolerance-320-review-only.nc",
+      "sha256": "60491196d96e03b340c0c2b4d525fa4ce908173db1a52f2fcc4cbf22d8fdd0b0",
+      "preview": {
+        "file": "fine-tolerance-320.svg",
+        "sha256": "1fefa2df57d334d5e5954c7455a853fffc6ab711e75a52c67fc943dc70bd596e"
+      },
+      "fineChordToleranceMm": 0.32,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "broadEffectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "fineEffectiveDiameterMm": 0.12143593539448982,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -1.625,
+        -1.2,
+        -0.6,
+        -0.04
+      ],
+      "motion": {
+        "commands": 60631,
+        "feedBasedEstimateMinutes": 73.0013516393653,
+        "nominalRuntimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 4380.081098361918,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutSegments": 44766,
+        "cutDistanceMm": 30676.92552856761,
+        "medianCutSegmentMm": 0.32096520060592587,
+        "p95CutSegmentMm": 2.195394051189897,
+        "cutSegmentsAtMost0p1Mm": 9707,
+        "cutSegmentsAtMost0p1MmPercent": 21.683867220658534,
+        "cutJunctions": 40782,
+        "cutJunctionsAtLeast90Deg": 29674,
+        "cutJunctionsAtLeast90DegPercent": 72.76249325682899,
+        "cutJunctionsAtLeast135Deg": 10599,
+        "retractCount": 3948,
+        "rapidXYDistanceMm": 27135.913680036683,
+        "estimateLimit": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min."
+      },
+      "coverage": {
+        "availableArtworkMm2": 2409.2226060195076,
+        "fullDiameterCombinedSweepMm2": 2305.519916718962,
+        "omittedArtworkMm2": 103.70268930057968,
+        "omittedArtworkFraction": 0.043044046258521616,
+        "omittedIncreaseVersusFullFidelityMm2": 79.99027410370363,
+        "additionalSweepVersusFullFidelityMm2": 0.026491264958669727,
+        "combinedSweepSymmetricDifferenceVersusFullFidelityMm2": 80.01676536866181,
+        "conservativeFullWidthSweepContainedInApprovedArtAndStock": true
+      },
+      "deltaVersusFullFidelity": {
+        "commands": -44600,
+        "feedBasedEstimateMinutes": -6.282411559236891,
+        "cutSegments": -44600,
+        "cutJunctions": -44600,
+        "retracts": 0
+      },
+      "checks": {
+        "exactFileParses": true,
+        "nonnegativeWorkXY": true,
+        "rapidXYAtSafeZ": true,
+        "C084BroadPassGeometryUnchangedAtEveryDepth": true,
+        "finePassMatchesReportedCandidateGeometry": true,
+        "conservativeFullWidthSweepContained": true,
+        "stockBoundsContained": true,
+        "terminalM5AndM2Preserved": true
+      }
+    }
+  ]
+}

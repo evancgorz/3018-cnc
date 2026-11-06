@@ -4,6 +4,8 @@ Updated: 2026-11-05
 
 ## Active
 
+User-requested Codex takeover: C-088 is signed off. Luna generated the offline review-only five-rung fine-residual fidelity/runtime ladder; independent review verified all five NC/preview hashes against the report, zero added omission on the full-fidelity rung, and monotonically increasing omitted artwork across coarser rungs. Run F (C-018 to C-020) reached its checkpoint after C-020; all three tasks are implemented pending planning review. Keep all artifacts offline/review-only and preserve unknown machining facts as release blockers. C-110 remains owned by /root and C-111 by /root/audit; do not overlap active ownership or physical work.
+
 Planning run C-097 closed. C-098 through C-112 define the machine-first Pine and background CAM initiative. Run A (C-098–C-101) authorized by the active goal. Run A signed off. /root/audit owns C-111 in the parallel migration workstream. C-113 closed. Hardware records workstream C-114–C-116 signed off. Parallel runs B and C are authorized as dependencies clear. Run B reached its checkpoint with C-102 through C-104 signed off. C-105 signed off. C-106 and C-107 signed off. Run D parity is authorized; C-108 and C-109 signed off; /root owns C-110. C checkpoint: offline worker, fidelity comparison, and ordered passes. Checkpoint: portable bundle handoff through guarded job loading and isolated discovery verification.
 
 Run C-096 reached its review checkpoint: /root implemented and verified the offline design-to-CAM workflow and backend API discovery. All three bundles replay byte-for-byte; 145 focused tests passed. See HANDOFFS.md. No live application or hardware interaction.
@@ -36,7 +38,7 @@ C-086 (/root/performance_workflow): implemented offline. G-code analysis adds re
 
 C-087 (codex-hybrid-pocket): implemented offline. The assumed 3.175 mm endmill has no conservative center-accessible area in the approved art; smaller-tool sensitivity is documented, and no endmill job was emitted to avoid fidelity loss. The exact C-069 V-bit comparison parses at 89.85 nominal minutes and retains its previously verified sweep/coverage. The 45-minute goal is aspirational. Evidence: `artifacts/ornaments/hawkeye/two-bit/c087-hybrid-pocket/`; no physical readiness claim.
 
-C-088 (codex-primary): in progress. Build general fine-stage density variants so future jobs have an explicit fidelity/runtime continuum rather than a binary full-detail or broad-only choice.
+C-088 (luna-execution): done after independent planning review. Five progressively coarsened fine-residual variants preserve exact C-084 broad paths; exact parsed G-code, conservative full-width sweeps, coverage, motion and nominal runtime tradeoffs are documented in `artifacts/ornaments/hawkeye/two-bit/c088-detail-ladder/`. All NC and preview hashes match the report, the full-fidelity rung adds no omission, and omitted artwork increases monotonically across coarser rungs. No physical readiness claim or machine action.
 
 C-089 (codex-primary): implemented offline by current user request. `artifacts/ornaments/hawkeye/two-bit/c089-adaptive-regions/` contains a 7,669-command, component-local broad-only candidate (SHA `31c2773c...`) with 92 concentric components, five local stay-down links, and a verified scanline fallback in the reusable planner. It is materially simpler than C-084 (19,744 commands), but has 70.75 mm² additional broad-art omission because it remains broad-only. The active job was not loaded over, interrupted, or otherwise touched.
 
@@ -270,11 +272,6 @@ combined C-001–C-015 software diff/evidence, requests repairs, and signs off.
 - Backend/frontend separation is now the leading architecture initiative. Its
   target is one authoritative, persistent backend with restartable GUI and agent
   clients—not multiple application controllers or direct hardware access.
-
-
-
-
-
 
 
 

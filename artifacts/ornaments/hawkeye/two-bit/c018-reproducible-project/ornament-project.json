@@ -1,0 +1,184 @@
+{
+  "artwork": {
+    "mapped_artwork_diameter_mm": 90.0,
+    "retained_source": true,
+    "sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "source_path": "artifacts/ornaments/hawkeye/approved-artwork-reference.png",
+    "source_pixel_dimensions": [
+      1254,
+      1254
+    ],
+    "stock_xy_transform": {
+      "crop": [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      "image_y_axis": "flipped into Cartesian stock coordinates",
+      "physical_scale_mm_per_pixel": 0.07177033492822966,
+      "translation_mm": [
+        10.0,
+        10.0
+      ]
+    },
+    "threshold": 128,
+    "units": "mm",
+    "vector_geometry": "approved-artwork-geometry.svg"
+  },
+  "fixture_provenance": {
+    "actual_fixture_and_clamp_clearance": "unknown",
+    "machine_x_mm": null,
+    "machine_y_mm": null,
+    "wcs_slot": 1,
+    "xy_datum": "Lower-left stock corner, user-reported fixture fence reference",
+    "z_datum": "Planed stock top surface, user-reported setup reference"
+  },
+  "inputs_sha256": {
+    "approved_artwork_reference_png": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "endmill_setup_json": "df5c3b3d4b6eacf7b009ffebb21660491704af6e2f54c9a6bbecb003b5d7bdd7",
+    "vbit_setup_json": "eda5a8bcead015684bc0a80e0cbc77c0b2e9de0dfba30bd7f0f128212fdef13e",
+    "vectorized_artwork_svg": "78744dedd3ece360727bef33ec709435d9a9936140c0b55c9e0e7712e0dadf4c"
+  },
+  "operations": [
+    {
+      "depth_mm": 0.25,
+      "file": "engraving-review.nc",
+      "id": "engrave-approved-artwork",
+      "status": "review only",
+      "strategy": "fixed-depth raster clearing from thresholded black source pixels",
+      "tool_id": "vbit-30deg-0p1"
+    },
+    {
+      "depends_on": [],
+      "depth_mm": 3.45,
+      "file": "disc-hole-profile-review.nc",
+      "id": "hanger-hole-through",
+      "status": "review only; emitted before outer profile",
+      "tool_id": "endmill-3p175"
+    },
+    {
+      "depends_on": [
+        "hanger-hole-through"
+      ],
+      "depth_mm": 3.45,
+      "file": "disc-hole-profile-review.nc",
+      "id": "tabbed-outside-through",
+      "status": "review only; four outer tabs",
+      "tool_id": "endmill-3p175"
+    }
+  ],
+  "origin": "lower-left candidate stock corner; XY frame shared by both programs",
+  "outputs_sha256": {
+    "disc-hole-profile-review.nc": "9652c1569e2b0f8f4321ffd504e94d5b38262f5ecdfd345bf032d208c292a612",
+    "engraving-preview.svg": "8a7ded1ff3d8da50758f8406aa3a2a8ab0c2917d1d35c76e11f7394f3ec3ac65",
+    "engraving-review.nc": "644b04cac6f869f3a28e18b8921ae7d676c7df59689fe255c888db1fab9ec23e",
+    "profile-preview.svg": "5f111b6081918b534f7441d892e7281210e2e223451cd5b1fe5a0a0c61dd7912"
+  },
+  "part_geometry": {
+    "center_stock_xy_mm": [
+      55.0,
+      55.0
+    ],
+    "diameter_mm": 100.0,
+    "hanger_hole_center_stock_xy_mm": [
+      55.0,
+      100.0
+    ],
+    "hanger_hole_diameter_mm": 4.0,
+    "shape": "disc"
+  },
+  "process_provenance": {
+    "cut_feed_mm_min": "unknown in named setup; listed candidate feeds are illustrative",
+    "plunge_feed_mm_min": "unknown in named setup; listed candidate feeds are illustrative",
+    "safe_z_mm": "unknown in named setup; 3.0 mm used only as provisional review value",
+    "spindle_rpm": "unknown in named setup; no spindle-start command emitted"
+  },
+  "production_release_blockers": [
+    "The named setup records 100 x 100 mm stock; the candidate 100 mm disc needs a distinct 110 x 110 mm blank to retain cutter clearance.",
+    "The actual fixture/clamp layout and safe Z clearance are unknown.",
+    "The endmill flute length, usable cutting length, and holder clearance are unknown.",
+    "Feeds, plunge feeds, spindle speed, actual material response, breakthrough, tab retention and plywood flatness are unverified.",
+    "The setup provenance describes measured/reported inputs but does not independently verify them in this run.",
+    "The retained artwork is a thresholded raster conversion; the report quantifies sweep-inaccessible black detail and makes no aesthetic approval claim."
+  ],
+  "project_id": "hawkeye-approved-100mm-ornament",
+  "provisional_settings": {
+    "candidate_stock_dimensions_mm": [
+      110.0,
+      110.0
+    ],
+    "endmill_cut_feed_mm_min": 180.0,
+    "endmill_plunge_feed_mm_min": 65.0,
+    "engraving_depth_mm": 0.25,
+    "engraving_max_stepdown_mm": 0.125,
+    "engraving_stepover_mm": 0.12,
+    "profile_breakthrough_mm": 0.2,
+    "safe_z_mm": 3.0,
+    "tab_count": 4,
+    "tab_height_mm": 0.7,
+    "tab_width_mm": 3.0,
+    "vbit_cut_feed_mm_min": 300.0,
+    "vbit_plunge_feed_mm_min": 80.0
+  },
+  "rebuild": {
+    "command": ".venv\\Scripts\\python.exe artifacts\\ornaments\\hawkeye\\two-bit\\c018-reproducible-project\\prepare.py",
+    "compatibility": "Uses existing ornament_cam raster clearing, gcode parser/validators, step_engraver profile compensation and tab simulation.",
+    "requirements": "repository .venv and source checkout; no backend, GUI, or hardware"
+  },
+  "schema_version": 1,
+  "setup_inputs": {
+    "engraving": {
+      "setup_id": "plywood-vbit-engraving",
+      "sha256": "eda5a8bcead015684bc0a80e0cbc77c0b2e9de0dfba30bd7f0f128212fdef13e",
+      "source_path": "examples/hardware-setups/plywood-vbit-engraving.json"
+    },
+    "profile": {
+      "setup_id": "plywood-endmill-profile",
+      "sha256": "df5c3b3d4b6eacf7b009ffebb21660491704af6e2f54c9a6bbecb003b5d7bdd7",
+      "source_path": "examples/hardware-setups/plywood-endmill-profile.json"
+    }
+  },
+  "status": "offline_review_only_not_released",
+  "stock": {
+    "candidate_dimensions_provenance": "unverified candidate; differs from named 100 x 100 mm setups",
+    "dimensions_mm": [
+      110.0,
+      110.0
+    ],
+    "material": "birch plywood (user-reported package label)",
+    "recorded_setup_dimensions_mm": {
+      "height": 100.0,
+      "provenance": "Named setup records: width/height measured with calipers; thickness measured with digital calipers; not re-measured here.",
+      "thickness": 3.25,
+      "width": 100.0
+    },
+    "shape": "square",
+    "thickness_mm": 3.25,
+    "thickness_provenance": "measured in named setup record; not re-measured here"
+  },
+  "tools": [
+    {
+      "effective_diameter_at_depth_mm": {
+        "depth_mm": 0.25,
+        "diameter_mm": 0.23397459621556135
+      },
+      "id": "vbit-30deg-0p1",
+      "included_angle_deg": 30.0,
+      "kind": "v-bit",
+      "release_state": "not independently verified",
+      "setup_provenance": "30 degree user-reported packaging angle; 0.1 mm measured per tool specification in setup record",
+      "tip_diameter_mm": 0.1
+    },
+    {
+      "diameter_mm": 3.175,
+      "diameter_provenance": "measured in named setup record; not re-measured here",
+      "flute_length_mm": null,
+      "id": "endmill-3p175",
+      "kind": "flat-endmill",
+      "release_state": "blocked until flute/usable cutting length and holder clearance are measured"
+    }
+  ],
+  "units": "mm",
+  "work_coordinate_system": "G54 P1; named setup slot, physical zero not verified"
+}
