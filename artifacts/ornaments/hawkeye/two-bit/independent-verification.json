@@ -1,0 +1,34 @@
+{
+  "release": "offline_review_only_not_cutting_ready",
+  "app_restart": "completed; new backend contracts and Pine window confirmed; no homing/cut sent",
+  "shared_frame": {
+    "stock_mm": [
+      110,
+      110
+    ],
+    "origin": "lower-left",
+    "part_center_mm": [
+      55,
+      55
+    ],
+    "part_diameter_mm": 100
+  },
+  "jobs": [
+    {
+      "file": "01-detail-review.nc",
+      "sha256": "e76235fe07cf1ad71a51f930f90b3b4639799596041972a5200bafdce454d6eb",
+      "estimated_minutes": 182.61851363052546,
+      "minimum_z": -0.45,
+      "commands": 257628,
+      "parser_rapid_clearance_nonnegativeXY": "passed"
+    },
+    {
+      "file": "02-cutout-review.nc",
+      "sha256": "065bb7b347ac2a6edd0a448c1a8eb4b5e1e620716bd4306833eccc31c1520348",
+      "estimated_minutes": 8.712563386913986,
+      "minimum_z": -3.15,
+      "commands": 1482,
+      "parser_rapid_clearance_nonnegativeXY": "passed"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -14,6 +15,10 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from ..application.controller import ApplicationController
+from ..backend.process import BackendProcessManager
+from ..backend.discovery import default_data_root
+from ..backend.data_migration import assert_data_root_not_migrating
+from ..backend.qt_adapter import BackendApplicationAdapter
 from .view_model import ControllerViewModel
 
 
@@ -66,7 +71,8 @@ def _configure_logging(root: Path) -> logging.Logger:
 
 
 def build_engine(*, visible: bool = True, auto_connect: bool = False,
-                 application: ApplicationController | None = None) -> tuple[QQmlApplicationEngine, ControllerViewModel]:
+                 application: ApplicationController | None = None,
+                 backend_client=None, root: Path | None = None) -> tuple[QQmlApplicationEngine, ControllerViewModel]:
     """Load the Qt shell without starting the Qt event loop; useful for checks."""
     global _STYLE_INITIALIZED
     if not _STYLE_INITIALIZED:
@@ -78,8 +84,13 @@ def build_engine(*, visible: bool = True, auto_connect: bool = False,
     engine = QQmlApplicationEngine()
     logger = logging.getLogger("pine.qt")
     engine.warnings.connect(lambda warnings: [logger.warning(warning.toString()) for warning in warnings])
-    controller = application or ApplicationController(Path.cwd())
-    view_model = ControllerViewModel(controller, auto_connect=auto_connect)
+    if application is not None and backend_client is not None:
+        raise ValueError("Choose an in-process application or a backend client, not both")
+    application_root = getattr(application, "root", None) if application is not None else None
+    data_root = default_data_root(root if root is not None else application_root)
+    controller = application or (BackendApplicationAdapter(backend_client, data_root)
+                                 if backend_client is not None else ApplicationController(data_root))
+    view_model = ControllerViewModel(controller, auto_connect=auto_connect, root=data_root)
     # The context property does not transfer Python ownership; retain it with
     # the engine for the full QML lifecycle.
     engine._ttc3018_view_model = view_model  # type: ignore[attr-defined]
@@ -93,26 +104,48 @@ def build_engine(*, visible: bool = True, auto_connect: bool = False,
     return engine, view_model
 
 
-def main() -> None:
-    logger = _configure_logging(Path.cwd())
-    if "--check" in sys.argv:
+def parse_startup_arguments(argv: list[str] | None = None) -> tuple[Path | None, bool, list[str]]:
+    """Return the explicit data root, check mode, and arguments for Qt."""
+    parser = argparse.ArgumentParser(prog="pine-cnc", allow_abbrev=False)
+    parser.add_argument("--data-root", "--root", dest="data_root", type=Path,
+                        help="use this application data root (default: launch working directory)")
+    parser.add_argument("--check", action="store_true", help=argparse.SUPPRESS)
+    options, qt_arguments = parser.parse_known_args(argv)
+    return options.data_root, options.check, qt_arguments
+
+
+def main(argv: list[str] | None = None) -> None:
+    data_root_argument, check_mode, qt_arguments = parse_startup_arguments(
+        list(sys.argv[1:] if argv is None else argv)
+    )
+    data_root = default_data_root(data_root_argument)
+    assert_data_root_not_migrating(data_root)
+    logger = _configure_logging(data_root)
+    if check_mode:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _configure_windows_identity()
-    app = QApplication(sys.argv)
+    app = QApplication([sys.argv[0], *qt_arguments])
     app.setApplicationName("Pine")
     app.setApplicationDisplayName("Pine")
     app.setOrganizationName("Pine CNC")
     pine_icon = QIcon(str(PINE_ICON))
     app.setWindowIcon(pine_icon)
-    if "--check" in sys.argv:
-        engine, view_model = build_engine()
+    if check_mode:
+        manager = BackendProcessManager(data_root)
+        backend_client = manager.attach_or_spawn()
+        engine, view_model = build_engine(backend_client=backend_client, root=data_root)
         print("Pine Qt shell check passed")
+        view_model.close()
+        manager.close_client()
         engine.deleteLater()
         return
     splash = QSplashScreen(QPixmap(str(ASSET_ROOT / "pine-splash.png")))
     splash.show()
     app.processEvents()
-    engine, view_model = build_engine(visible=False, auto_connect=True)
+    manager = BackendProcessManager(data_root)
+    backend_client = manager.attach_or_spawn()
+    engine, view_model = build_engine(visible=False, auto_connect=True,
+                                      backend_client=backend_client, root=data_root)
     root = engine.rootObjects()[0]
 
     def reveal_workspace() -> None:
@@ -121,5 +154,6 @@ def main() -> None:
 
     QTimer.singleShot(550, reveal_workspace)
     app.aboutToQuit.connect(view_model.close)
+    app.aboutToQuit.connect(manager.close_client)
     app.aboutToQuit.connect(lambda: logger.info("Pine stopped cleanly"))
     sys.exit(app.exec())

@@ -61,6 +61,15 @@ class JobStreamer:
             self.outstanding_lengths.clear()
             raise
 
+    def reset(self) -> None:
+        """Clear the previous run result without sending controller commands."""
+        self.commands = ()
+        self.next_index = 0
+        self.acknowledged_count = 0
+        self.outstanding_lengths.clear()
+        self.error = ""
+        self.state = "idle"
+
     def handle_response(self, response: str) -> bool:
         text = response.strip()
         lowered = text.lower()

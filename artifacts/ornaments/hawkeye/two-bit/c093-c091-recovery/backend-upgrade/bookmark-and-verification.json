@@ -1,0 +1,58 @@
+{
+  "bookmark": {
+    "state": "confirmed_paused",
+    "confirmed": true,
+    "live_hold_confirmed": false,
+    "current_for_active_run": false,
+    "confirmed_at_utc": "2026-11-05T00:17:14+00:00",
+    "confirmation_source": "fresh_controller_status_after_pause_request",
+    "run_id": "dy9TyRoJyms3uXnKS4kFlnJk3U0DxGrX",
+    "machine_id": "16c0f71b-f47e-52a4-8eb8-531a0f3fb157",
+    "source_sha256": "133176a0a293f363095f291aefa7d77fdf9a8da6a2f247bd6b5b3572824574b9",
+    "filename": "01-c091-continuation-before-8603.nc",
+    "accepted_commands": 1437,
+    "sent_commands": 1451,
+    "total_commands": 69461,
+    "controller_state": "Hold",
+    "session_generation": 5,
+    "position_context": {
+      "machine_position": {
+        "x": 50.761,
+        "y": 93.3,
+        "z": -34.444
+      },
+      "work_position": null,
+      "work_offset": null,
+      "position_is_resume_cursor": false
+    },
+    "tool_context": {
+      "program_sha256": "133176a0a293f363095f291aefa7d77fdf9a8da6a2f247bd6b5b3572824574b9",
+      "provenance_report_state": "missing",
+      "provenance_report_name": "",
+      "provenance_file_sha256": "133176a0a293f363095f291aefa7d77fdf9a8da6a2f247bd6b5b3572824574b9",
+      "reported_tool_details": [],
+      "active_tool_length_offset_mm": null,
+      "physical_tool_verified": false,
+      "verification_required_before_continuation": true
+    },
+    "recovery_fence": {
+      "automatic_resume_allowed": false,
+      "resume_supported": false,
+      "accepted_command_count_is_physical_position": false,
+      "requires_same_backend_session": true,
+      "requires_same_machine_id": true,
+      "requires_same_run_id": true,
+      "requires_same_program_sha256": true,
+      "requires_fresh_controller_hold": true,
+      "requires_operator_review_after_disconnect_or_restart": true,
+      "requires_homing_after_disconnect_or_restart": true,
+      "requires_work_zero_reconfirmation_after_disconnect_or_restart": true,
+      "requires_tool_verification_before_continuation": true,
+      "backend_restart_observed": false
+    }
+  },
+  "first_source_command": 1104,
+  "preamble_commands": 4,
+  "output_sha256": "35403c78f5c02d057e83d0b55295c40b8ebc9b3e14058d928b8a74dd810094b6",
+  "output": "C:\\Github\\3018-cnc\\artifacts\\ornaments\\hawkeye\\two-bit\\c093-c091-recovery\\backend-upgrade\\01-upgrade-bookmark-continuation.nc"
+}

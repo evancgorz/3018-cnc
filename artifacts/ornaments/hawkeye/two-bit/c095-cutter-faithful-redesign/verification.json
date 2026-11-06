@@ -1,0 +1,10 @@
+{
+  "gcode_sha256": "a94dad45d99b92577aef5ac3692f14ec8753bc0e34c00e7a6e07a88a5d803bfb",
+  "render_vs_emitted_max_depth_difference_mm": 0.0,
+  "independent_segment_formula_max_error_mm": 5.675503647051272e-07,
+  "rough_paths_per_upper_depth": 227,
+  "finish_paths": 387,
+  "fine_paths": 2418,
+  "depth_grid_mm": 0.025,
+  "checks": "all emitted depth levels included; independent segment formula checked"
+}

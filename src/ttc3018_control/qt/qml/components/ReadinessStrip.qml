@@ -7,10 +7,10 @@ Rectangle {
     required property var palette
     required property var entries
     signal activated(string action)
-    implicitHeight: 45
-    radius: 10
+    implicitHeight: 46
+    radius: 12
     color: palette.raised
-    border.color: palette.divider
+    border.color: Qt.rgba(1, 1, 1, 0.10)
     border.width: 1
     RowLayout {
         anchors.fill: parent
@@ -35,7 +35,7 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                 }
-                background: Rectangle { radius: 7; color: parent.hovered ? root.palette.hover : "transparent" }
+                background: Rectangle { radius: 9; color: parent.hovered ? root.palette.hover : "transparent"; Behavior on color { ColorAnimation { duration: 120 } } }
                 ToolTip.visible: hovered
                 ToolTip.text: modelData.reason
                 onClicked: root.activated(modelData.action)

@@ -132,7 +132,7 @@ The prepared procedure is:
    available, connect only to the explicitly selected controller. Capture the
    startup banner, `$I`, `$G`, `$#`, `$$` and fresh Idle status. Abort on alarm,
    malformed report, unexpected firmware/settings or uncertain physical pose.
-3. **Tiny motion gate.** After a trusted manual reference, perform only bounded
+3. **Tiny motion gate.** After a successful guarded home, perform only bounded
    spindle-off X/Y/Z jogs that remain well inside the measured envelope. Compare
    state, MPos/WPos/WCO, feed, Bf and acknowledgement ordering. Abort on any
    unexpected movement or discrepancy.

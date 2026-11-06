@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
@@ -10,15 +10,24 @@ from .grbl import Position
 
 @dataclass(frozen=True)
 class SavedWorkZero:
-    """A GRBL work offset previously confirmed by a fresh status report."""
+    """A GRBL work offset, with the axes actually confirmed by fresh status."""
 
     x: float
     y: float
     z: float
+    confirmed_axes: frozenset[str] = frozenset("XYZ")
+
+    def __post_init__(self) -> None:
+        axes = self.confirmed_axes
+        if isinstance(axes, str):
+            axes = frozenset(axes.upper())
+        else:
+            axes = frozenset(str(axis).upper() for axis in axes)
+        object.__setattr__(self, "confirmed_axes", axes)
 
     @classmethod
-    def from_position(cls, position: Position) -> "SavedWorkZero":
-        return cls(position.x, position.y, position.z)
+    def from_position(cls, position: Position, confirmed_axes: str = "XYZ") -> "SavedWorkZero":
+        return cls(position.x, position.y, position.z, frozenset(confirmed_axes.upper()))
 
     @property
     def position(self) -> Position:
@@ -27,6 +36,8 @@ class SavedWorkZero:
     def validate(self) -> None:
         if not all(math.isfinite(value) for value in (self.x, self.y, self.z)):
             raise ValueError("Saved work-zero coordinates must be finite")
+        if not self.confirmed_axes or not self.confirmed_axes <= frozenset("XYZ"):
+            raise ValueError("Saved work-zero axes must contain X, Y, or Z")
 
 
 class WorkZeroStore:
@@ -44,6 +55,9 @@ class WorkZeroStore:
                 return None
         elif machine_id is not None and self.legacy_machine_id is not None and machine_id != self.legacy_machine_id:
             return None
+        data = dict(data)
+        if "confirmed_axes" in data:
+            data["confirmed_axes"] = frozenset(data["confirmed_axes"])
         saved = SavedWorkZero(**data)
         saved.validate()
         return saved
@@ -52,11 +66,17 @@ class WorkZeroStore:
         saved.validate()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
+        serialized = {
+            "x": saved.x,
+            "y": saved.y,
+            "z": saved.z,
+            "confirmed_axes": [axis for axis in "XYZ" if axis in saved.confirmed_axes],
+        }
         if machine_id is None:
-            data = asdict(saved)
+            data = serialized
         else:
             data = self._load_catalog()
-            data.setdefault("machines", {})[machine_id] = asdict(saved)
+            data.setdefault("machines", {})[machine_id] = serialized
             data["schema_version"] = 1
         temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         temporary.replace(self.path)

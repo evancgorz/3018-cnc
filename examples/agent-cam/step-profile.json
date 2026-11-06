@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "concept": "Tabbed outline and mounting hole around a centered engraved cross.",
+  "kind": "step-profile",
+  "source": "../showcase-profile-hole.step",
+  "settings": {
+    "stock_width": 80,
+    "stock_height": 80,
+    "stock_thickness": 3,
+    "tool_diameter": 3.175,
+    "max_stepdown": 0.8,
+    "safe_z": 3,
+    "cut_feed": 180,
+    "plunge_feed": 65,
+    "spindle_rpm": null,
+    "breakthrough": 0.2,
+    "tab_count": 4,
+    "tab_width": 3,
+    "tab_height": 0.7
+  }
+}

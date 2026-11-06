@@ -1,0 +1,30 @@
+{
+  "scope": "engraving only; no cutout, tool-change, acceleration or hardware timing",
+  "rapid_assumption_mm_per_min": 3000,
+  "same_source_and_physical_settings": true,
+  "baseline_two_pass": {
+    "cutting_minutes": 91.8120273333332,
+    "plunge_minutes": 498.76406249986576,
+    "rapid_minutes": 35.05008057431676,
+    "estimated_minutes": 625.6261704077866,
+    "plunges": 12518
+  },
+  "optimized_two_pass": {
+    "cutting_minutes": 127.18905884670751,
+    "plunge_minutes": 104.86875000000528,
+    "rapid_minutes": 6.616329090312048,
+    "estimated_minutes": 238.6741379368635,
+    "plunges": 2632
+  },
+  "single_pass_timing_projection_unverified": {
+    "cutting_minutes": 63.594529423307364,
+    "plunge_minutes": 53.46249999999879,
+    "rapid_minutes": 3.331117823522104,
+    "estimated_minutes": 120.38814724684326,
+    "plunges": 1316
+  },
+  "single_pass_caveat": "Requires max_stepdown 0.25 instead of 0.125; untested, not a cutting recommendation",
+  "artwork_inaccessible_fraction_unchanged": 0.09340922847992196,
+  "optimized_program_sha256": "68ef03945c9b3abb44ef4ee19a32d07b4a3bdec9fce57f3189f08df87c4e7a88",
+  "generator_sha256": "8ad637b690d18dedf7e24d8598c92b47f36558dfcdb197985f543b24af23e487"
+}

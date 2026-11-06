@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -7,6 +8,7 @@ import time
 from ttc3018_control.simulation.models import PlantSnapshot, SimulationProfile, SimulationWorkpiece
 from ttc3018_control.simulation.public_scenarios import run_public_collision_lifecycle
 from ttc3018_control.simulation.supervisor import supervisor_main
+from ttc3018_control.simulation.trace import load_trace
 
 
 class _Connection:
@@ -73,6 +75,17 @@ def test_public_controller_collision_lifecycle_isolated_and_exported(tmp_path):
     assert result.work_offset is not None and result.work_offset.z == 30.0
     assert result.physical_factory_calls == 0
     assert result.cleanup_complete
+    assert result.seed == 20260910
+    assert "owned loopback TCP" in result.configuration
+    assert result.expected_outcome.startswith("one bounded")
+    assert {"e5_configuration", "initial_idle", "reference_established", "work_zero_confirmed",
+            "collision_job_started", "first_contact_interlock", "expected_outcome_observed",
+            "cleanup_complete"}.issubset(result.transitions)
+    assert "G10 L20 P1 X0 Y0 Z0" in result.transport_commands
+    exported = json.loads((tmp_path / "evidence" / "collision.json").read_text(encoding="utf-8"))
+    assert any(event["kind"] == "e5_cleanup" and event["payload"]["owned_process_cleanup"]
+               for event in exported["events"])
+    assert load_trace(tmp_path / "evidence" / "collision.json")
     assert (tmp_path / "evidence" / "collision.json").exists()
     assert (tmp_path / "evidence" / "collision.md").exists()
 

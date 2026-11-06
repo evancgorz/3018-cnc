@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "id": "plywood-endmill-profile",
+  "name": "100 mm plywood · 3.175 mm endmill · corner fixture",
+  "description": "Portable setup reference for offline CAM planning. Verify physical stock, tool, and fixture at the machine.",
+  "stock": {
+    "shape": "square",
+    "material": {
+      "value": "birch plywood",
+      "unit": "text",
+      "provenance": {
+        "kind": "user-reported",
+        "note": "Package label"
+      }
+    },
+    "dimensions_mm": {
+      "width": {
+        "value": 100,
+        "unit": "mm",
+        "provenance": {
+          "kind": "measured",
+          "note": "Calipers"
+        }
+      },
+      "height": {
+        "value": 100,
+        "unit": "mm",
+        "provenance": {
+          "kind": "measured",
+          "note": "Calipers"
+        }
+      },
+      "thickness": {
+        "value": 3.25,
+        "unit": "mm",
+        "provenance": {
+          "kind": "measured",
+          "note": "Digital calipers"
+        }
+      }
+    }
+  },
+  "tool": {
+    "id": "endmill-3p175",
+    "kind": "flat-endmill",
+    "diameter_mm": {
+      "value": 3.175,
+      "unit": "mm",
+      "provenance": {
+        "kind": "measured",
+        "note": "Calipers"
+      }
+    },
+    "tip_diameter_mm": {
+      "value": null,
+      "unit": "mm",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    },
+    "included_angle_deg": {
+      "value": null,
+      "unit": "degree",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    }
+  },
+  "fixture": {
+    "id": "corner-clamp-lower-left",
+    "name": "Corner fence · G54 P1",
+    "machine_profile_id": null,
+    "wcs_slot": 1,
+    "datum": {
+      "xy_description": {
+        "value": "Lower-left stock corner",
+        "unit": "text",
+        "provenance": {
+          "kind": "user-reported",
+          "note": "Fixture fence reference"
+        }
+      },
+      "z_description": {
+        "value": "Planed stock top surface",
+        "unit": "text",
+        "provenance": {
+          "kind": "user-reported",
+          "note": "Zero Z to stock top after tool change"
+        }
+      },
+      "machine_x_mm": {
+        "value": null,
+        "unit": "mm",
+        "provenance": {
+          "kind": "unknown",
+          "note": "Not recorded"
+        }
+      },
+      "machine_y_mm": {
+        "value": null,
+        "unit": "mm",
+        "provenance": {
+          "kind": "unknown",
+          "note": "Not recorded"
+        }
+      }
+    }
+  },
+  "process": {
+    "safe_z_mm": {
+      "value": null,
+      "unit": "mm",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    },
+    "cut_feed_mm_min": {
+      "value": null,
+      "unit": "mm/min",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    },
+    "plunge_feed_mm_min": {
+      "value": null,
+      "unit": "mm/min",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    },
+    "spindle_rpm": {
+      "value": null,
+      "unit": "rpm",
+      "provenance": {
+        "kind": "unknown",
+        "note": "Not recorded"
+      }
+    }
+  }
+}

@@ -29,6 +29,70 @@ class AxisEnd(StrEnum):
     MAX = "max"
 
 
+class SwitchWiring(StrEnum):
+    """Physical contact convention represented by a GRBL limit input."""
+
+    NC = "nc_open_on_trigger"
+    NO = "no_close_on_trigger"
+
+    @property
+    def label(self) -> str:
+        return "NC — normally closed / open on trigger" if self is SwitchWiring.NC else "NO — normally open / close on trigger"
+
+
+@dataclass(frozen=True)
+class HomingInputInterpretation:
+    """Pure interpretation of one GRBL ``Pn`` transition."""
+
+    state: str
+    pins: str
+    changed_axis: str = ""
+    reason: str = ""
+
+
+def interpret_pn_transition(
+    baseline_pins: str | None,
+    current_pins: str | None,
+    expected_axes: str = "XYZ",
+    wiring: SwitchWiring | str = SwitchWiring.NC,
+    *,
+    grbl_limit_inverted: bool = False,
+) -> HomingInputInterpretation:
+    """Interpret released/actuated NC or NO limit inputs without hardware I/O.
+
+    ``Pn`` is interpreted either as the controller's raw commissioned
+    presentation or as the logical GRBL presentation after ``$5`` inversion.
+    Unknown pins, missing baseline, or simultaneous changes are fail-closed.
+    """
+    try:
+        convention = wiring if isinstance(wiring, SwitchWiring) else SwitchWiring(str(wiring))
+    except (TypeError, ValueError):
+        return HomingInputInterpretation("unknown", "", reason="Unknown switch polarity; identify NC or NO wiring and recommission inputs.")
+    axes = "".join(axis for axis in "XYZ" if axis in str(expected_axes).upper())
+    if not axes:
+        return HomingInputInterpretation("unknown", "", reason="No homing axes are declared; configure X, Y, and Z inputs first.")
+    current = "".join(axis for axis in "XYZ" if axis in str(current_pins or "").upper())
+    released = "" if grbl_limit_inverted else (axes if convention is SwitchWiring.NC else "")
+    if baseline_pins is None:
+        if current != released:
+            return HomingInputInterpretation("mismatch", current, reason=f"Expected released {convention.label} baseline Pn:{released or 'none'}, observed Pn:{current or 'none'}; inspect wiring and recommission.")
+        return HomingInputInterpretation("released", current, reason=f"All declared inputs released ({convention.label}).")
+    baseline = "".join(axis for axis in "XYZ" if axis in str(baseline_pins).upper())
+    if baseline != released:
+        return HomingInputInterpretation("mismatch", current, reason=f"Stored Pn baseline does not match {convention.label}; clear and recommission homing inputs.")
+    if current == baseline:
+        return HomingInputInterpretation("released", current, reason=f"All declared inputs released ({convention.label}).")
+    changed = "".join(axis for axis in axes if (axis in baseline) != (axis in current))
+    if len(changed) != 1:
+        return HomingInputInterpretation("mismatch", current, changed, "Multiple or unknown homing-input changes detected; stop motion and inspect all X/Y/Z wiring.")
+    axis = changed
+    actuated = ((axis in current) if grbl_limit_inverted else (axis not in current)
+                if convention is SwitchWiring.NC else (axis in current))
+    if not actuated:
+        return HomingInputInterpretation("mismatch", current, axis, "Unexpected Pn transition; stop motion and recommission the affected input.")
+    return HomingInputInterpretation("actuated", current, axis, f"{axis} limit input actuated ({convention.label}); release it before motion.")
+
+
 @dataclass(frozen=True)
 class AxisSensorDeclaration:
     """One optional homing/limit input, including its electrical polarity."""
@@ -41,6 +105,15 @@ class AxisSensorDeclaration:
     hard_limit: bool = False
     debounce_ms: float = 5.0
     max_override: float | None = None
+
+    @property
+    def wiring(self) -> SwitchWiring:
+        """Human-facing contact convention; legacy ``active_low`` remains canonical."""
+        return SwitchWiring.NC if self.active_low else SwitchWiring.NO
+
+    @property
+    def wiring_label(self) -> str:
+        return self.wiring.label
 
     def validate(self) -> None:
         axis = self.axis.upper()

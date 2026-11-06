@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import math
 from pathlib import Path
 import re
@@ -49,6 +50,8 @@ class GCodeProgram:
     segments: tuple[Segment, ...]
     bounds: Bounds
     estimated_seconds: float = 0.0
+    source_sha256: str = ""
+    header_comments: tuple[str, ...] = ()
 
 
 class GCodeError(ValueError):
@@ -68,13 +71,16 @@ def _number_code(value: float) -> int:
 
 def load_gcode(path: Path) -> GCodeProgram:
     try:
-        text = path.read_text(encoding="utf-8-sig")
+        raw = path.read_bytes()
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise GCodeError("G-code file must be UTF-8 or ASCII text") from exc
-    return parse_gcode(text, path)
+    return parse_gcode(text, path, source_sha256=hashlib.sha256(raw).hexdigest())
 
 
-def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
+def parse_gcode(
+    text: str, path: Path | None = None, *, source_sha256: str | None = None
+) -> GCodeProgram:
     commands: list[str] = []
     segments: list[Segment] = []
     position = Point(0.0, 0.0, 0.0)
@@ -83,8 +89,16 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
     feed: float | None = None
     dwell_seconds = 0.0
     points = [position]
+    header_comments: list[str] = []
 
     for line_number, raw in enumerate(text.splitlines(), start=1):
+        raw_trimmed = raw.strip()
+        if not commands and (raw_trimmed.startswith(";") or
+                             (raw_trimmed.startswith("(") and raw_trimmed.endswith(")"))):
+            note = raw_trimmed[1:-1].strip() if raw_trimmed.startswith("(") else raw_trimmed[1:].strip()
+            if note and len(header_comments) < 10:
+                header_comments.append(" ".join(note.split())[:240])
+            continue
         line = _clean(raw)
         if not line or line == "%":
             continue
@@ -185,6 +199,8 @@ def parse_gcode(text: str, path: Path | None = None) -> GCodeProgram:
         tuple(segments),
         Bounds(minimum, maximum),
         estimated_seconds,
+        source_sha256 or hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        tuple(header_comments),
     )
 
 

@@ -1,5 +1,6 @@
 param(
-    [switch]$ShortcutOnly
+    [switch]$ShortcutOnly,
+    [string]$DataRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +19,7 @@ if (-not $ShortcutOnly) {
     $venvPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
     & $venvPython -m pip install --upgrade pip
     & $venvPython -m pip install -r (Join-Path $projectRoot "requirements-dev.txt")
+    & $venvPython -m pip install --no-deps --editable $projectRoot
 }
 
 $desktop = [Environment]::GetFolderPath("Desktop")
@@ -31,6 +33,10 @@ $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $pythonw
 $shortcut.Arguments = '"' + (Join-Path $projectRoot "run.py") + '"'
+if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+    $selectedDataRoot = [System.IO.Path]::GetFullPath($DataRoot)
+    $shortcut.Arguments += ' --data-root "' + $selectedDataRoot + '"'
+}
 $shortcut.WorkingDirectory = $projectRoot
 $shortcut.Description = "Launch Pine CNC Studio"
 $shortcut.IconLocation = (Join-Path $projectRoot "src\ttc3018_control\qt\assets\pine.ico") + ",0"

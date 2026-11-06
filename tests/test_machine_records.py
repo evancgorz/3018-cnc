@@ -35,6 +35,18 @@ def test_legacy_work_zero_can_be_restricted_to_its_migrated_machine(tmp_path: Pa
     assert store.load("other") is None
 
 
+def test_work_zero_store_round_trips_partial_axis_confirmation(tmp_path: Path) -> None:
+    store = WorkZeroStore(tmp_path / "work-zero.json")
+    partial = SavedWorkZero(12, 34, 56, frozenset("XY"))
+
+    store.save(partial, "machine")
+
+    loaded = WorkZeroStore(store.path).load("machine")
+    assert loaded == partial
+    assert loaded is not None
+    assert loaded.confirmed_axes == frozenset("XY")
+
+
 def test_generic_machine_record_store_isolated_and_atomic(tmp_path: Path) -> None:
     store = MachineRecordStore(tmp_path / "commissioning.json")
     store.save("a", {"status": "commissioned"})

@@ -27,7 +27,7 @@ declaration therefore supports `disabled`, `reset_only`, `feedback_only`, and
 manual recovery. A latched event stops scheduling, requests spindle-off/hold
 when possible, invalidates reference/work-zero trust, and blocks motion,
 probing, homing, and restart until the input is released, the controller is
-known Idle, and the user explicitly resets and re-references. Contradictory,
+known Idle, and the user explicitly resets and re-homes. Contradictory,
 missing, or stale feedback fails closed. The twin can inject these transitions
 for deterministic tests; it never emits a real reset or GPIO write.
 

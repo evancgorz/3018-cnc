@@ -4,19 +4,19 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    property var palette: ({ accent: "#168BFF", text: "#F2F4F7", muted: "#A8AFBA" })
-    readonly property color accentColor: palette && palette.accent ? palette.accent : "#168BFF"
-    readonly property color textColor: palette && palette.text ? palette.text : "#F2F4F7"
-    readonly property color mutedColor: palette && palette.muted ? palette.muted : "#A8AFBA"
+    property var palette: ({ accent: "#0A84FF", text: "#F5F5F7", muted: "#AEAEB2" })
+    readonly property color accentColor: palette && palette.accent ? palette.accent : "#0A84FF"
+    readonly property color textColor: palette && palette.text ? palette.text : "#F5F5F7"
+    readonly property color mutedColor: palette && palette.muted ? palette.muted : "#AEAEB2"
     property bool active: false
     property string name: ""
     property string phase: ""
     property real progress: 0
     visible: active
     implicitHeight: 38
-    radius: 9
-    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.12)
-    border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.42)
+    radius: 12
+    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.10)
+    border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.30)
     border.width: 1
     RowLayout {
         anchors.fill: parent

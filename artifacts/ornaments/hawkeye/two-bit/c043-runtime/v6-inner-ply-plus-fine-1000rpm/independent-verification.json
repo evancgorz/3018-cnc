@@ -1,0 +1,48 @@
+{
+  "result": "passed",
+  "scope": "NC hashes, emitted sweep coverage, app parser, bounds, feeds, depths, spindle commands, SVG preview and estimated timing",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "gcodeSha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1",
+  "previewSvgSha256": "63a552455da2cdabeae06c7b87dfecc39c1891f97bf3c9556751fed26c4ab9c9",
+  "generatorSha256": "3dcc1fa513176e3c86b849e932bd8dabe11686d7c142aaf67f23ad0466084b85",
+  "depthPassesMm": [
+    -0.6,
+    -1.2,
+    -1.625,
+    -0.04
+  ],
+  "cutFeedMmPerMin": 600,
+  "plungeFeedMmPerMin": 160,
+  "spindleRpm": 1000,
+  "controlCommands": {
+    "m5": 1,
+    "m3": 1,
+    "m6": 0,
+    "program_end": 1
+  },
+  "lineCount": 265593,
+  "estimatedMinutes": 94.363,
+  "availableBlackOmittedMm2Recomputed": 16.0026,
+  "availableBlackOmittedPercentRecomputed": 0.664,
+  "streamSweepsContainedInApprovedArt": true,
+  "rapidXYClearanceMm": 3.0,
+  "parserBoundsMm": {
+    "minimum": [
+      0.0,
+      0.0,
+      -1.625
+    ],
+    "maximum": [
+      98.9343,
+      98.1448,
+      3.0
+    ]
+  },
+  "hashesVerified": [
+    "baseCandidate",
+    "gcode",
+    "preview",
+    "previewPng",
+    "generator"
+  ]
+}

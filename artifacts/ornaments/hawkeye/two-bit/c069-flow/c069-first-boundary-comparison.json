@@ -1,0 +1,41 @@
+{
+  "result": "passed",
+  "priorC058Sha256": "a9f17459b112c1324cb082b58471d2ca9174569aca59b04f71723fbaacee474d",
+  "candidateSha256": "bef0b50e8b65cd1008854b701d500b508b5ae7334267454786f6aae31372b9a8",
+  "depths": {
+    "-1.625": {
+      "pathCountSame": true,
+      "onlyPath0Changed": true,
+      "firstEndpointsPreserved": true
+    },
+    "-1.2": {
+      "pathCountSame": true,
+      "onlyPath0Changed": true,
+      "firstEndpointsPreserved": true
+    },
+    "-0.6": {
+      "pathCountSame": true,
+      "onlyPath0Changed": true,
+      "firstEndpointsPreserved": true
+    },
+    "-0.04": {
+      "pathCountSame": true,
+      "onlyPath0Changed": true,
+      "firstEndpointsPreserved": true
+    }
+  },
+  "changedPathIndexesByDepth": {
+    "-1.625": [
+      0
+    ],
+    "-1.2": [
+      0
+    ],
+    "-0.6": [
+      0
+    ],
+    "-0.04": []
+  },
+  "finePathUnchanged": true,
+  "allBroadLevelsChangeSameFirstPath": true
+}

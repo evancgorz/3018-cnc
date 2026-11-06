@@ -1,0 +1,48 @@
+{
+  "result": "rejected: added omission exceeds 10 mm2 limit",
+  "candidatePath": "artifacts/ornaments/hawkeye/two-bit/c069-flow/01-detail-c069-smoothed-675-120-review-only.nc",
+  "candidateSha256": "3a8dcbcdbe5ef0af0776aa1661cfc8df2d2ac9f27b914e3102fb86a0fbf5d392",
+  "settings": {
+    "cutFeedMmPerMin": 675,
+    "plungeFeedMmPerMin": 120,
+    "broadDepthsMm": [
+      -0.6,
+      -1.2,
+      -1.625
+    ],
+    "fineDepthMm": -0.04,
+    "fineGeometryChanged": false
+  },
+  "comparisonVsC058": {
+    "segments": [
+      88676,
+      87134
+    ],
+    "medianSegmentMm": [
+      0.1435,
+      0.1435
+    ],
+    "junctionsAtLeast90Deg": [
+      75136,
+      66631
+    ],
+    "approvedBlackOmittedMm2": [
+      23.602943864525756,
+      76.88741213016895
+    ],
+    "additionalOmissionMm2": 53.28446826564319
+  },
+  "comparisonVsC057": {
+    "approvedBlackOmittedMm2": [
+      16.426446117012937,
+      76.88741213016895
+    ],
+    "additionalOmissionMm2": 60.46096601315601
+  },
+  "checks": {
+    "fullDiameterSweepWithinApprovedArtwork": true,
+    "depthsAndOperationOrderValidatedBeforeOmissionGate": true,
+    "status": "coverage gate failed"
+  },
+  "method": "Locally guarded weighted-average smoothing over all broad paths, followed by 0.02 mm guarded RDP. The output G-code was written offline; generator intentionally stops at the 10 mm2 omission gate."
+}

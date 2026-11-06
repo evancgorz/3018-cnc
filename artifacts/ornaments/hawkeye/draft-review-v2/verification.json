@@ -1,0 +1,14 @@
+{
+  "parser": "passed",
+  "rapid_clearance": "passed",
+  "nonnegative_XY": "passed",
+  "maximum_line_bytes": 31,
+  "no_spindle_start_or_toolchange": true,
+  "source_hash_matches": true,
+  "generator_sha256": "d1b69170dd9f396478b754643530b87adf65842eb779fe46ba3367c1cc2556d3",
+  "files_sha256": {
+    "engraving.nc": "a46059b2ea182fe9f7da5717ba14d4623a8497e0bdaa6d722efc3b559cfa2f0b",
+    "report.json": "69102214a63a3058a275a4ece895e853a75b4a2248ff343b0fbc8764e8cc1c53",
+    "engraving-preview.svg": "3a1a827c578e55d8f1e4403118d1e00e2380f3760866e15587da5d1df3110184"
+  }
+}

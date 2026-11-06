@@ -1,0 +1,25 @@
+{
+  "result": "passed-with-hybrid-infeasible",
+  "endmillFeasibility": "rejected: 3.175 mm conservative cutter inset is empty",
+  "nominalEndmillCenterAccessibleAreaMm2": 0.0,
+  "toolSensitivityAreaMm2": {
+    "3.0": 0.13124699529105582,
+    "2.8": 0.6353599963838766,
+    "2.5": 2.2911849545938168,
+    "2.0": 25.58249428167023,
+    "1.5": 215.42487378548216,
+    "1.0": 680.3322258744056
+  },
+  "comparisonFileSha256": "f38e959b21c83df37ca339e011a7d347516e2d3acccf41299060352bd2fa730b",
+  "comparisonCommands": 107517,
+  "comparisonNominalMinutes": 89.8519566500801,
+  "comparisonBoundsMm": {"min": [0.0, 0.0, -1.625], "max": [98.9343, 98.1448, 3.0]},
+  "checks": {
+    "exactGcodeParsed": true,
+    "exactFileHashMatchedC069Report": true,
+    "fullDiameterSweepAndCoverageMatchedExistingVerification": true,
+    "endmillMotionFileOmittedBecauseNoContainedPaths": true,
+    "reviewOnlyNoPhysicalReadinessClaim": true,
+    "noGuiBackendOrHardwareInteraction": true
+  }
+}

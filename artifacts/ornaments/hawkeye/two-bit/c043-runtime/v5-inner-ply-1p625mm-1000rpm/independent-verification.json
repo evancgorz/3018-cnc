@@ -1,0 +1,44 @@
+{
+  "result": "passed",
+  "scope": "offline artifact hashes, parser, bounds, feeds, pass depths, timing and safety commands",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "gcodeSha256": "2b1489bb011e52ddc9b34e4cb5167dc413dadfcca9f8c3dbb19c145269607df3",
+  "previewSvgSha256": "5e420fe97d07cbb14034c0729706874cf0a72372d4b57b3511b1a7f62307404b",
+  "generatorSha256": "bfd3a2619fdcfee9580e7a8559ff0057f911bf4ad994cb71be92549cd43a1408",
+  "gcodeParses": true,
+  "nonnegativeWorkXY": true,
+  "rapidXYClearanceMm": 3.0,
+  "parserBoundsMm": {
+    "minimum": [
+      0.0,
+      0.0,
+      -1.625
+    ],
+    "maximum": [
+      98.5095,
+      97.72,
+      3.0
+    ]
+  },
+  "depthPassesMm": [
+    -0.6,
+    -1.2,
+    -1.625
+  ],
+  "cutFeedMmPerMin": 600,
+  "plungeFeedMmPerMin": 160,
+  "controlCommands": {
+    "m5": 1,
+    "m3": 1,
+    "m6": 0,
+    "program_end": 1
+  },
+  "lineCount": 71067,
+  "estimatedMinutes": 46.249,
+  "availableBlackOmittedPercent": 27.697,
+  "hashesVerified": [
+    "gcode",
+    "preview",
+    "generator"
+  ]
+}

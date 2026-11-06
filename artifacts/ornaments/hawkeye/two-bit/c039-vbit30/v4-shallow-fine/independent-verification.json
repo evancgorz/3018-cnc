@@ -1,0 +1,50 @@
+{
+  "result": "passed",
+  "scope": "offline artifact integrity, G-code parse, coordinate and command checks",
+  "tool": {
+    "type": "assumed 30 degree included-angle V-bit with 0.1 mm flat tip",
+    "includedAngleDeg": 30.0,
+    "tipDiameterMm": 0.1,
+    "tipDiameterVerified": false,
+    "runoutVerified": false,
+    "spindleStartupIncluded": false,
+    "automaticToolchangeIncluded": false
+  },
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "commands": {
+    "rebuild": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c039-vbit30/v4-shallow-fine/prepare-detail-vbit30-shallowfine.py",
+    "verify": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c039-vbit30/v4-shallow-fine/verify-review.py"
+  },
+  "gcodeSha256": "b4f1a7281d9542689041bad40c9ee600fbcddd2275038a156165b7c954c5518b",
+  "previewSvgSha256": "97849c73a1dfaf2f45944096b60306b4b63a17659b4c6a04cc7f8be19b0cd751",
+  "sourceSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+  "gcodeParses": true,
+  "nonnegativeWorkXY": true,
+  "rapidXYClearanceMm": 3.0,
+  "controlCommands": {
+    "m5": 2,
+    "m3": 0,
+    "m6": 0,
+    "program_end": 1
+  },
+  "lineCount": 178947,
+  "estimatedMinutes": 189.197,
+  "availableBlackOmittedPercent": 1.707,
+  "hashesVerified": [
+    "source",
+    "gcode",
+    "preview"
+  ],
+  "generatorOfflineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolNoM3NoM6": true,
+    "initialAndFinalM5": true,
+    "oneFinalProgramEnd": true,
+    "allSweepsInsideStock": true,
+    "coarseAndFineSweepsInsideApprovedBlack": true,
+    "holeKeepoutPreserved": true,
+    "fineStageTargetIsDerivedFromCoarseResidual": true
+  }
+}

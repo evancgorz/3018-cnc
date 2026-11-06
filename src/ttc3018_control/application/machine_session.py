@@ -34,6 +34,8 @@ class MachineSession:
     work_offset: Position | None = None
     work_zero_confirmed: bool = False
     awaiting_work_zero_report: bool = False
+    confirmed_work_zero_axes: frozenset[str] = field(default_factory=frozenset)
+    pending_work_zero_axes: str = ""
 
     @property
     def machine_position(self) -> Position | None:
@@ -59,8 +61,7 @@ class MachineSession:
         if status.work_offset is not None:
             self.work_offset = status.work_offset
             if self.awaiting_work_zero_report and confirm_pending_work_zero:
-                self.work_zero_confirmed = True
-                self.awaiting_work_zero_report = False
+                self.confirm_work_zero_axes(self.pending_work_zero_axes or "XYZ")
 
     def clear_status(self, *, retain_work_zero: bool = False) -> None:
         """Require a fresh GRBL report before motion can be accepted again."""
@@ -69,6 +70,8 @@ class MachineSession:
         self.work_offset = None
         self.work_zero_confirmed = False
         self.awaiting_work_zero_report = retain_work_zero and had_confirmed_work_zero
+        self.confirmed_work_zero_axes = frozenset("XYZ") if retain_work_zero and had_confirmed_work_zero else frozenset()
+        self.pending_work_zero_axes = "XYZ" if self.awaiting_work_zero_report else ""
 
     def establish_reference(self) -> ActionOutcome:
         if not self.can_move:
@@ -91,18 +94,30 @@ class MachineSession:
             return ActionOutcome(False, "Select at least one work-zero axis.")
         if self.status is None or not self.status.can_jog:
             return ActionOutcome(False, "GRBL must be Idle before changing work zero.")
-        # Any axis update makes the previously confirmed XYZ origin stale. A
-        # fresh WCO report is required before a job or automatic return move.
+        # Each axis has its own fresh WCO acknowledgement. An individual
+        # update preserves previously confirmed axes; an XYZ request starts a
+        # complete new acknowledgement set.
         self.work_offset = None
-        self.invalidate_work_zero()
         if normalized == "XYZ":
-            self.awaiting_work_zero_report = True
-            return ActionOutcome(True, "Waiting for GRBL to report the updated XYZ work offset.")
-        return ActionOutcome(True, f"{normalized} work zero requested.")
+            self.confirmed_work_zero_axes = frozenset()
+        self.work_zero_confirmed = False
+        self.pending_work_zero_axes = normalized
+        self.awaiting_work_zero_report = True
+        return ActionOutcome(True, f"Waiting for GRBL to report the updated {normalized} work offset.")
 
-    def invalidate_work_zero(self) -> None:
+    def confirm_work_zero_axes(self, axes: str) -> None:
+        normalized = frozenset(axis for axis in "XYZ" if axis in axes.upper())
+        self.confirmed_work_zero_axes = frozenset(set(self.confirmed_work_zero_axes) | set(normalized))
+        self.pending_work_zero_axes = ""
+        self.awaiting_work_zero_report = False
+        self.work_zero_confirmed = self.confirmed_work_zero_axes >= frozenset("XYZ")
+
+    def invalidate_work_zero(self, reason: str | None = None, *, clear_axes: bool = True) -> None:
         self.work_zero_confirmed = False
         self.awaiting_work_zero_report = False
+        self.pending_work_zero_axes = ""
+        if clear_axes:
+            self.confirmed_work_zero_axes = frozenset()
 
     def check_jog(self, axis: str, distance_mm: float) -> ActionOutcome:
         if not self.can_move:

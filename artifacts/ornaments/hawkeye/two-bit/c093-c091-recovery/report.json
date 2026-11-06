@@ -1,0 +1,25 @@
+{
+  "source": "C:\\Github\\3018-cnc\\artifacts\\ornaments\\hawkeye\\two-bit\\c091-approved-raised-plane\\01-approved-raised-plane-full-detail-test.nc",
+  "source_sha256": "2cba53849eeb5e7b255fdeb1d7fd332c71205d2b3c710882260f3fe9a85583e9",
+  "accepted_bookmark": 8603,
+  "sent_commands": 8619,
+  "rewind_commands_minimum": 32,
+  "first_included_source_command": 8435,
+  "boundary_commands": [
+    "G0 Z3.0000",
+    "G0 X12.0661 Y53.5369",
+    "G0 Z0.2000",
+    "G1 Z-1.2000 F120.0000"
+  ],
+  "output": "C:\\Github\\3018-cnc\\artifacts\\ornaments\\hawkeye\\two-bit\\c093-c091-recovery\\01-c091-continuation-before-8603.nc",
+  "output_sha256": "133176a0a293f363095f291aefa7d77fdf9a8da6a2f247bd6b5b3572824574b9",
+  "commands": 69463,
+  "depths": [
+    -1.625,
+    -1.2,
+    -0.04
+  ],
+  "nominal_minutes": 53.02245813222316,
+  "checks": "pass: exact executable suffix, safe entry, parse, bounds, depths, safe rapids, final M5/M2",
+  "note": "Accepted count is not physical progress; re-cuts overlap before uncertain buffered region. Geometry inherits exact verified C091 suffix."
+}

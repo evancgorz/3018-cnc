@@ -61,7 +61,8 @@ def test_axis_only_probe_waits_for_fresh_wco_before_safe_retract() -> None:
     service.observe_status(GrblStatus("Idle", machine_position=Position(10, 10, 16), pins=""))
     service.handle_response("[PRB:10,10,14:1]")
     service.handle_response("ok")
-    assert sent[-1] == b"G10 L20 P1 Z1.5\n"
+    assert sent[-1] == b"G10 L2 P1 Z12.5\n"
+    assert service.expected_offset_z == 12.5
     assert service.state is ProbeState.APPLY_OFFSET
     service.handle_response("ok")
     assert service.state is ProbeState.CONFIRM_OFFSET
@@ -69,3 +70,17 @@ def test_axis_only_probe_waits_for_fresh_wco_before_safe_retract() -> None:
     assert sent[-1] == b"G91 G21 G1 Z2 F25\n"
     service.handle_response("ok")
     assert service.state is ProbeState.COMPLETE
+
+
+def test_positive_probe_retracts_away_from_contact() -> None:
+    sent = []
+    service = ProbingService(ready_session(), Grbl11Adapter(), sent.append)
+    positive_plan = ProbePlan(
+        "Z", 5, 2, 1, 5, 100, 25, 25, 1, Position(10, 10, 0),
+        retract_direction=-1,
+    )
+    assert service.start(positive_plan, connected=True, spindle_off=True).accepted
+    assert sent[-1] == b"G91 G21 G38.2 Z5 F100\n"
+    service.handle_response("[PRB:10,10,25:1]")
+    service.handle_response("ok")
+    assert sent[-1] == b"G91 G21 G1 Z-1 F25\n"

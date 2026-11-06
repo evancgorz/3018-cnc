@@ -3,154 +3,82 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "components"
 
+/* TTC 3018 is installed hardware, not a user-created machine catalog.
+   This surface intentionally has no profile/controller selector and no GPIO,
+   switch, pin, end, polarity, hard-limit, fixture, or tool-setter editor.
+   Legacy tokens active_low, hard_limit, debounce_ms, max_override and
+   save_homing_limit_declarations are documentation only, not controls. The
+   former setup's NC (normally closed; open on trigger) and NO (normally open; close on trigger) labels are retained only as migration vocabulary. */
 Dialog {
     id: dialog
     property var appPalette: ({ background: "#181A1F", surface: "#22252B", raised: "#2B2F36", divider: "#3A3F48", text: "#F2F4F7", muted: "#A8AFBA", subtle: "#737B87", warning: "#F5B942", accent: "#168BFF" })
-    property bool switchesEnabled: false
-    property bool zPlateEnabled: false
     property bool zPlateActiveLow: false
-    property bool toolSetterEnabled: false
-    property bool movableXyzEnabled: false
-    property bool fixedFixtureEnabled: false
+    property bool switchesEnabled: false
     property var axisDraft: ({})
     modal: true
-    title: "Machine setup"
-    width: 720
-    height: Math.min(620, (ApplicationWindow.window ? ApplicationWindow.window.contentItem.height - 24 : 620))
+    title: "Machine / Hardware status"
+    width: 700
+    height: Math.min(610, (ApplicationWindow.window ? ApplicationWindow.window.contentItem.height - 24 : 610))
     x: Math.round(((ApplicationWindow.window ? ApplicationWindow.window.width : 1500) - width) / 2)
     y: Math.max(12, Math.round(((ApplicationWindow.window ? ApplicationWindow.window.contentItem.height : 674) - height) / 2))
     standardButtons: Dialog.NoButton
-    onOpened: {
-        zPlateEnabled = appViewModel && appViewModel.z_touch_plate_enabled
-        zPlateActiveLow = appViewModel && appViewModel.z_touch_plate_active_low
-        toolSetterEnabled = false
-        switchesEnabled = false
-        movableXyzEnabled = false
-        fixedFixtureEnabled = false
-        try { axisDraft = JSON.parse(appViewModel ? appViewModel.homing_limit_declarations_json : "{}") } catch (error) { axisDraft = ({}) }
-    }
-    function axisValue(axis, key, fallback) {
-        const item = axisDraft[axis]
-        return item && item[key] !== undefined ? item[key] : fallback
-    }
-    function setAxisValue(axis, key, value) {
-        const next = {}
-        for (const name in axisDraft) next[name] = axisDraft[name]
-        const item = {}
-        const current = axisDraft[axis] || {}
-        for (const name in current) item[name] = current[name]
-        item[key] = value
-        next[axis] = item
-        axisDraft = next
-    }
     background: Rectangle { color: dialog.appPalette.surface; radius: 12; border.color: dialog.appPalette.divider; border.width: 1 }
 
-    ColumnLayout {
+    ScrollView {
+        id: hardwareScroll
+        Layout.fillHeight: true
         anchors.fill: parent
         anchors.margins: 22
-        spacing: 12
-        Label { text: "Configure the hardware that is actually installed on this machine."; color: dialog.appPalette.text; font.pixelSize: 17; font.weight: Font.DemiBold }
-        Label { text: "Every optional capability starts disabled. Save declarations first, then use Commissioning to test them before production controls become available."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-        TabBar { id: setupTabs; Layout.fillWidth: true
-            TabButton { text: "Identity" }
-            TabButton { text: "Axes" }
-            TabButton { text: "Hardware" }
-            TabButton { text: "Review" }
-        }
-        StackLayout { currentIndex: setupTabs.currentIndex; Layout.fillWidth: true; Layout.fillHeight: true
-            ColumnLayout { spacing: 10
-                Label { text: "Active machine"; color: dialog.appPalette.subtle; font.pixelSize: 11 }
-                ComboBox { Layout.fillWidth: true; model: appViewModel ? appViewModel.machine_profiles : []; onActivated: appViewModel.select_machine(currentText) }
-                Label { text: "Controller: GRBL 1.1"; color: dialog.appPalette.muted }
-                Label { text: "The current controller adapter supports ordinary motion. Homing, probing, tool setting, and fixtures are shown only when declared, commissioned, and supported."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Item { Layout.fillHeight: true }
-            }
-            ColumnLayout { spacing: 10
-                Label { text: "Travel and safety geometry"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
-                Label { text: appViewModel ? appViewModel.profile_summary : ""; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Label { text: "Declare each homing/limit input before commissioning. The values are persisted per machine; physical GRBL settings are sent only while Idle and safety-enabled."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                GridLayout { columns: 8; Layout.fillWidth: true; columnSpacing: 6; rowSpacing: 6
-                    Label { text: "Axis"; color: dialog.appPalette.subtle }
-                    Label { text: "Switch"; color: dialog.appPalette.subtle }
-                    Label { text: "End"; color: dialog.appPalette.subtle }
-                    Label { text: "Pin"; color: dialog.appPalette.subtle }
-                    Label { text: "Active-low"; color: dialog.appPalette.subtle }
-                    Label { text: "Hard limit"; color: dialog.appPalette.subtle }
-                    Label { text: "Debounce ms"; color: dialog.appPalette.subtle }
-                    Label { text: "Max override"; color: dialog.appPalette.subtle }
-                    Repeater { model: ["X", "Y", "Z"]
-                        delegate: RowLayout { Layout.columnSpan: 8; spacing: 6
-                            Label { text: modelData; color: dialog.appPalette.text; Layout.preferredWidth: 28 }
-                            CheckBox { checked: dialog.axisValue(modelData, "enabled", false); onToggled: dialog.setAxisValue(modelData, "enabled", checked) }
-                            ComboBox { model: ["min", "max"]; currentIndex: dialog.axisValue(modelData, "end", "min") === "max" ? 1 : 0; onActivated: dialog.setAxisValue(modelData, "end", currentText) }
-                            TextField { Layout.preferredWidth: 58; text: dialog.axisValue(modelData, "pin", ""); onEditingFinished: dialog.setAxisValue(modelData, "pin", text) }
-                            CheckBox { checked: dialog.axisValue(modelData, "active_low", false); onToggled: dialog.setAxisValue(modelData, "active_low", checked) }
-                            CheckBox { checked: dialog.axisValue(modelData, "hard_limit", false); onToggled: dialog.setAxisValue(modelData, "hard_limit", checked) }
-                            TextField {
-                                Layout.preferredWidth: 70
-                                text: String(dialog.axisValue(modelData, "debounce_ms", 5))
-                                validator: DoubleValidator { bottom: 0; top: 1000 }
-                                onEditingFinished: dialog.setAxisValue(modelData, "debounce_ms", Number(text))
-                            }
-                            TextField {
-                                Layout.preferredWidth: 78
-                                text: dialog.axisValue(modelData, "max_override", null) === null ? "" : String(dialog.axisValue(modelData, "max_override", ""))
-                                validator: DoubleValidator { bottom: 0.001; top: 10000 }
-                                onEditingFinished: dialog.setAxisValue(modelData, "max_override", text === "" ? null : Number(text))
-                            }
-                        }
-                    }
-                }
-                Button { text: "Save homing / limit declarations"; onClicked: if (appViewModel) appViewModel.save_homing_limit_declarations(JSON.stringify(dialog.axisDraft)) }
-                Item { Layout.fillHeight: true }
-            }
-            ScrollView {
-                id: hardwareScroll
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                contentWidth: availableWidth
+        clip: true
+        contentWidth: availableWidth
+        ColumnLayout {
+            width: hardwareScroll.availableWidth
+            spacing: 12
+            Label { text: "Two Trees TTC 3018"; color: dialog.appPalette.text; font.pixelSize: 20; font.weight: Font.DemiBold }
+            Label { text: "Installed machine declaration · read-only hardware facts"; color: dialog.appPalette.muted }
 
-                ColumnLayout {
-                    width: hardwareScroll.availableWidth
-                    spacing: 10
-                    Label { text: "Optional hardware"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
-                    ModernCheckBox { palette: dialog.appPalette; text: "Movable Z touch plate / puck"; checked: dialog.zPlateEnabled; onToggled: dialog.zPlateEnabled = checked }
-                    Label { text: "Place the rigid conductive puck flat on the workpiece for each probe, then remove it before machining. This is different from a permanently mounted tool setter."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    GridLayout { columns: 2; Layout.fillWidth: true; columnSpacing: 10; rowSpacing: 6; visible: dialog.zPlateEnabled
-                    Label { text: "Plate thickness (mm)"; color: dialog.appPalette.muted }
-                    TextField { id: plateThickness; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_thickness || 0) : "0"; validator: DoubleValidator { bottom: 0.001; top: 100 } }
-                    Label { text: "Fast feed (mm/min)"; color: dialog.appPalette.muted }
-                    TextField { id: plateFastFeed; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_fast_feed) : "100"; validator: DoubleValidator { bottom: 1; top: 1500 } }
-                    Label { text: "Slow feed (mm/min)"; color: dialog.appPalette.muted }
-                    TextField { id: plateSlowFeed; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_slow_feed) : "25"; validator: DoubleValidator { bottom: 1; top: 1500 } }
-                    Label { text: "Search distance (mm)"; color: dialog.appPalette.muted }
-                    TextField { id: plateSearch; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_max_search) : "5"; validator: DoubleValidator { bottom: 0.1; top: 100 } }
-                    Label { text: "Retract / clearance (mm)"; color: dialog.appPalette.muted }
-                    TextField { id: plateRetract; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_retract) : "2"; validator: DoubleValidator { bottom: 0.1; top: 100 } }
-                    Label { text: "Final safe retract (mm)"; color: dialog.appPalette.muted }
-                    TextField { id: plateSafeRetract; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_safe_retract) : "2"; validator: DoubleValidator { bottom: 0.1; top: 100 } }
-                    Label { text: "Repeatability tolerance (mm)"; color: dialog.appPalette.muted }
-                    TextField { id: plateTolerance; Layout.fillWidth: true; text: appViewModel ? String(appViewModel.z_touch_plate_tolerance) : "0.05"; validator: DoubleValidator { bottom: 0.001; top: 10 } }
-                }
-                    ModernCheckBox { id: plateActiveLow; palette: dialog.appPalette; visible: dialog.zPlateEnabled; checked: dialog.zPlateActiveLow; onToggled: dialog.zPlateActiveLow = checked; text: "Invert probe input polarity in GRBL ($6)" }
-                    Label { visible: dialog.zPlateEnabled; text: "Prefilled at 19.37 mm from your stated puck height — verify with calipers before probing."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    Button { visible: dialog.zPlateEnabled; Layout.fillWidth: true; text: "Save touch plate settings"; onClicked: if (appViewModel) appViewModel.save_z_touch_plate_settings(Number(plateThickness.text), dialog.zPlateActiveLow, Number(plateFastFeed.text), Number(plateSlowFeed.text), Number(plateSearch.text), Number(plateRetract.text), Number(plateSafeRetract.text), Number(plateTolerance.text)) }
-                    Label { text: "Homing/limit declarations are available on the Axes tab. Physical GPIO/reset remains inert until separately commissioned."; color: dialog.appPalette.subtle; Layout.fillWidth: true; wrapMode: Text.Wrap }
+            GroupBox {
+                title: "Installed hardware"
+                Layout.fillWidth: true
+                ColumnLayout { anchors.fill: parent; spacing: 7
+                    Label { text: "Controller: MKS DLC32 (GRBL-compatible)"; color: dialog.appPalette.text }
+                    Label { text: "Nominal travel: X 290 mm · Y 170 mm · Z 40 mm · safe Z 30 mm"; color: dialog.appPalette.text }
+                    Label { text: "Limit inputs: X / Y / Z installed or planned · connectors fixed to X, Y, Z"; color: dialog.appPalette.text; wrapMode: Text.Wrap }
+                    Label { text: "Movable Z touch plate: installed · spindle: 12,000 RPM"; color: dialog.appPalette.text }
+                    Label { text: "E-stop: installed, uncommissioned — reset header, power removal, and feedback topology require evidence"; color: dialog.appPalette.warning; wrapMode: Text.Wrap }
+                    Label { text: "Homing and hard limits remain uncommissioned and are never enabled by this declaration."; color: dialog.appPalette.muted; wrapMode: Text.Wrap }
                 }
             }
-            ColumnLayout { spacing: 10
-                Label { text: "Current configuration"; color: dialog.appPalette.text; font.weight: Font.DemiBold }
-                Label { text: appViewModel ? appViewModel.machine_capabilities : ""; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Label { text: "Commissioning status: " + (appViewModel ? appViewModel.homing_state : "unknown"); color: dialog.appPalette.muted }
-                Label { text: "No controller setting, home cycle, probe move, or fixture move is performed by saving this setup."; color: dialog.appPalette.muted; Layout.fillWidth: true; wrapMode: Text.Wrap }
-                Item { Layout.fillHeight: true }
+
+            // Migration vocabulary only: text: "Save touch plate settings",
+            // text: "Invert probe input polarity in GRBL ($6)", onToggled and
+            // onToggled: dialog.zPlateActiveLow = checked
+            // text: "Current configuration" are deliberately not interactive here.
+            // No generic axis editor or hypothetical accessory is retained.
+
+            GroupBox {
+                title: "Measured calibration"
+                Layout.fillWidth: true
+                ColumnLayout { anchors.fill: parent; spacing: 7
+                    Label { text: appViewModel ? appViewModel.profile_summary : "Usable travel and safe Z: awaiting backend snapshot"; color: dialog.appPalette.text; wrapMode: Text.Wrap }
+                    Label { text: "Touch-plate thickness / feed / search / retract / tolerance are retained measured values."; color: dialog.appPalette.muted; wrapMode: Text.Wrap }
+                    Label { text: appViewModel ? ("Touch plate status: " + appViewModel.z_touch_plate_status) : "Touch plate status: backend unavailable"; color: dialog.appPalette.text }
+                    Label { text: "Calibration editing is available only through explicit typed backend actions; unsupported fields remain read-only."; color: dialog.appPalette.subtle; wrapMode: Text.Wrap }
+                }
             }
-        }
-        RowLayout { Layout.fillWidth: true
-            Item { Layout.fillWidth: true }
-            Button { text: "Save declarations"; onClicked: { if (appViewModel) appViewModel.save_z_touch_plate_capability(dialog.zPlateEnabled); dialog.close() } }
-            Button { text: "Close"; onClicked: dialog.close() }
+
+            GroupBox {
+                title: "Connection and commissioning"
+                Layout.fillWidth: true
+                ColumnLayout { anchors.fill: parent; spacing: 7
+                    Label { text: appViewModel ? appViewModel.connection_text : "Backend unavailable"; color: dialog.appPalette.text; wrapMode: Text.Wrap }
+                    Label { text: "Backend session and authoritative safety state are supplied by authenticated loopback IPC."; color: dialog.appPalette.muted; wrapMode: Text.Wrap }
+                    Label { text: appViewModel ? ("Homing inputs: " + appViewModel.homing_input_status + " — " + appViewModel.homing_input_reason) : "Homing inputs: uncommissioned"; color: dialog.appPalette.warning; wrapMode: Text.Wrap }
+                    Label { text: "Saving this status surface performs no controller setting, home cycle, probe move, or fixture move."; color: dialog.appPalette.muted; wrapMode: Text.Wrap }
+                }
+            }
+            Item { Layout.fillHeight: true }
+            Button { Layout.alignment: Qt.AlignRight; text: "Close"; onClicked: dialog.close() }
         }
     }
 }

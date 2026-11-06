@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "events": [
+    {
+      "sequence": 1,
+      "time_ns": 0,
+      "kind": "runtime_started",
+      "payload": {
+        "profile": {
+          "schema_version": 1,
+          "travel_x": 290.0,
+          "travel_y": 170.0,
+          "travel_z": 40.0,
+          "safe_z": 30.0,
+          "max_feed_x": 1500.0,
+          "max_feed_y": 1500.0,
+          "max_feed_z": 500.0,
+          "acceleration_x": 600.0,
+          "acceleration_y": 600.0,
+          "acceleration_z": 250.0,
+          "steps_per_mm": 80.0,
+          "initial_x": 0.0,
+          "initial_y": 0.0,
+          "initial_z": 0.0,
+          "default_wco_x": 0.0,
+          "default_wco_y": 0.0,
+          "default_wco_z": 0.0,
+          "spindle_acceleration": 6000.0,
+          "spindle_deceleration": 8000.0,
+          "rx_capacity": 512,
+          "planner_capacity": 15,
+          "stock_resolution": 0.5,
+          "max_stock_cells": 1000000,
+          "tool_radius": 1.5,
+          "tool_length": 20.0,
+          "holder_radius": 6.0,
+          "holder_length": 35.0
+        }
+      },
+      "source": "runtime"
+    },
+    {
+      "sequence": 2,
+      "time_ns": 0,
+      "kind": "initial_idle",
+      "payload": {
+        "state": "Idle"
+      },
+      "source": "application"
+    },
+    {
+      "sequence": 3,
+      "time_ns": 0,
+      "kind": "reference_established",
+      "payload": {},
+      "source": "application"
+    },
+    {
+      "sequence": 4,
+      "time_ns": 0,
+      "kind": "safe_z",
+      "payload": {
+        "machine_z": 30.0
+      },
+      "source": "application"
+    },
+    {
+      "sequence": 5,
+      "time_ns": 0,
+      "kind": "work_zero_confirmed",
+      "payload": {
+        "wco": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 30.0
+        }
+      },
+      "source": "application"
+    },
+    {
+      "sequence": 6,
+      "time_ns": 0,
+      "kind": "collision_job_started",
+      "payload": {},
+      "source": "application"
+    },
+    {
+      "sequence": 7,
+      "time_ns": 5485185500,
+      "kind": "hazard",
+      "payload": {
+        "kind": "spindle_off_entry",
+        "body_a": "cutter",
+        "body_b": "stock",
+        "message": "Cutter enters stock with spindle off"
+      },
+      "source": "backend"
+    },
+    {
+      "sequence": 8,
+      "time_ns": 0,
+      "kind": "first_contact_interlock",
+      "payload": {
+        "kind": "spindle_off_entry"
+      },
+      "source": "application"
+    },
+    {
+      "sequence": 9,
+      "time_ns": 0,
+      "kind": "evidence_exported",
+      "payload": {
+        "path": "collision.json"
+      },
+      "source": "application"
+    },
+    {
+      "sequence": 10,
+      "time_ns": 0,
+      "kind": "runtime_stopped",
+      "payload": {},
+      "source": "runtime"
+    }
+  ]
+}

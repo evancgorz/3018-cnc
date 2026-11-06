@@ -1,0 +1,26 @@
+{
+  "X": {
+    "enabled": true,
+    "end": "min",
+    "pin": "X1",
+    "wiring": "NC",
+    "hard_limit": false,
+    "debounce_ms": 5.0
+  },
+  "Y": {
+    "enabled": true,
+    "end": "min",
+    "pin": "Y1",
+    "wiring": "NC",
+    "hard_limit": false,
+    "debounce_ms": 5.0
+  },
+  "Z": {
+    "enabled": true,
+    "end": "max",
+    "pin": "Z1",
+    "wiring": "NC",
+    "hard_limit": false,
+    "debounce_ms": 5.0
+  }
+}

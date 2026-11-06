@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "source": {
+    "artPath": "artifacts\\ornaments\\hawkeye\\approved-artwork-reference.png",
+    "artSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "v6NcPath": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-stream-compatible-inner-ply-plus-fine-600-160.nc",
+    "v6NcSha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1",
+    "speedCandidatePath": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-speed-optimized-candidate-450-120.nc",
+    "speedCandidateSha256": "6f0ea17df84e2173e9d254cde1114e5fd0058d5ad8f8586aa8589682aef14c62",
+    "pixelSizeMm": 0.07177033492822966
+  },
+  "candidate": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\c057-fine-microsegments\\01-detail-speed-fine-simplified-450-120-review-only.nc",
+    "sha256": "fd0856cd72fcfa14fee45871f47fe5287b1a398442bc92f09937a5fbe1498995"
+  },
+  "generator": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\c057-fine-microsegments\\optimize-fine-pass.py",
+    "sha256": "b67f65c46fafee8bde8b9430ada753997a2e732c957e7b176afd76ff28ec0e1f"
+  },
+  "geometry": {
+    "pathsBefore": 3645,
+    "pathsAfter": 3645,
+    "pathsSimplified": 1264,
+    "pathsKeptForFullDiameterContainment": 0,
+    "xyVerticesBefore": 183590,
+    "xyVerticesAfter": 109102,
+    "xyMoveSegmentsBefore": 179945,
+    "xyMoveSegmentsAfter": 105457,
+    "xyMoveReductionPercent": 41.394870654922336,
+    "xyVertexReductionPercent": 40.573015959474915,
+    "simplificationToleranceMm": 0.0015,
+    "maximumEmittedCenterlineHausdorffMm": 0.0014965668269805558,
+    "fineDepthMm": -0.04,
+    "fineEffectiveDiameterMm": 0.12143593539448982,
+    "fineBufferRadiusMm": 0.06071796769724491,
+    "fullDiameterConservativeGuardRadiusMm": 0.06073626032331677,
+    "fineSweepBaselineMm2": 785.3981982014557,
+    "fineSweepCandidateMm2": 785.8939288149618,
+    "fineSweepLostFromBaselineMm2": 0.062087333300463725,
+    "fineSweepAddedVsBaselineMm2": 0.5578179467996134,
+    "fineSweepSymmetricDifferenceMm2": 0.6199052801000771,
+    "fineSweepSymmetricDifferencePercent": 0.078928788163717,
+    "combinedApprovedBlackOmittedBaselineMm2": 16.426439572762927,
+    "combinedApprovedBlackOmittedCandidateMm2": 16.426446117012937,
+    "combinedApprovedBlackOmissionChangeMm2": 6.5442500094547995e-06,
+    "fullDiameterConservativeSweepInsideApprovedArtworkAndOutsideKeepout": true,
+    "fullDiameterConservativeSweepInsideStock": true
+  },
+  "motion": {
+    "cutFeedMmPerMin": 450.0,
+    "plungeFeedMmPerMin": 120.0,
+    "spindleRpm": 1000,
+    "depthPassesMm": [
+      -0.6,
+      -1.2,
+      -1.625
+    ],
+    "finePassDepthMm": -0.04,
+    "cuttingXyMoveCount": 158923,
+    "lineCount": 177713,
+    "estimatedMinutes": 118.17874606365623,
+    "speedCandidateEstimatedMinutes": 118.18117340369902,
+    "parserBoundsMm": {
+      "minimum": [
+        0.0,
+        0.0,
+        -1.625
+      ],
+      "maximum": [
+        98.9343,
+        98.1448,
+        3.0
+      ]
+    },
+    "machineCommands": {
+      "m5": 1,
+      "m3": 1,
+      "m4": 0,
+      "m6": 0,
+      "program_end": 1
+    }
+  },
+  "offlineChecks": {
+    "v6AndSpeedCandidateHashesMatchReports": true,
+    "speedCandidateFineGeometryMatchesV6": true,
+    "broadGeometryUnchangedAtEveryDepth": true,
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "fullDiameterFineSweepContainedInArtworkOutsideKeepoutAndStock": true,
+    "fullDiameterSweepComparedByExactSymmetricDifference": true,
+    "combinedApprovedBlackOmissionChangeWithin0p10Mm2": true,
+    "cutFeed450Plunge120": true,
+    "spindleUnchangedAt1000Rpm": true,
+    "singleM3FinalM5M2NoM4M6": true
+  }
+}

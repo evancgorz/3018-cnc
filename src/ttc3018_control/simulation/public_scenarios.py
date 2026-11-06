@@ -28,6 +28,11 @@ class PublicCollisionLifecycleResult:
     trace_path: str
     physical_factory_calls: int
     cleanup_complete: bool
+    seed: int = 20260910
+    configuration: str = ""
+    transport_commands: tuple[str, ...] = ()
+    transitions: tuple[str, ...] = ()
+    expected_outcome: str = ""
     failure: str = ""
 
 
@@ -50,6 +55,11 @@ def _pump(controller: ApplicationController, predicate: Callable[[], bool], *, t
 def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCollisionLifecycleResult:
     """Exercise connect through cleanup using only production app boundaries."""
     physical_factory_calls = 0
+    seed = 20260910
+    configuration = "realtime / Collision-only STEP / owned loopback TCP"
+    transport_commands: list[str] = []
+    transitions: list[str] = []
+    expected_outcome = "one bounded first-contact interlock and failed job"
 
     def forbidden_factory():
         nonlocal physical_factory_calls
@@ -65,6 +75,11 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
     final_work_offset: Position | None = None
     failure = ""
     cleanup_complete = False
+
+    def mark_transition(kind: str, payload: dict | None = None) -> None:
+        transitions.append(kind)
+        controller.record_simulation_event(kind, payload)
+
     try:
         # Keep the fixture bounded for a deterministic acceptance run while
         # retaining the real collision-only STEP provenance/path.
@@ -83,6 +98,30 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
             raise RuntimeError(outcome.message)
         runtime = controller.simulation_runtime
         assert runtime is not None
+        # Capture commands at the transport boundary, after the loopback
+        # connection is established.  This includes ordinary and realtime
+        # commands issued by the production application services.
+        transport = controller.transport
+        if transport is not None:
+            original_send_line = transport.send_line
+            original_send_realtime = transport.send_realtime
+
+            def capture_line(command: bytes, **kwargs) -> None:
+                transport_commands.append(command.decode("ascii", errors="replace").strip())
+                original_send_line(command, **kwargs)
+
+            def capture_realtime(command: bytes) -> None:
+                transport_commands.append(" ".join(f"0x{byte:02X}" for byte in command))
+                original_send_realtime(command)
+
+            transport.send_line = capture_line
+            transport.send_realtime = capture_realtime
+        mark_transition("e5_configuration", {
+            "seed": seed,
+            "transport": "owned-loopback-tcp",
+            "configuration": configuration,
+            "expected_outcome": expected_outcome,
+        })
         _pump(controller, lambda: controller.status is not None and controller.status.state == "Idle")
         # A boot/setup pose is not a motion transition and must never create an
         # incident merely because a stock fixture is present.
@@ -90,22 +129,22 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
         startup_hazard_count = len(runtime.hazards)
         if startup_hazard_count:
             raise AssertionError(f"startup produced {startup_hazard_count} hazard(s)")
-        controller.record_simulation_event("initial_idle", {"state": controller.status.state})
+        mark_transition("initial_idle", {"state": controller.status.state})
 
         if not controller.establish_reference().accepted:
             raise AssertionError("reference establishment was rejected")
-        controller.record_simulation_event("reference_established")
+        mark_transition("reference_established")
         if not controller.move_to(Position(0.0, 0.0, 30.0), 600.0).accepted:
             raise AssertionError("safe-Z move was rejected")
         _pump(controller, lambda: controller.status is not None and controller.status.state == "Idle" and controller.machine_position is not None and controller.machine_position.z == 30.0)
-        controller.record_simulation_event("safe_z", {"machine_z": 30.0})
+        mark_transition("safe_z", {"machine_z": 30.0})
 
         if not controller.set_work_zero("XYZ").accepted:
             raise AssertionError("work-zero request was rejected")
         _pump(controller, lambda: controller.work_zero_confirmed)
         if controller.work_offset != Position(0.0, 0.0, 30.0):
             raise AssertionError(f"unexpected WCO {controller.work_offset}")
-        controller.record_simulation_event("work_zero_confirmed", {"wco": controller.work_offset.__dict__})
+        mark_transition("work_zero_confirmed", {"wco": controller.work_offset.__dict__})
 
         # This generated collision-only program descends from work-Z +5 to -2
         # at the work origin.  With WCO Z=30 it fits the machine envelope and
@@ -114,9 +153,12 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
         fits, reason = controller.preflight()
         if not fits:
             raise AssertionError(reason)
-        if not controller.start_job().accepted:
+        authorization = controller.authorize_job_start(
+            review_acknowledged=True, physical_preflight_confirmed=True,
+        )
+        if not authorization.accepted or not controller.start_authorized_job(authorization.token).accepted:
             raise AssertionError("collision-only job was rejected")
-        controller.record_simulation_event("collision_job_started")
+        mark_transition("collision_job_started")
         _pump(controller, lambda: bool(runtime.hazards) and controller.job_state == "failed", timeout=12.0)
         incident_count = len(runtime.hazards)
         incident_kinds = tuple(hazard.kind.value for hazard in runtime.hazards)
@@ -129,8 +171,13 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
         controller.poll_simulation()
         if len(runtime.hazards) != first_count:
             raise AssertionError("continuous contact produced duplicate incidents")
-        controller.record_simulation_event("first_contact_interlock", {"kind": incident_kinds[0]})
-        controller.record_simulation_event("evidence_exported", {"path": evidence_path.name})
+        mark_transition("first_contact_interlock", {"kind": incident_kinds[0]})
+        mark_transition("evidence_exported", {"path": evidence_path.name})
+        mark_transition("expected_outcome_observed", {
+            "expected": expected_outcome,
+            "observed": "one bounded first-contact interlock and failed job",
+            "transport_commands": tuple(transport_commands),
+        })
         controller.export_simulation_trace(evidence_path)
         if not evidence_path.exists() or not evidence_path.with_suffix(".md").exists():
             raise AssertionError("simulation evidence export did not produce both artifacts")
@@ -156,9 +203,17 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
                 and owned.endpoint is None
             )
         )
+        transitions.append("cleanup_complete")
         if owned is not None and evidence_path.exists():
             # Include the terminal runtime_stopped marker after normal
             # disconnect while retaining the public export path above.
+            last_time_ns = owned.trace.events[-1].time_ns if owned.trace.events else 0
+            owned.trace.record(last_time_ns, "e5_cleanup", {
+                "owned_process_cleanup": cleanup_complete,
+                "backend_stopped": owned.backend is None,
+                "supervisor_stopped": owned.supervisor is None,
+                "endpoint_released": owned.endpoint is None,
+            }, source="application")
             owned.trace.export_json(evidence_path)
             owned.trace.export_markdown(evidence_path.with_suffix(".md"), title="Digital twin lifecycle evidence")
 
@@ -172,5 +227,10 @@ def run_public_collision_lifecycle(root: Path, evidence_path: Path) -> PublicCol
         trace_path=str(evidence_path),
         physical_factory_calls=physical_factory_calls,
         cleanup_complete=cleanup_complete,
+        seed=seed,
+        configuration=configuration,
+        transport_commands=tuple(transport_commands),
+        transitions=tuple(transitions),
+        expected_outcome=expected_outcome,
         failure=failure,
     )

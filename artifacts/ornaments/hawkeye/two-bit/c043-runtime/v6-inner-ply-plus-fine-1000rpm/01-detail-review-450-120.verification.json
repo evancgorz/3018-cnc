@@ -1,0 +1,12 @@
+{
+  "file": "C:\\Github\\3018-cnc\\artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-review-450-120.nc",
+  "sha256": "9bd1419576f09da099a75ecd9ef6abe0079ca086450e9ff127ee0cf0330ca5f3",
+  "source_sha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1",
+  "cut_feed": 450,
+  "plunge_feed": 120,
+  "spindle_command": 1000,
+  "estimated_minutes": 118.99195697637406,
+  "commands": 265578,
+  "geometry_and_other_commands": "unchanged",
+  "release": "offline review; not loaded or started"
+}

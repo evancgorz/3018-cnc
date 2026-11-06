@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "concept": "Workshop plaque on the named plywood and V-bit setup.",
+  "kind": "plaque",
+  "settings": {
+    "title": "PINE",
+    "title_height": 12,
+    "margin": 5,
+    "border": "Rectangle",
+    "depth": 0.2,
+    "max_stepdown": 0.25,
+    "safe_z": 3,
+    "cut_feed": 250,
+    "plunge_feed": 80,
+    "spindle_rpm": null
+  },
+  "setup": {
+    "registry": "../hardware-setups",
+    "id": "plywood-vbit-engraving"
+  }
+}

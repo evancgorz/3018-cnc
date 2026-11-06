@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import logging
+import secrets
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
@@ -16,6 +17,12 @@ from ..application.ux_state import (
     OperationState,
     ReadinessSnapshot,
 )
+from ..application.workflow_projection import (
+    GUIDED_STEP_NAMES,
+    WorkflowObservation,
+    project_workflow,
+)
+from ..application.envelope_projection import EnvelopeMarker, project_machine_position
 from ..gcode import GCodeError
 from ..plaque_engraver import BORDER_STYLES
 from ..grbl import (
@@ -42,12 +49,13 @@ from .ui_preferences import UiPreferences, UiPreferencesStore
 class ControllerViewModel(QObject):
     """Qt-facing controller facade; QML never touches a transport or GRBL command."""
 
+    STATUS_FRESHNESS_SECONDS = 2.0
+
     state_changed = Signal()
     toast_requested = Signal(str)
     confirmation_requested = Signal(str, str, str)
     ports_changed = Signal()
     unreferenced_jog_requested = Signal()
-    close_requested = Signal()
     step_import_completed = Signal(object, str)
     step_model_imported = Signal(str)
     connection_changed = Signal()
@@ -61,30 +69,57 @@ class ControllerViewModel(QObject):
     profiles_changed = Signal()
     live_changed = Signal()
     simulation_changed = Signal()
+    workspace_changed = Signal()
+    auto_connection_failed = Signal(str)
 
-    def __init__(self, application: ApplicationController | None = None, *, auto_connect: bool = False) -> None:
+    def __init__(self, application: ApplicationController | None = None, *, auto_connect: bool = False,
+                 root: Path | None = None) -> None:
         super().__init__()
-        root = Path.cwd()
-        self.application = application or ApplicationController(root)
+        supplied_root = Path(root).expanduser().resolve() if root is not None else None
+        if application is not None:
+            try:
+                application_root = Path(application.root).expanduser().resolve()
+            except AttributeError as exc:
+                raise TypeError("A preconstructed application must expose an explicit root") from exc
+            if supplied_root is not None and supplied_root != application_root:
+                raise ValueError(
+                    "The explicit ViewModel root must match the preconstructed application root"
+                )
+        elif supplied_root is not None:
+            application_root = supplied_root
+        else:
+            application_root = Path.cwd().resolve()
+        self.application = application or ApplicationController(application_root)
+        self._application_root = application_root
         self.application.bind_callbacks(
             on_notice=self._set_notice,
             on_change=self._emit_state,
-            on_position_complete=self._on_motion_position_complete,
             on_ready_to_return=self.return_to_work_zero,
         )
-        self.connection = None
-        self._close_after_return_pending = False
+        self._workspace_index = 0
+        self._auto_connect_started = False
+        self._auto_connection_state = "idle"
+        self._auto_connection_attempts: list[str] = []
+        self._auto_failure_reported = False
+        self._envelope_marker = EnvelopeMarker("unknown", "MPos unavailable")
+        self._backend_session_seen = ""
         self._last_status_poll = 0.0
+        self._last_status_projection: tuple[bool, str] | None = None
+        self._last_status_received_at = 0.0
         self._last_live_snapshot = 0.0
         self._unreferenced_jog_allowed = False
+        self._live_jog_lease_token = ""
+        self._live_jog_lease_generation = 0
         self._pending_confirmation: tuple[str, object] | None = None
         self._confirmation_token = ""
         self._confirmation_sequence = 0
         self._ports: list[str] = []
+        self._ports_loaded = False
         self._connection_text = "Disconnected"
         self._state_text = "Unknown"
         self._machine_position_text = "X—  Y—  Z—"
         self._work_position_text = "X—  Y—  Z—"
+        self._envelope_marker = EnvelopeMarker("unknown", "Controller disconnected")
         self._reference_text = "Position unknown"
         self._work_zero_text = "Not confirmed"
         self._spindle_text = "Off"
@@ -100,11 +135,25 @@ class ControllerViewModel(QObject):
         self._simulation_export_status = "No simulation evidence exported"
         self._job_file_text = "No G-code loaded"
         self._job_summary_text = "Load a metric, pre-sliced engraving file."
+        self._job_provenance: dict[str, object] = {
+            "report_state": "unavailable", "file_sha256": "", "report_name": "",
+            "release_status": "", "bundle": "", "details": [], "header_notes": [],
+            "verification_text": "",
+            "notice": "No job is loaded.",
+        }
         self._preview_strokes: list[list[list[float]]] = []
+        self._preview_cutting_strokes: list[list[list[float]]] = []
+        self._preview_rapid_strokes: list[list[list[float]]] = []
         self._preview_model_strokes: list[list[list[float]]] = []
+        self._preview_image_url = ""
+        self._preview_cutting_image_url = ""
+        self._preview_rapid_image_url = ""
+        self._preview_path_layers_available = False
+        self._preview_image_note = ""
         self._preview_stock_width = 0.0
         self._preview_stock_height = 0.0
         self._preview_summary = ""
+        self._program_execution_layer: dict[str, object] = {}
         self._step_operations: list[dict[str, object]] = []
         self._step_preview_valid = False
         self._step_isometric_faces: list[dict[str, object]] = []
@@ -124,6 +173,9 @@ class ControllerViewModel(QObject):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(150)
         self._preview_timer.timeout.connect(self._run_pending_preview)
+        self._live_jog_renew_timer = QTimer(self)
+        self._live_jog_renew_timer.setInterval(100)
+        self._live_jog_renew_timer.timeout.connect(self._renew_live_jog_lease)
         self._task_runner = TaskRunner(self)
         self._task_runner.completed.connect(self._finish_background_task)
         self._operations = OperationCoordinator()
@@ -138,12 +190,31 @@ class ControllerViewModel(QObject):
         self._last_operation_snapshot: OperationSnapshot | None = None
         self._last_connection_projection: tuple[object, ...] | None = None
         self._last_job_projection: tuple[object, ...] | None = None
-        self._ui_preferences_store = UiPreferencesStore(root / "config" / "ui-preferences.json")
+        self._backend_program_projection: tuple[object, ...] | None = None
+        self._workflow_cache_key: tuple[object, ...] | None = None
+        self._workflow_cache = None
+        self._workflow_preflight: tuple[bool, str] = (False, "Load a validated metric G-code program first.")
+        self._review_facts_cache_key: tuple[object, ...] | None = None
+        self._review_facts_cache: dict[str, object] | None = None
+        self._ui_preferences_store = UiPreferencesStore(application_root / "config" / "ui-preferences.json")
         self._ui_preferences = self._ui_preferences_store.load()
-        self._guided_step = 0
+        # Guided navigation is session-local and never restored from a
+        # persisted preference that could hide an unsafe prerequisite.
+        self._guided_step = 1
         self._guided_preflight_confirmed = False
+        self._review_acknowledged = False
+        self._next_part_available = False
+        # Completion may be observed while the streamer is draining. Arm the
+        # repeat affordance only after a reviewed run starts.
+        self._next_part_armed = False
+        # A motion/connection action may complete asynchronously.  Keep one
+        # explicit, session-local completion intent so observed completion can
+        # advance the guided rail without moving the machine or overriding a
+        # deliberate backward review.
+        self._guided_completion_pending: int | None = None
+        self._last_review_fingerprint: tuple[object, ...] | None = None
         self._log_lines: list[str] = []
-        self._live_settings_store = LiveSettingsStore(root / "config" / "live.json")
+        self._live_settings_store = LiveSettingsStore(application_root / "config" / "live.json")
         self._live_settings = self._live_settings_store.load()
         self._live_frames = FrameHub()
         self._camera_service = CameraService(self._live_frames, self)
@@ -158,12 +229,16 @@ class ControllerViewModel(QObject):
         self.port = self.application.settings.usb_port
         self.wifi_host = self.application.settings.wifi_host
         self.wifi_port = self.application.settings.wifi_port
-        self._refresh_ports()
         self.step_import_completed.connect(self._finish_step_import)
         self._camera_service.state_changed.connect(lambda _state: self._refresh_live_state())
         self._camera_frame_data = ""
         self._camera_service.frame_data_changed.connect(self._on_camera_frame)
         self._camera_service.camera_list_changed.connect(lambda: self.live_changed.emit())
+
+        # Launch on the earliest incomplete safe prerequisite.  This is derived
+        # from current facts, never from a persisted navigation preference.
+        step = self._workflow().earliest_incomplete
+        self._guided_step = 5 if step == 4 else step
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll)
@@ -182,6 +257,8 @@ class ControllerViewModel(QObject):
     @status.setter
     def status(self, value) -> None:
         self.application.status = value
+        if value is not None:
+            self._last_status_received_at = time.monotonic()
 
     @property
     def program(self):
@@ -195,11 +272,6 @@ class ControllerViewModel(QObject):
     @connection.setter
     def connection(self, value) -> None:
         self.application.set_transport_for_testing(value)
-
-    def _on_motion_position_complete(self) -> None:
-        if self._close_after_return_pending and self.at_reference:
-            self._close_after_return_pending = False
-            self.close_requested.emit()
 
     @Property(str, notify=operation_changed)
     def operation_name(self) -> str:
@@ -249,6 +321,203 @@ class ControllerViewModel(QObject):
     def readiness_reason(self) -> str:
         return self._readiness_snapshot.reason
 
+    def _workflow(self):
+        status = self.application.status
+        status_name = getattr(status, "state", "Unknown") if status is not None else "Unknown"
+        supervisor_healthy = True
+        if self.application.simulation_active:
+            supervisor_healthy = getattr(self.application, "supervisor_state", "unavailable") == "healthy"
+        program = self.application.program
+        program_key = None if program is None else (
+            str(program.path), tuple(program.commands), repr(program.bounds),
+        )
+        try:
+            profile_key = repr(self.application.machine_definition.to_profile())
+        except (AttributeError, TypeError, ValueError):
+            profile_key = repr(self.application.machine_definition)
+        physical_safety = self._physical_safety_status()
+        physical_safety_key = tuple(
+            (key, repr(physical_safety.get(key)))
+            for key in ("state", "raw_state", "transition_id", "power_removal",
+                        "blocks_motion", "latched", "commissioned", "reason")
+        )
+        # The projection is read by many QML properties during one state
+        # publication.  Key it by the immutable facts it consumes so direct
+        # test/adaptor mutations still invalidate it without requiring every
+        # caller to remember a private cache-reset hook.
+        cache_key = (
+            repr(self.application.machine_definition), profile_key,
+            bool(self.application.connected), status_name, repr(status),
+            bool(self.application.simulation_active), supervisor_healthy,
+            bool(getattr(self.application, "status_fresh", False)),
+            bool(self.application.reference_trusted), repr(self.application.session.envelope.reference),
+            bool(self.application.work_zero_confirmed), repr(self.application.work_offset),
+            program_key, bool(self.application.job_active),
+            str(self.application.z_touch_plate_status),
+            bool(self.application.simulation_plate_commissioned),
+            str(self.application.auto_xyz_calibration_state),
+            bool(self.application.calibration.work_offset_confirmed),
+            physical_safety_key,
+            bool(self.simulation_hazard_active), bool(self.simulation_estop_active),
+            bool(self.operation_active), bool(self._review_acknowledged),
+        )
+        if cache_key == self._workflow_cache_key and self._workflow_cache is not None:
+            return self._workflow_cache
+        profile_valid = True
+        try:
+            self.application.machine_definition.to_profile().validate()
+        except (TypeError, ValueError):
+            profile_valid = False
+        job_preflight_ok = False
+        job_preflight_reason = "Load a validated metric G-code program first."
+        if program is not None:
+            try:
+                job_preflight_ok, job_preflight_reason = self.application.preflight()
+                job_preflight_ok = bool(job_preflight_ok)
+                job_preflight_reason = str(job_preflight_reason)
+            except (AttributeError, TypeError, ValueError):
+                job_preflight_ok = False
+                job_preflight_reason = "Validation unavailable."
+        self._workflow_preflight = (job_preflight_ok, job_preflight_reason)
+        spindle_off_confirmed = bool(
+            getattr(self.application, "status_fresh", False)
+            and status is not None
+            and getattr(status, "spindle", None) == 0
+        )
+        projection = project_workflow(WorkflowObservation(
+            machine_definition=self.application.machine_definition,
+            connected=bool(self.application.connected),
+            controller_state=str(status_name),
+            simulation_active=bool(self.application.simulation_active),
+            supervision_healthy=supervisor_healthy,
+            fresh_status=bool(getattr(self.application, "status_fresh", False)),
+            homing_inputs_safe=bool(getattr(self.application, "homing_inputs_safe", True)),
+            spindle_off=status is None or getattr(status, "spindle", None) in (None, 0),
+            job_spindle_off_confirmed=spindle_off_confirmed,
+            reference_trusted=bool(self.application.reference_trusted),
+            work_zero_confirmed=bool(self.application.work_zero_confirmed),
+            job_loaded=program is not None,
+            job_active=bool(self.application.job_active),
+            z_plate_status=str(self.application.z_touch_plate_status),
+            simulation_plate_commissioned=bool(self.application.simulation_plate_commissioned),
+            auto_xyz_state=str(self.application.auto_xyz_calibration_state),
+            auto_xyz_wco_confirmed=bool(self.application.calibration.work_offset_confirmed),
+            hazard=bool(self.simulation_hazard_active),
+            estop=bool(self.simulation_estop_active),
+            active_operation=bool(self.operation_active),
+            review_acknowledged=bool(self._review_acknowledged),
+            profile_valid=profile_valid,
+            job_preflight_ok=job_preflight_ok,
+        ))
+        self._workflow_cache_key = cache_key
+        self._workflow_cache = projection
+        return projection
+
+    @Property("QVariantMap", notify=state_changed)
+    def review_facts(self) -> dict[str, object]:
+        """Typed evidence for Review/Run; unknown facts never appear green."""
+        # Establish the same state key used by the workflow projection.  This
+        # keeps Review and Run on one invalidation boundary and avoids a second
+        # preflight calculation for repeated property reads.
+        self._workflow()
+        if self._review_facts_cache_key == self._workflow_cache_key and self._review_facts_cache is not None:
+            return dict(self._review_facts_cache)
+        program_loaded = self.application.program is not None
+        validation_state = "not_run"
+        bounds_checked = False
+        reason = "Load a validated metric G-code program first."
+        if program_loaded:
+            bounds_checked, reason = self._workflow_preflight
+            validation_state = "passed" if bounds_checked else "failed"
+        if self.application.simulation_active:
+            runtime = self.application.simulation_runtime
+            supervisor = str(getattr(self.application, "supervisor_state", "unavailable"))
+            estop = "active" if self.simulation_estop_active else ("clear" if runtime is not None else "unknown")
+            hazard = "active" if self.simulation_hazard_active else "clear"
+            if self.simulation_hazard_active:
+                collision_analysis = "detected" if self.simulation_collision_active else "hazard"
+            else:
+                collision_analysis = "not_run"
+        else:
+            supervisor, estop, hazard = "not_applicable", "not_applicable", "not_applicable"
+            collision_analysis = "not_run"
+        physical_safety = self._physical_safety_status()
+        facts = {
+            "program_loaded": program_loaded,
+            "validation": validation_state,
+            "bounds_checked": bool(bounds_checked),
+            "collision_analysis": collision_analysis,
+            "supervisor": supervisor,
+            "estop": estop,
+            "hazard": hazard,
+            "fresh_status": str(getattr(self.application, "status_state", "unavailable")) == "fresh",
+            "physical_safety_input": str(physical_safety.get("state", "unknown")),
+            "physical_power_removal": str(physical_safety.get("power_removal", "unknown")),
+            "physical_safety_blocks_motion": bool(physical_safety.get("blocks_motion", False)),
+            "physical_safety_clear": bool(
+                physical_safety.get("commissioned", False)
+                and physical_safety.get("state") == "clear"
+                and physical_safety.get("power_removal") == "confirmed"
+                and not physical_safety.get("blocks_motion", True)
+            ),
+            "reason": str(reason),
+        }
+        self._review_facts_cache_key = self._workflow_cache_key
+        self._review_facts_cache = facts
+        return dict(facts)
+
+    @Property("QVariantList", notify=state_changed)
+    def workflow_steps(self) -> list[dict[str, object]]:
+        return [step.as_dict() for step in self._workflow().steps]
+
+    @Property("QVariantList", notify=state_changed)
+    def work_zero_methods(self) -> list[dict[str, object]]:
+        return [method.as_dict() for method in self._workflow().work_zero_methods]
+
+    @Property("QVariantList", notify=state_changed)
+    def setup_warnings(self) -> list[dict[str, object]]:
+        return [warning.as_dict() for warning in self._workflow().setup_warnings]
+
+    @Property("QStringList", notify=state_changed)
+    def setup_warning_text(self) -> list[str]:
+        return [f"{warning.title}: {warning.reason}" for warning in self._workflow().setup_warnings]
+
+    @Property(str, notify=state_changed)
+    def workflow_reference_mode(self) -> str:
+        return self._workflow().reference_mode
+
+    @Property(str, notify=state_changed)
+    def workflow_next_action(self) -> str:
+        return self._workflow().next_action
+
+    @Property(str, notify=state_changed)
+    def workflow_reason(self) -> str:
+        return self._workflow().reason
+
+    @Property(str, notify=state_changed)
+    def workflow_json(self) -> str:
+        return json.dumps(self._workflow().as_dict(), sort_keys=True, separators=(",", ":"))
+
+    @Property(int, notify=state_changed)
+    def guided_step_index(self) -> int:
+        return self._guided_step
+
+    @Property(str, notify=state_changed)
+    def guided_step_key(self) -> str:
+        return self._workflow().steps[self._guided_step].key
+
+    @Property(int, notify=state_changed)
+    def current_guided_step(self) -> int:
+        return self._guided_step
+
+    @Property("QVariantList", notify=state_changed)
+    def guided_steps(self) -> list[dict[str, object]]:
+        return self.workflow_steps
+
+    @Property(bool, notify=state_changed)
+    def review_acknowledged(self) -> bool:
+        return self._review_acknowledged
+
     @Property(bool, notify=issues_changed)
     def has_issue(self) -> bool:
         return self._issue is not None
@@ -273,21 +542,6 @@ class ControllerViewModel(QObject):
     def first_run_complete(self) -> bool:
         return self._ui_preferences.first_run_complete
 
-    @Property(int, constant=True)
-    def initial_workspace(self) -> int:
-        return self._ui_preferences.last_workspace
-
-    @Slot(int)
-    def save_workspace(self, workspace: int) -> None:
-        workspace = max(0, min(2, int(workspace)))
-        if workspace == self._ui_preferences.last_workspace:
-            return
-        self._ui_preferences.last_workspace = workspace
-        try:
-            self._ui_preferences_store.save(self._ui_preferences)
-        except OSError:
-            self._set_notice("Workspace preference could not be saved")
-
     @Slot(bool)
     def set_expert_mode(self, enabled: bool) -> None:
         self._ui_preferences.expert_mode = bool(enabled)
@@ -310,6 +564,152 @@ class ControllerViewModel(QObject):
         return self._connection_text
 
     @Property(str, notify=state_changed)
+    def auto_connection_state(self) -> str:
+        return self._auto_connection_state
+
+    @Property("QStringList", notify=state_changed)
+    def auto_connection_attempts(self) -> list[str]:
+        return list(self._auto_connection_attempts)
+
+    @Property(int, notify=workspace_changed)
+    def workspace_index(self) -> int:
+        return self._workspace_index
+
+    @Property("QStringList", constant=True)
+    def workspace_names(self) -> list[str]:
+        return ["Machine", "Prepare", "Review", "Run"]
+
+    @Slot(int)
+    def select_workspace(self, index: int) -> None:
+        index = int(index)
+        if index not in range(4):
+            return
+        if self.application.job_active and index != 3:
+            self._set_notice("Run monitoring remains selected while the job is active")
+            index = 3
+        if index == 0:
+            machine_steps = range(1, 4)
+            if self._guided_step not in machine_steps:
+                self._guided_step = next((step for step in machine_steps
+                                          if self._workflow().steps[step].selectable), 1)
+        else:
+            self._guided_step = {1: 4, 2: 5, 3: 6}[index]
+        self._guided_completion_pending = None
+        if self._workspace_index != index:
+            self._workspace_index = index
+            self.workspace_changed.emit()
+        self._emit_state()
+
+    @Property(bool, notify=state_changed)
+    def backend_available(self) -> bool:
+        return bool(getattr(self.application, "backend_available", True))
+
+    @Property(str, notify=state_changed)
+    def backend_state(self) -> str:
+        return str(getattr(self.application, "backend_state", "local"))
+
+    @Property(str, notify=state_changed)
+    def backend_error(self) -> str:
+        return str(getattr(self.application, "backend_error", ""))
+
+    @Property(bool, notify=state_changed)
+    def header_status_visible(self) -> bool:
+        return bool(
+            not self.backend_available
+            or self._auto_connection_state in {"trying", "failed"}
+            or self.safety_attention
+        )
+
+    @Property(str, notify=state_changed)
+    def header_status_text(self) -> str:
+        if not self.backend_available:
+            return "Backend unavailable"
+        if self._auto_connection_state == "trying":
+            return "Connecting…"
+        if self._auto_connection_state == "failed":
+            return "Device not found"
+        if self.safety_attention:
+            return "Safety attention"
+        return ""
+
+    @Property(bool, notify=state_changed)
+    def safety_attention(self) -> bool:
+        physical = self._physical_safety_status()
+        physical_attention = bool(
+            physical.get("blocks_motion", False)
+            or (physical.get("commissioned", False) and physical.get("state") not in {"clear"})
+        )
+        return bool(
+            self.simulation_hazard_active
+            or self.simulation_estop_active
+            or physical_attention
+            or (self.connected and not bool(getattr(self.application, "status_fresh", False)))
+            or (self.simulation_active and not self.simulation_supervisor_healthy)
+        )
+
+    @Property(str, notify=state_changed)
+    def safety_attention_text(self) -> str:
+        physical = self._physical_safety_status()
+        if self.simulation_estop_active:
+            return "E-stop active — remove hazardous power and recover explicitly."
+        if self.simulation_hazard_active:
+            return "Safety supervisor reports a hazard — motion is blocked."
+        if physical.get("blocks_motion", False):
+            return f"Physical safety input blocks motion — {physical.get('reason', 'verify the safety circuit')}"
+        if self.connected and not bool(getattr(self.application, "status_fresh", False)):
+            return "Controller status is stale — wait for a fresh report before motion."
+        if self.simulation_active and not self.simulation_supervisor_healthy:
+            return "Safety supervisor is unavailable — simulation is blocked."
+        return ""
+
+    def _physical_safety_status(self) -> dict[str, object]:
+        value = getattr(self.application, "physical_safety_input_status", {})
+        return dict(value) if isinstance(value, dict) else {}
+
+    @Property(str, notify=state_changed)
+    def physical_safety_input_state(self) -> str:
+        return str(self._physical_safety_status().get("state", "unknown"))
+
+    @Property(str, notify=state_changed)
+    def physical_safety_input_power_removal(self) -> str:
+        return str(self._physical_safety_status().get("power_removal", "unknown"))
+
+    @Property(bool, notify=state_changed)
+    def physical_safety_input_commissioned(self) -> bool:
+        return bool(self._physical_safety_status().get("commissioned", False))
+
+    @Property(bool, notify=state_changed)
+    def physical_safety_input_latched(self) -> bool:
+        return bool(self._physical_safety_status().get("latched", False))
+
+    @Property(bool, notify=state_changed)
+    def physical_safety_input_blocks_motion(self) -> bool:
+        return bool(self._physical_safety_status().get("blocks_motion", False))
+
+    @Property(str, notify=state_changed)
+    def physical_safety_input_reason(self) -> str:
+        return str(self._physical_safety_status().get("reason", "Backend safety-input status unavailable"))
+
+    @Property(str, notify=state_changed)
+    def physical_safety_input_status_text(self) -> str:
+        status = self._physical_safety_status()
+        commissioned = bool(status.get("commissioned", False))
+        state = str(status.get("state", "unknown")).upper()
+        power = str(status.get("power_removal", "unknown")).upper()
+        if not commissioned:
+            return f"Physical E-stop input: {state} / UNCOMMISSIONED · hazardous-power removal: {power}"
+        channel_a = status.get("channel_a_closed")
+        channel_b = status.get("channel_b_closed")
+        def channel(value: object) -> str:
+            return "closed" if value is True else "open" if value is False else "unknown"
+        return (f"Physical E-stop input: {state} · A={channel(channel_a)}, B={channel(channel_b)} · "
+                f"power removal: {power} · {self.physical_safety_input_reason}")
+
+    @Property(bool, notify=state_changed)
+    def physical_safety_input_acknowledge_available(self) -> bool:
+        return bool(self.physical_safety_input_commissioned and self.physical_safety_input_latched)
+
+    @Property(str, notify=state_changed)
     def confirmation_token(self) -> str:
         return self._confirmation_token
 
@@ -320,6 +720,19 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def machine_position(self) -> str:
         return self._machine_position_text
+
+    @Property("QVariantMap", notify=position_changed)
+    def envelope_marker(self) -> dict[str, object]:
+        return self._envelope_marker.as_dict()
+
+    @Property(str, notify=position_changed)
+    def envelope_marker_text(self) -> str:
+        marker = self._envelope_marker
+        if marker.state == "unknown":
+            return f"Position unknown · {marker.reason}"
+        if marker.out_of_bounds:
+            return f"OUT OF BOUNDS · {marker.direction} · Z{marker.z:.2f}"
+        return f"MPos X{marker.x * self.application.profile.travel_x:.2f} Y{marker.y * self.application.profile.travel_y:.2f} Z{marker.z:.2f}"
 
     @Property(str, notify=state_changed)
     def work_position(self) -> str:
@@ -341,6 +754,47 @@ class ControllerViewModel(QObject):
     def work_zero_confirmed(self) -> bool:
         return self.application.work_zero_confirmed
 
+    @Property(bool, notify=state_changed)
+    def saved_work_zero_available(self) -> bool:
+        return (
+            self._saved_work_zero_position() is not None
+            and {"X", "Y"} <= self._saved_work_zero_axes()
+        )
+
+    @Property(bool, notify=state_changed)
+    def saved_work_zero_display_available(self) -> bool:
+        return self._saved_work_zero_position() is not None
+
+    @Property(str, notify=state_changed)
+    def saved_work_zero_text(self) -> str:
+        saved = self._saved_work_zero_position()
+        if saved is None:
+            return ""
+        axes = self._saved_work_zero_axes()
+        coordinates = ", ".join(
+            f"{axis} {getattr(saved, axis.lower()):.3f} mm" for axis in "XYZ" if axis in axes
+        )
+        suffix = "" if axes >= frozenset("XYZ") else f" ({''.join(axis for axis in 'XYZ' if axis in axes)} confirmed)"
+        return f"Saved previous work-zero coordinates: {coordinates}{suffix}"
+
+    def _saved_work_zero_position(self) -> Position | None:
+        # The backend adapter exposes the value as a Position. Keep the
+        # in-process composition compatible while all clients migrate to IPC.
+        saved = getattr(self.application, "saved_work_zero", None)
+        if saved is None:
+            saved = getattr(self.application, "_saved_work_zero", None)
+        position = getattr(saved, "position", saved)
+        return position if isinstance(position, Position) else None
+
+    def _saved_work_zero_axes(self) -> frozenset[str]:
+        axes = getattr(self.application, "saved_work_zero_axes", None)
+        if axes is None:
+            saved = getattr(self.application, "_saved_work_zero", None)
+            axes = getattr(saved, "confirmed_axes", None)
+        if axes is None:
+            return frozenset("XYZ") if self._saved_work_zero_position() is not None else frozenset()
+        return frozenset(str(axis).upper() for axis in axes)
+
     @Property(str, notify=state_changed)
     def spindle(self) -> str:
         return self._spindle_text
@@ -360,6 +814,36 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def job_summary(self) -> str:
         return self._job_summary_text
+
+    @Property("QVariantMap", notify=state_changed)
+    def job_provenance(self) -> dict[str, object]:
+        return dict(self._job_provenance)
+
+    @Property("QVariantMap", notify=state_changed)
+    def watchdog_recovery(self) -> dict[str, object]:
+        return dict(getattr(self.application, "watchdog_recovery", {}) or {})
+
+    @Property("QVariantMap", notify=state_changed)
+    def automatic_continuation(self) -> dict[str, object]:
+        return dict(getattr(self.application, "automatic_continuation", {}) or {})
+
+    @Slot()
+    def continue_watchdog_home(self) -> None:
+        if self.watchdog_recovery.get("can_continue_to_home"):
+            self._set_notice(self.application.continue_to_home().message)
+            self._emit_state()
+
+    @Slot()
+    def cancel_watchdog_recovery(self) -> None:
+        if self.watchdog_recovery.get("can_cancel"):
+            self._set_notice(self.application.cancel_recovery().message)
+            self._emit_state()
+
+    @Property("QVariantMap", notify=state_changed)
+    def job_recovery(self) -> dict[str, object]:
+        """Advisory recovery evidence from the backend, never a resume cursor."""
+        value = getattr(self.application, "job_recovery", {})
+        return dict(value) if isinstance(value, dict) else {}
 
     @Property("QStringList", constant=True)
     def fonts(self) -> list[str]:
@@ -423,9 +907,47 @@ class ControllerViewModel(QObject):
     def preview_strokes(self) -> list[list[list[float]]]:
         return self._preview_strokes
 
+    @Property("QVariantList", notify=preview_changed)
+    def preview_cutting_strokes(self) -> list[list[list[float]]]:
+        return self._preview_cutting_strokes
+
+    @Property("QVariantList", notify=preview_changed)
+    def preview_rapid_strokes(self) -> list[list[list[float]]]:
+        return self._preview_rapid_strokes
+
     @Property("QVariantList", notify=state_changed)
     def preview_model_strokes(self) -> list[list[list[float]]]:
         return self._preview_model_strokes
+
+    @Property(str, notify=preview_changed)
+    def preview_image_url(self) -> str:
+        return self._preview_image_url
+
+    @Property(str, notify=preview_changed)
+    def preview_cutting_image_url(self) -> str:
+        return self._preview_cutting_image_url
+
+    @Property(str, notify=preview_changed)
+    def preview_rapid_image_url(self) -> str:
+        return self._preview_rapid_image_url
+
+    @Property(bool, notify=preview_changed)
+    def preview_path_layers_available(self) -> bool:
+        return self._preview_path_layers_available
+
+    @Property(str, notify=preview_changed)
+    def preview_image_note(self) -> str:
+        return self._preview_image_note
+
+    @Property(int, notify=preview_changed)
+    def preview_image_width(self) -> int:
+        preview = getattr(self.application, "program_preview", {})
+        return int(preview.get("width", 0) or 0) if isinstance(preview, dict) else 0
+
+    @Property(int, notify=preview_changed)
+    def preview_image_height(self) -> int:
+        preview = getattr(self.application, "program_preview", {})
+        return int(preview.get("height", 0) or 0) if isinstance(preview, dict) else 0
 
     @Property(float, notify=state_changed)
     def preview_stock_width(self) -> float:
@@ -434,6 +956,37 @@ class ControllerViewModel(QObject):
     @Property(float, notify=state_changed)
     def preview_stock_height(self) -> float:
         return self._preview_stock_height
+
+    @Property("QVariantMap", notify=state_changed)
+    def program_execution_layer(self) -> dict[str, object]:
+        value = getattr(self.application, "program_execution_layer", self._program_execution_layer)
+        return dict(value) if isinstance(value, dict) else {}
+
+    @Property("QVariantMap", notify=position_changed)
+    def live_work_marker(self) -> dict[str, object]:
+        """Fresh work-coordinate marker for the job plot (not the envelope)."""
+        status = getattr(self.application, "status", None)
+        if not bool(getattr(self.application, "status_fresh", False)) or status is None:
+            return {"visible": False}
+        point = getattr(status, "work_position", None)
+        if point is None:
+            machine = getattr(status, "machine_position", None)
+            offset = getattr(self.application, "work_offset", None)
+            if machine is not None and offset is not None:
+                point = machine.minus(offset)
+        if point is None:
+            return {"visible": False}
+        return {"visible": True, "x": float(point.x), "y": float(point.y), "z": float(point.z)}
+
+    @Property("QVariantMap", notify=preview_changed)
+    def job_plot_bounds(self) -> dict[str, float]:
+        program = getattr(self.application, "program", None)
+        bounds = getattr(program, "bounds", None)
+        minimum, maximum = getattr(bounds, "minimum", None), getattr(bounds, "maximum", None)
+        if minimum is None or maximum is None:
+            return {}
+        return {"min_x": float(minimum.x), "min_y": float(minimum.y),
+                "max_x": float(maximum.x), "max_y": float(maximum.y)}
 
     @Property("QVariantList", notify=state_changed)
     def step_operations(self) -> list[dict[str, object]]:
@@ -587,9 +1140,34 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def machine_capabilities(self) -> str:
         definition = self.application.machine_definition
-        enabled = ["movable Z touch plate / puck" for probe in definition.probes
-                   if probe.kind.value == "movable_z_plate" and probe.enabled]
+        labels = {
+            "movable_z_plate": "movable Z touch plate / puck (supported)",
+            "fixed_tool_setter": "fixed tool setter (configured — workflow unavailable)",
+            "movable_xyz": "movable physical XYZ (configured — workflow unavailable)",
+            "fixed_xyz": "fixed XYZ (configured — workflow unavailable)",
+        }
+        enabled = [labels.get(probe.kind.value, probe.kind.value) for probe in definition.probes if probe.enabled]
         return "Optional hardware: " + (", ".join(enabled) if enabled else "none")
+
+    def _probe_enabled(self, kind: str) -> bool:
+        return any(probe.kind.value == kind and probe.enabled
+                   for probe in self.application.machine_definition.probes)
+
+    @Property(bool, notify=state_changed)
+    def movable_z_probe_enabled(self) -> bool:
+        return self._probe_enabled("movable_z_plate")
+
+    @Property(bool, notify=state_changed)
+    def fixed_tool_setter_enabled(self) -> bool:
+        return self._probe_enabled("fixed_tool_setter")
+
+    @Property(bool, notify=state_changed)
+    def movable_xyz_probe_enabled(self) -> bool:
+        return self._probe_enabled("movable_xyz")
+
+    @Property(bool, notify=state_changed)
+    def fixed_xyz_probe_enabled(self) -> bool:
+        return self._probe_enabled("fixed_xyz")
 
     @Property(bool, notify=state_changed)
     def z_touch_plate_enabled(self) -> bool:
@@ -598,6 +1176,17 @@ class ControllerViewModel(QObject):
     @Property(str, notify=state_changed)
     def z_touch_plate_status(self) -> str:
         return self.application.z_touch_plate_status.replace("_", " ")
+
+    @Property(str, notify=state_changed)
+    def z_probe_completion_json(self) -> str:
+        snapshot = getattr(self.application, "z_probe_completion_snapshot", {})
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        return json.dumps(snapshot, sort_keys=True)
+
+    @Property(str, notify=state_changed)
+    def z_probe_backend_session_id(self) -> str:
+        return str(getattr(self.application, "backend_session_id", ""))
 
     @Property(str, notify=state_changed)
     def z_touch_plate_status_text(self) -> str:
@@ -671,10 +1260,77 @@ class ControllerViewModel(QObject):
         return self.application.homing.state.value
 
     @Property(bool, notify=state_changed)
+    def probe_active(self) -> bool:
+        """Expose the active probe transaction for direct recovery controls."""
+        return bool(self.application.probing.active)
+
+    @Property(str, notify=state_changed)
+    def homing_input_polarity(self) -> str:
+        declarations = self.application.homing_limit_declarations
+        values = {str(item.get("wiring", "")) for item in declarations.values()
+                  if bool(item.get("enabled", False))}
+        if len(values) == 1:
+            return next(iter(values))
+        if not values:
+            return "Not configured"
+        return "Unknown — mixed NC/NO"
+
+    @Property(str, notify=state_changed)
+    def homing_input_status(self) -> str:
+        observation = self.application.homing_input_observation
+        pins = observation.pins or "none"
+        return f"{observation.state}: Pn:{pins}"
+
+    @Property(str, notify=state_changed)
+    def homing_input_reason(self) -> str:
+        return self.application.homing_input_observation.reason
+
+    @Property(bool, notify=state_changed)
     def can_home_machine(self) -> bool:
-        definition = self.application.machine_definition
-        return bool(self.connected and not self.application.job_active and not self.application.motion_busy
-                    and all(axis.switch_mode.value != "none" for axis in definition.axes.values()))
+        return bool(getattr(self.application, "can_home_machine", False))
+
+    @Property(str, notify=state_changed)
+    def home_action_block_reason(self) -> str:
+        app = self.application
+        if bool(getattr(app, "can_home_machine", False)):
+            return ""
+        if not bool(getattr(app, "connected", False)):
+            return "Connect to the controller before homing."
+        if not bool(getattr(app, "operation_transport_ready", True)):
+            return "USB is for Wi-Fi setup only; use a verified Wi-Fi connection before homing."
+        if not bool(getattr(app, "status_fresh", False)):
+            return "Wait for a fresh GRBL status report before homing."
+        if not bool(getattr(app, "homing_inputs_safe", False)):
+            reason = str(getattr(getattr(app, "homing_input_observation", None), "reason", ""))
+            return reason or "Release active homing inputs before homing."
+        status = getattr(app, "status", None)
+        state = str(getattr(status, "state", "Unknown"))
+        if state not in {"Idle", "Alarm"}:
+            return f"Wait for GRBL to report Idle or Alarm before homing (current state: {state})."
+        if getattr(status, "spindle", None) not in (None, 0):
+            return "Turn off the spindle before homing."
+        definition = getattr(app, "machine_definition", None)
+        axes = getattr(definition, "axes", {})
+        if any(axes.get(axis) is None for axis in "XYZ"):
+            return "Configure X, Y, and Z homing switches before homing."
+        if any(getattr(getattr(axes[axis], "switch_mode", None), "value", "none") == "none"
+               for axis in "XYZ"):
+            return "Configure and commission X, Y, and Z homing switches before homing."
+        if bool(getattr(getattr(app, "homing", None), "active", False)):
+            return "Homing is already in progress."
+        if bool(getattr(getattr(app, "probing", None), "active", False)):
+            return "Finish the active probe cycle before homing."
+        if bool(getattr(getattr(app, "calibration", None), "active", False)):
+            return "Finish the active calibration before homing."
+        if bool(getattr(getattr(app, "travel_calibration", None), "active", False)):
+            return "Finish or abort travel calibration before homing."
+        if bool(getattr(app, "job_active", False)):
+            return "Finish or abort the active job before homing."
+        if bool(getattr(app, "manual_pending_acks", False)):
+            return "Wait for the pending GRBL acknowledgement before homing."
+        if bool(getattr(app, "motion_busy", False)):
+            return "Wait for the current motion operation to finish before homing."
+        return "Homing is unavailable until the controller and homing setup are ready."
 
     @Property("QStringList", notify=state_changed)
     def log_lines(self) -> list[str]:
@@ -701,6 +1357,10 @@ class ControllerViewModel(QObject):
         return self._format_duration(seconds) if seconds > 0 else "—"
 
     @Property(str, notify=state_changed)
+    def job_elapsed(self) -> str:
+        return self._format_duration(self.application.job_elapsed_seconds).lstrip("~")
+
+    @Property(str, notify=state_changed)
     def job_time_remaining(self) -> str:
         if not self.application.program:
             return ""
@@ -709,7 +1369,7 @@ class ControllerViewModel(QObject):
         remaining = self.application.job_remaining_seconds
         if remaining is None:
             return ""
-        text = "Finishing…" if self.application.job_elapsed_seconds >= self.application.job_estimated_seconds else self._format_duration(remaining)
+        text = "Nominal estimate exceeded · remaining unknown" if self.application.job_elapsed_seconds >= self.application.job_estimated_seconds else self._format_duration(remaining) + " nominal"
         return text + (" (paused)" if self.application.job_state == "paused" else "")
 
     @Property(bool, notify=state_changed)
@@ -748,6 +1408,8 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=simulation_changed)
     def simulation_supervisor_healthy(self) -> bool:
+        if hasattr(self.application, "supervisor_state"):
+            return self.application.supervisor_state == "healthy"
         runtime = self.application.simulation_runtime
         if not self.simulation_active or runtime is None:
             return False
@@ -757,6 +1419,12 @@ class ControllerViewModel(QObject):
         if healthy is not None:
             return bool(healthy)
         return bool(runtime.supervisor is not None and runtime.supervisor.is_alive())
+
+    @Property(str, notify=simulation_changed)
+    def simulation_supervisor_state(self) -> str:
+        if hasattr(self.application, "supervisor_state"):
+            return str(self.application.supervisor_state)
+        return "healthy" if self.simulation_supervisor_healthy else "unavailable"
 
     @Property(bool, notify=simulation_changed)
     def simulation_export_available(self) -> bool:
@@ -932,7 +1600,8 @@ class ControllerViewModel(QObject):
 
     @Property(bool, notify=simulation_changed)
     def simulation_auto_xyz_available(self) -> bool:
-        return bool(self.application.simulation_plate_commissioned and not self.application.calibration.active)
+        method = next((item for item in self._workflow().work_zero_methods if item.key == "auto_xyz"), None)
+        return bool(method and method.available)
 
     @Property(str, notify=simulation_changed)
     def simulation_auto_xyz_status(self) -> str:
@@ -978,22 +1647,88 @@ class ControllerViewModel(QObject):
     def saved_wifi_port(self) -> int:
         return self.wifi_port
 
+    @Property(str, notify=state_changed)
+    def saved_usb_port(self) -> str:
+        return self.port
+
     @Property(bool, notify=state_changed)
     def at_reference(self) -> bool:
         position = self.application.virtual_position
         return bool(self.connected and position is not None and self._is_reference_position(position))
 
     @Property(bool, notify=state_changed)
-    def requires_exit_prompt(self) -> bool:
-        return bool(self.connected and not self.at_reference)
-
-    @Property(bool, notify=state_changed)
     def can_return_to_reference(self) -> bool:
         return self.application.can_return_to_reference
+
+    @Property(str, notify=state_changed)
+    def homing_state(self) -> str:
+        state = getattr(getattr(self.application, "homing", None), "state", "idle")
+        return str(getattr(state, "value", state))
+
+    @Property(str, notify=state_changed)
+    def homing_status(self) -> str:
+        if self.homing_state == "complete":
+            return "Home complete · fresh machine reference"
+        if self.homing_state in {"waiting_ack", "waiting_idle"}:
+            return "Homing in progress · waiting for a fresh Idle report"
+        if self.homing_state == "failed":
+            return "Homing failed · reference remains untrusted"
+        if not self.can_home_machine:
+            return "Home unavailable until connection, Idle, switches, and safety gates are ready"
+        return "Ready to home"
+
+    @Property("QVariantMap", notify=state_changed)
+    def travel_calibration(self) -> dict[str, object]:
+        value = getattr(self.application, "travel_calibration_snapshot", None)
+        if value is not None:
+            return dict(value)
+        service = getattr(self.application, "travel_calibration", None)
+        return service.snapshot() if service is not None else {}
+
+    @Property(str, notify=state_changed)
+    def travel_calibration_status(self) -> str:
+        return str(self.travel_calibration.get("status", "Travel calibration unavailable"))
+
+    @Property(bool, notify=state_changed)
+    def travel_calibration_active(self) -> bool:
+        return str(self.travel_calibration.get("state", "idle")) in {"settings", "homing", "baseline", "searching", "validating"}
+
+    @Property(bool, notify=state_changed)
+    def travel_calibration_can_accept(self) -> bool:
+        return bool(self.travel_calibration.get("can_accept", False))
 
     @Property(bool, notify=state_changed)
     def can_jog(self) -> bool:
         return self.application.can_jog
+
+    @Property(str, notify=state_changed)
+    def move_action_block_reason(self) -> str:
+        app = self.application
+        if bool(getattr(app, "can_jog", False)):
+            return ""
+        if not bool(getattr(app, "operation_transport_ready", True)):
+            return "USB is for Wi-Fi setup only; use a verified Wi-Fi connection before moving."
+        if not bool(getattr(app, "connected", False)):
+            return "Connect to the controller before moving."
+        if not bool(getattr(app, "homing_inputs_safe", False)):
+            reason = str(getattr(getattr(app, "homing_input_observation", None), "reason", ""))
+            return reason or "Release active homing inputs before moving."
+        if bool(getattr(app, "job_active", False)):
+            return "Finish or abort the active job before moving."
+        if bool(getattr(app, "manual_pending_acks", False)):
+            return "Wait for the pending GRBL acknowledgement before moving."
+        if bool(getattr(app, "motion_busy", False)):
+            return "Wait for the current motion operation to finish."
+        status = getattr(app, "status", None)
+        if not bool(getattr(app, "status_fresh", False)):
+            return "Wait for a fresh GRBL status report before moving."
+        state = str(getattr(status, "state", "Unknown"))
+        if state != "Idle":
+            return f"Wait for GRBL to report Idle before moving (current state: {state})."
+        session = getattr(app, "session", None)
+        if getattr(session, "machine_position", None) is None:
+            return "Wait for a current machine position before moving."
+        return "Positioning is unavailable until GRBL reports Idle with a current position."
 
     @Property(bool, notify=state_changed)
     def can_live_jog(self) -> bool:
@@ -1002,7 +1737,7 @@ class ControllerViewModel(QObject):
     @Property(bool, notify=state_changed)
     def live_jog_active(self) -> bool:
         """Whether a held-jog session is active, including during GRBL state changes."""
-        return self.application.live_jog_active
+        return bool(self._live_jog_lease_token or getattr(self.application, "live_jog_active", False))
 
     @Property(bool, notify=state_changed)
     def unreferenced_jog_allowed(self) -> bool:
@@ -1016,63 +1751,117 @@ class ControllerViewModel(QObject):
     def can_start_job(self) -> bool:
         return self.application.can_start_job
 
+    @Property(bool, notify=state_changed)
+    def start_job_action_ready(self) -> bool:
+        return not bool(self.start_job_block_reason)
+
+    @Property(str, notify=state_changed)
+    def start_job_block_reason(self) -> str:
+        if not self._review_acknowledged:
+            return "Review and acknowledge the current validated path before starting."
+        app = self.application
+        if not bool(getattr(app, "can_start_job", False)):
+            if not bool(getattr(app, "operation_transport_ready", True)):
+                return "USB is for Wi-Fi setup only; use a verified Wi-Fi connection before starting a job."
+            if not bool(getattr(app, "connected", False)):
+                return "Connect to the controller before starting a job."
+            if not bool(getattr(app, "status_fresh", False)):
+                return "Wait for a fresh GRBL status report before starting a job."
+            if not bool(getattr(app, "homing_inputs_safe", False)):
+                reason = str(getattr(getattr(app, "homing_input_observation", None), "reason", ""))
+                return reason or "Release active homing inputs before starting a job."
+            if bool(getattr(app, "simulation_active", False)):
+                supervisor = str(getattr(app, "supervisor_state", "unavailable"))
+                if supervisor != "healthy":
+                    return f"Wait for healthy digital-twin safety supervision (current state: {supervisor})."
+                runtime = getattr(app, "simulation_runtime", None)
+                if getattr(runtime, "active_hazards", ()):
+                    return "Clear the active digital-twin safety hazard before starting a job."
+                if bool(getattr(runtime, "estop_status", {}).get("interlocked", False)):
+                    return "Release and recover the digital-twin E-stop before starting a job."
+            session = getattr(app, "session", None)
+            if not bool(getattr(session, "can_move", False)):
+                status = getattr(app, "status", None)
+                state = str(getattr(status, "state", "Unknown"))
+                if state != "Idle":
+                    return f"Wait for GRBL to report Idle before starting a job (current state: {state})."
+                if getattr(session, "machine_position", None) is None:
+                    return "Wait for a current machine position before starting a job."
+                return "Wait for a safe, current machine position before starting a job."
+            status = getattr(app, "status", None)
+            spindle_rpm = getattr(status, "spindle", None)
+            if spindle_rpm is None:
+                return "Wait for a fresh GRBL report confirming the spindle is off before starting a job."
+            if spindle_rpm != 0:
+                return "Turn the spindle off and wait for a fresh zero-RPM report before starting a job."
+            if not bool(getattr(app, "work_zero_confirmed", False)):
+                return "Set and confirm XYZ work zero before starting a job."
+            if bool(getattr(app, "manual_pending_acks", False)):
+                return "Wait for the pending GRBL acknowledgement before starting a job."
+            if bool(getattr(app, "motion_busy", False)):
+                return "Wait for the current motion operation to finish before starting a job."
+            if bool(getattr(app, "job_active", False)):
+                return "A job is already active."
+            if bool(getattr(getattr(app, "job", None), "restart_requires_reload", False)):
+                return "Reload and review the program after the previous job failure."
+            if bool(getattr(app, "_z_plate_removal_required", False)):
+                return "Remove the Z touch plate and clip, then acknowledge their removal."
+            if getattr(app, "program", None) is None:
+                return "Load a G-code program before starting a job."
+            try:
+                fits, reason = app.preflight()
+            except (AttributeError, RuntimeError, TypeError, ValueError):
+                fits, reason = False, "Job validation is unavailable."
+            if not fits:
+                return f"Resolve the job validation issue before starting: {reason}"
+            return "The machine is not ready to start a job. Review the current machine and safety state."
+        if not self._guided_preflight_confirmed:
+            return "Confirm that the material and tool are secure before starting."
+        return ""
+
     @Property(int, notify=state_changed)
     def guided_step(self) -> int:
         return self._guided_step
 
     @Property(int, constant=True)
     def guided_step_count(self) -> int:
-        return 9
+        return 7
 
     @Property("QStringList", constant=True)
     def guided_step_names(self) -> list[str]:
-        return [
-            "Safety",
-            "Connect",
-            "Machine profile",
-            "Machine reference",
-            "Work zero",
-            "Create or load",
-            "Review",
-            "Physical preflight",
-            "Run",
-        ]
+        return list(GUIDED_STEP_NAMES)
 
     @Property(str, notify=state_changed)
     def guided_step_title(self) -> str:
         return (
-            "Start safely",
+            "Configure the machine",
             "Connect to GRBL",
-            "Confirm the machine profile",
-            "Establish machine reference",
+            "Home the machine",
             "Set the work zero",
-            "Create or load a job",
+            "Prepare a job",
             "Review the validated path",
-            "Complete physical preflight",
             "Run the job",
         )[self._guided_step]
 
     @Property(str, notify=state_changed)
     def guided_step_description(self) -> str:
         return (
-            "Keep physical power removal or an emergency stop within reach. This app has no home switches or probe to discover the machine's location.",
-            "Connect over USB serial or Wi-Fi TCP and wait for a fresh GRBL Idle report with machine coordinates.",
-            "Enter measured usable X, Y, and Z travel and a safe-Z height. The profile protects every trusted motion and generated job.",
-            "Jog manually to the chosen physical reference, then establish it here. All trusted virtual coordinates are measured from this point.",
-            "Jog to the material's intended origin and set XYZ work zero. Wait for GRBL to confirm the new work offset before continuing.",
-            "Load validated metric G-code or create text, plaque, or STEP toolpaths. Generation never sends machine motion.",
-            "Review the exact loaded file, dimensions, operation plan, and envelope result. A job cannot run unless the transformed bounds fit.",
-            "Secure the material and tool, verify the spindle state, safe Z, feed, and emergency power. This acknowledgement is reset for each guided run.",
-            "Start the guarded acknowledged stream. Pause, resume, or abort remain available in Preview & Run; completion returns safely to work zero.",
+            "Review the machine profile, axes, probes, and digital-twin settings. Configuration is periodic setup, not a motion action.",
+            "Choose USB serial, Wi-Fi TCP, or the loopback digital twin and wait for a fresh controller report.",
+            "Home the machine with all declared switches to establish its trusted reference; incomplete switch commissioning remains blocked.",
+            "Choose Manual XYZ, commissioned movable Z, or loopback-only Auto XYZ. Fresh WCO confirmation is required.",
+            "Load validated metric G-code or create text, plaque, engraving, or STEP toolpaths.",
+            "Inspect the path, envelope, stock fit, collision result, and execution facts, then acknowledge this review.",
+            "Complete physical preflight before starting. Pause, resume, abort, progress, hazards, and recovery remain here.",
         )[self._guided_step]
 
     @Property(bool, notify=state_changed)
     def guided_step_ready(self) -> bool:
-        return self._guided_ready()[0]
+        return self._workflow().steps[self._guided_step].continuable
 
     @Property(str, notify=state_changed)
     def guided_step_reason(self) -> str:
-        return self._guided_ready()[1]
+        return self._workflow().steps[self._guided_step].reason
 
     @Property(bool, notify=state_changed)
     def guided_preflight_confirmed(self) -> bool:
@@ -1089,8 +1878,118 @@ class ControllerViewModel(QObject):
 
     @Slot(str)
     def show_preview_notice(self, message: str) -> None:
-        """Temporary navigation feedback while a workspace is being migrated."""
+        """Show a bounded navigation or preview notice."""
         self._set_notice(message)
+
+    def _arm_guided_completion(self, step: int) -> None:
+        """Remember a user action whose completion may advance the rail."""
+        if self._guided_step == step:
+            self._guided_completion_pending = step
+
+    def _advance_guided_on_completion(self) -> None:
+        """Advance only after the controller reports the requested outcome."""
+        step = self._guided_completion_pending
+        if step is None or self._guided_step != step:
+            return
+        projection = self._workflow()
+        if step == 1:
+            # The connection service's accepted outcome is the observed
+            # completion of Connect. Safety remains an enforced backend gate,
+            # but is not a separate click-through operator step.
+            complete = bool(self.application.connected)
+        elif step == 2:
+            complete = bool(
+                self.application.reference_trusted
+                and not self.application.homing.active
+                and not self.application.motion_busy
+            )
+        elif step == 3:
+            complete = bool(
+                self.application.work_zero_confirmed
+                and not self.application.manual_pending_acks
+                and not self.application.motion_busy
+                and not self.application.probing.active
+                and not self.application.calibration.active
+            )
+        else:
+            complete = False
+        if not complete or not projection.steps[step].continuable:
+            return
+        self._guided_completion_pending = None
+        self._guided_step = 5 if step == 3 else step + 1
+        self._set_notice(f"{projection.steps[step].name} complete — continue with {projection.steps[self._guided_step].name}")
+
+    @Slot(int)
+    def select_guided_step(self, index: int) -> None:
+        """Navigate freely; action-level guards remain authoritative."""
+        projection = self._workflow()
+        index = int(index)
+        if index < 0 or index >= len(projection.steps):
+            return
+        if index != self._guided_step:
+            self._guided_completion_pending = None
+            self._guided_step = index
+            self._emit_state()
+
+    @Slot(int)
+    def select_workflow_step(self, index: int) -> None:
+        self.select_guided_step(index)
+
+    @Slot()
+    def guided_continue(self) -> None:
+        """Advance one step only after its projected prerequisite is true."""
+        projection = self._workflow()
+        current = projection.steps[self._guided_step]
+        if not current.continuable:
+            self._set_notice(f"Cannot continue — {current.reason}")
+            return
+        if self._guided_step < len(projection.steps) - 1:
+            self._guided_step = 5 if self._guided_step == 3 else self._guided_step + 1
+            self._emit_state()
+
+    @Slot()
+    def continue_guided_step(self) -> None:
+        self.guided_continue()
+
+    @Slot()
+    def guided_back(self) -> None:
+        if self.application.job_active:
+            if self._guided_step != len(GUIDED_STEP_NAMES) - 1:
+                self._guided_step = len(GUIDED_STEP_NAMES) - 1
+                self._emit_state()
+            self._set_notice("Run monitoring remains selected while the job is active")
+            return
+        if self._guided_step > 0:
+            projection = self._workflow()
+            candidate = 3 if self._guided_step == 5 else self._guided_step - 1
+            while candidate > 0 and not projection.steps[candidate].selectable:
+                candidate -= 1
+            if not projection.steps[candidate].selectable:
+                candidate = projection.earliest_incomplete
+            self._guided_completion_pending = None
+            self._guided_step = candidate
+            self._emit_state()
+
+    @Slot()
+    def back_guided_step(self) -> None:
+        self.guided_back()
+
+    @Slot()
+    def acknowledge_review(self) -> None:
+        if self._guided_step != 5:
+            self._set_notice("Review acknowledgement is available on the Review step")
+            return
+        projection = self._workflow()
+        if not projection.steps[5].state == "required":
+            self._set_notice(f"Review acknowledgement blocked — {projection.steps[5].reason}")
+            return
+        self._review_acknowledged = True
+        self._set_notice("Review acknowledged for this session")
+        self._emit_state()
+
+    @Slot()
+    def acknowledge_guided_review(self) -> None:
+        self.acknowledge_review()
 
     @Slot()
     def show_connection_notice(self) -> None:
@@ -1098,31 +1997,45 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def guided_next(self) -> None:
-        ready, reason = self._guided_ready()
-        if not ready:
-            self._set_notice(f"Guided setup blocked — {reason}")
-            return
-        if self._guided_step < self.guided_step_count - 1:
-            self._guided_step += 1
-            if self._guided_step < 7:
-                self._guided_preflight_confirmed = False
-            self._emit_state()
+        self.guided_continue()
 
     @Slot()
     def guided_previous(self) -> None:
-        if self._guided_step > 0:
-            self._guided_step -= 1
-            self._emit_state()
+        self.guided_back()
 
     @Slot()
     def guided_reset(self) -> None:
-        self._guided_step = 0
+        step = self._workflow().earliest_incomplete
+        self._guided_step = 5 if step == 4 else step
         self._guided_preflight_confirmed = False
+        self._review_acknowledged = False
+        self._next_part_available = False
+        self._guided_completion_pending = None
+        self._emit_state()
+
+    @Property(bool, notify=state_changed)
+    def next_part_available(self) -> bool:
+        """A completed job may be repeated only through an explicit action."""
+        return self._next_part_available
+
+    @Slot()
+    def prepare_next_part(self) -> None:
+        if not self._next_part_available or self.application.job_active or self.application.job_state != "complete":
+            self._set_notice("Next part is available only after a successful completed job")
+            return
+        self._next_part_available = False
+        self._next_part_armed = False
+        self._guided_completion_pending = None
+        self._review_acknowledged = False
+        self._guided_preflight_confirmed = False
+        step = self._workflow().earliest_incomplete
+        self._guided_step = 5 if self.program is not None or step == 4 else step
+        self._set_notice("Next part ready — review the current path and complete preflight before starting")
         self._emit_state()
 
     @Slot()
     def confirm_guided_preflight(self) -> None:
-        if self._guided_step != 7:
+        if self._guided_step != 6:
             return
         self._guided_preflight_confirmed = True
         self._set_notice("Physical preflight acknowledged for this guided run")
@@ -1130,7 +2043,7 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def guided_start_job(self) -> None:
-        if self._guided_step != 8:
+        if self._guided_step != 6:
             return
         self.start_job()
 
@@ -1170,7 +2083,7 @@ class ControllerViewModel(QObject):
     def confirm_pending_action(self, token: str) -> None:
         pending = self._pending_confirmation
         if pending is None or token != self._confirmation_token:
-            self._set_notice("Confirmation expired; review the current machine state and try again")
+            self._set_notice("This action was canceled or replaced; choose it again.")
             return
         self._pending_confirmation = None
         self._confirmation_token = ""
@@ -1179,16 +2092,17 @@ class ControllerViewModel(QObject):
             outcome = self.application.start_spindle(int(payload))
             self._set_notice(outcome.message)
         elif operation == "job_start":
-            if not self.application.can_start_job:
-                self._set_notice("Job confirmation expired — the machine or loaded program is no longer ready")
+            if not isinstance(payload, str):
+                self._set_notice("Job confirmation expired — review authorization is missing")
                 return
-            fits, reason = self.application.preflight()
-            if not fits:
-                self._set_notice(f"Job blocked — {reason}")
+            if not self._review_acknowledged or not self._guided_preflight_confirmed:
+                self._set_notice("Job confirmation expired — review and physical preflight must remain acknowledged")
                 return
-            outcome = self.application.start_job()
+            outcome = self.application.start_authorized_job(payload)
             if outcome.accepted:
+                self._next_part_armed = True
                 self._guided_preflight_confirmed = False
+                self._review_acknowledged = False
                 self._clear_terminal_simulation_hazard()
             self._set_notice(outcome.message)
         elif operation == "job_abort":
@@ -1202,9 +2116,6 @@ class ControllerViewModel(QObject):
                 self._set_notice("Wi-Fi setup confirmation expired")
                 return
             outcome = self.application.begin_wifi_setup(payload[0], payload[1], payload[2], time.monotonic())
-            self._set_notice(outcome.message)
-        elif operation == "z_probe":
-            outcome = self.application.probe_work_z()
             self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1629,6 +2540,9 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def refresh_ports(self) -> None:
+        if self.application.simulation_active:
+            self._set_notice("Serial discovery is unavailable during a digital-twin session")
+            return
         self._refresh_ports()
 
     @Slot(str)
@@ -1643,6 +2557,8 @@ class ControllerViewModel(QObject):
             return
         self.transport = outcome.mode.value if outcome.mode else "USB serial"
         self.port = port
+        self._auto_connection_state = "connected"
+        self._arm_guided_completion(1)
         try:
             self.application.save_usb_settings(port)
         except (OSError, ValueError):
@@ -1661,6 +2577,7 @@ class ControllerViewModel(QObject):
             self._set_notice(outcome.message)
             return
         self.transport = outcome.mode.value if outcome.mode else "Wi-Fi TCP"
+        self._auto_connection_state = "trying"
         self._connection_text = outcome.message
         self._emit_state()
 
@@ -1681,7 +2598,7 @@ class ControllerViewModel(QObject):
             "wifi_setup",
             (ssid, password, self.wifi_port),
             "Switch controller to station mode?",
-            "The controller will restart and join the selected 2.4 GHz network. The current manual reference will be cleared.",
+            "The controller will restart and join the selected 2.4 GHz network. The current machine reference will be cleared; home again after reconnecting.",
         )
 
     @Slot()
@@ -1702,22 +2619,82 @@ class ControllerViewModel(QObject):
 
     @Slot(str, float)
     def start_live_jog(self, axis: str, direction: float) -> None:
+        if self._live_jog_lease_token:
+            self.stop_live_jog()
         if not self.can_live_jog:
             self._set_notice("Live jog ignored — machine is not ready or GRBL is not Idle")
             return
         if not self.application.reference_trusted and not self._unreferenced_jog_allowed:
             self.unreferenced_jog_requested.emit()
             return
-        outcome = self.application.start_live_jog(axis, direction, self._unreferenced_jog_allowed, 500.0)
+        token = secrets.token_hex(16)
+        self._live_jog_lease_generation += 1
+        generation = self._live_jog_lease_generation
+        self._live_jog_lease_token = token
+        renew_action = getattr(self.application, "renew_live_jog", None)
+        try:
+            if callable(renew_action):
+                outcome = self.application.start_live_jog(
+                    axis, direction, self._unreferenced_jog_allowed, 500.0, lease_token=token
+                )
+            else:
+                # The in-process controller remains available to isolated GUI
+                # fixtures; production clients expose renew_live_jog and use
+                # the backend-enforced lease contract.
+                outcome = self.application.start_live_jog(
+                    axis, direction, self._unreferenced_jog_allowed, 500.0
+                )
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            self.stop_live_jog()
+            self._set_notice(f"Live jog start failed — {exc}")
+            return
         if not outcome.accepted:
+            self.stop_live_jog()
             self._set_notice(outcome.message)
+            return
+        if self._live_jog_lease_token != token or self._live_jog_lease_generation != generation:
+            # A release may race an in-flight start. Never revive its heartbeat;
+            # send a final cancel in case the delayed start reached the owner last.
+            self.application.stop_live_jog()
+            return
+        if callable(renew_action):
+            self._live_jog_renew_timer.start()
+        self._emit_state()
+
+    def _renew_live_jog_lease(self) -> None:
+        token = self._live_jog_lease_token
+        if not token:
+            self._live_jog_renew_timer.stop()
+            return
+        renew_action = getattr(self.application, "renew_live_jog", None)
+        if not callable(renew_action):
+            self._fail_live_jog_lease(token, "backend lease renewal is unavailable")
+            return
+        try:
+            outcome = renew_action(token)
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._fail_live_jog_lease(token, str(exc))
+            return
+        if not outcome.accepted:
+            self._fail_live_jog_lease(token, outcome.message)
+
+    def _fail_live_jog_lease(self, token: str, message: str) -> None:
+        if token != self._live_jog_lease_token:
+            return
+        self.stop_live_jog()
+        self._set_notice(f"Live jog stopped — {message}")
+        self._emit_state()
 
     @Slot()
     def stop_live_jog(self) -> None:
+        self._live_jog_renew_timer.stop()
+        self._live_jog_lease_generation += 1
+        self._live_jog_lease_token = ""
         outcome = self.application.stop_live_jog()
         if not outcome.accepted:
             self._set_notice(outcome.message)
         self._last_status_poll = 0.0
+        self._emit_state()
 
     @Slot(int)
     def start_spindle(self, rpm: int) -> None:
@@ -1752,15 +2729,6 @@ class ControllerViewModel(QObject):
             self._set_notice(f"Position move blocked — {outcome.message}")
 
     @Slot()
-    def establish_reference(self) -> None:
-        outcome = self.application.establish_reference()
-        if outcome.accepted:
-            self._unreferenced_jog_allowed = False
-            self._clear_terminal_simulation_hazard()
-        self._set_notice(outcome.message)
-        self._emit_state()
-
-    @Slot()
     def connect_to_simulation(self) -> None:
         if self.connected:
             self.disconnect()
@@ -1771,6 +2739,8 @@ class ControllerViewModel(QObject):
             return
         self.transport = "Virtual Machine (Digital Twin)"
         self._connection_text = outcome.message
+        self._arm_guided_completion(1)
+        self._auto_connection_state = "connected"
         self._set_notice("DIGITAL TWIN — no physical machine is connected")
         self.simulation_changed.emit()
         self._emit_state()
@@ -1782,14 +2752,54 @@ class ControllerViewModel(QObject):
         self._set_notice(outcome.message)
         self._emit_state()
 
+    @Slot(str, str, int, str)
+    def save_connection_defaults(self, mode: str, host: str, port: int, usb_port: str) -> None:
+        try:
+            if mode == "Wi-Fi TCP":
+                self.application.save_wifi_settings(host.strip(), int(port))
+                self.wifi_host, self.wifi_port = host.strip(), int(port)
+            else:
+                self.application.save_usb_settings(usb_port.strip())
+                self.port = usb_port.strip()
+            self._set_notice("Connection defaults saved")
+        except (OSError, RuntimeError, ValueError) as exc:
+            self._set_notice(f"Connection defaults rejected — {exc}")
+        self._emit_state()
+
     @Slot(str)
-    def save_homing_limit_declarations(self, declarations_json: str) -> None:
+    def save_homing_limit_declarations(self, declarations_json: str) -> bool:
         try:
             declarations = json.loads(declarations_json)
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             self._set_notice(f"Homing/limit declarations rejected — {exc}")
-            return
+            return False
         outcome = self.application.save_homing_limit_declarations(declarations)
+        self._set_notice(outcome.message)
+        self._emit_state()
+        return bool(outcome.accepted)
+
+    @Slot(float, float, float, float)
+    def start_travel_calibration(self, increment_mm: float, max_overshoot_mm: float,
+                                 search_feed: float, return_feed: float) -> None:
+        outcome = self.application.start_travel_calibration(
+            increment_mm=increment_mm, max_overshoot_mm=max_overshoot_mm,
+            search_feed=search_feed, return_feed=return_feed,
+        )
+        if outcome.accepted:
+            self._guided_completion_pending = None
+            self._guided_step = 6
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def abort_travel_calibration(self) -> None:
+        outcome = self.application.abort_travel_calibration()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def accept_travel_calibration(self) -> None:
+        outcome = self.application.accept_travel_calibration()
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1828,7 +2838,24 @@ class ControllerViewModel(QObject):
 
     @Slot()
     def home_machine(self) -> None:
+        if not self.can_home_machine:
+            self._set_notice("Homing blocked — configure all X/Y/Z switches, wait for fresh Idle, and turn the spindle off")
+            self._emit_state()
+            return
         outcome = self.application.home_machine()
+        if outcome.accepted:
+            self._arm_guided_completion(2)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def acknowledge_physical_safety_input(self) -> None:
+        method = getattr(self.application, "acknowledge_safety_input", None)
+        if not callable(method):
+            self._set_notice("Physical safety-input acknowledgement is unavailable in this client")
+            self._emit_state()
+            return
+        outcome = method()
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1860,19 +2887,36 @@ class ControllerViewModel(QObject):
 
     @Slot(str, bool)
     def inject_simulation_limit(self, axis: str, active: bool) -> None:
-        outcome = self.application.set_simulation_limit_input(axis, active)
+        """Set a twin switch's logical state, honoring its declared NC/NO wiring."""
+        normalized_axis = str(axis).upper()
+        declarations = getattr(self.application, "homing_limit_declarations", {})
+        declaration = declarations.get(normalized_axis, {}) if isinstance(declarations, dict) else {}
+        active_low = bool(declaration.get("active_low", False)) if isinstance(declaration, dict) else False
+        # The application/twin boundary accepts the raw electrical level. The
+        # public checkbox represents a logical actuated switch, so translate
+        # it here without changing the raw electrical API used by other tests.
+        electrical_active = not bool(active) if active_low else bool(active)
+        outcome = self.application.set_simulation_limit_input(normalized_axis, electrical_active)
         self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot(float, float, float)
     def start_auto_xyz_calibration(self, x: float, y: float, z: float) -> None:
         outcome = self.application.start_auto_xyz_calibration((x, y, z))
+        if outcome.accepted:
+            self._arm_guided_completion(3)
         self._set_notice(outcome.message)
         self._emit_state()
 
     @Slot()
     def abort_auto_xyz_calibration(self) -> None:
         outcome = self.application.abort_auto_xyz_calibration()
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot()
+    def abort_probe(self) -> None:
+        outcome = self.application.abort_probe()
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1890,6 +2934,33 @@ class ControllerViewModel(QObject):
         outcome = self.application.save_z_plate_capability(enabled)
         self._set_notice(outcome.message)
         self._emit_state()
+
+    @Slot(bool, bool, bool, bool)
+    def save_probe_capabilities(self, z_plate: bool, tool_setter: bool,
+                                movable_xyz: bool, fixed_xyz: bool) -> None:
+        outcome = self.application.save_probe_capabilities(
+            z_plate=z_plate, tool_setter=tool_setter,
+            movable_xyz=movable_xyz, fixed_xyz=fixed_xyz,
+        )
+        self._set_notice(outcome.message)
+        self._emit_state()
+
+    @Slot(bool, bool, bool, bool, float, bool, float, float, float, float, float, float)
+    def save_probe_configuration(self, z_plate: bool, tool_setter: bool,
+                                 movable_xyz: bool, fixed_xyz: bool,
+                                 thickness: float, active_low: bool,
+                                 fast_feed: float, slow_feed: float,
+                                 max_search: float, retract: float,
+                                 safe_retract: float, tolerance: float) -> bool:
+        outcome = self.application.save_probe_configuration(
+            z_plate=z_plate, tool_setter=tool_setter, movable_xyz=movable_xyz,
+            fixed_xyz=fixed_xyz, plate_thickness=thickness, active_low=active_low,
+            fast_feed=fast_feed, slow_feed=slow_feed, max_search=max_search,
+            retract=retract, safe_retract=safe_retract, tolerance=tolerance,
+        )
+        self._set_notice(outcome.message)
+        self._emit_state()
+        return bool(outcome.accepted)
 
     @Slot(float, bool, float, float, float, float, float, float)
     def save_z_touch_plate_settings(self, thickness: float, active_low: bool, fast_feed: float,
@@ -1926,12 +2997,27 @@ class ControllerViewModel(QObject):
         self._set_notice(outcome.message)
         self._emit_state()
 
+    @Slot(str)
+    def continue_z_probe_to_surface(self, transaction_id: str) -> None:
+        continue_action = getattr(self.application, "continue_z_probe_to_surface", None)
+        if not callable(continue_action):
+            self._set_notice("Continue to work Z0 is unavailable from this application client")
+            self._emit_state()
+            return
+        outcome = continue_action(transaction_id)
+        self._set_notice(outcome.message)
+        self._emit_state()
+
     @Slot()
     def probe_work_z(self) -> None:
-        self._request_confirmation(
-            "z_probe", None, "Probe workpiece Z?",
-            "Confirm the rigid touch puck is flat on the workpiece, the clip is attached to the cutter, the spindle is off, and the puck will be removed after the probe. Pine will probe downward only within the configured search distance.",
-        )
+        # The operator explicitly starts this bounded probe from its guarded
+        # work-zero control. Keep the removal confirmation at the result step,
+        # where it authorizes a distinct Z-only descent after puck removal.
+        outcome = self.application.probe_work_z()
+        if outcome.accepted:
+            self._arm_guided_completion(3)
+        self._set_notice(outcome.message)
+        self._emit_state()
 
     @Slot(str)
     def select_machine(self, label: str) -> None:
@@ -1949,6 +3035,7 @@ class ControllerViewModel(QObject):
         if not outcome.accepted:
             self._set_notice(outcome.message)
             return
+        self._arm_guided_completion(3)
         self._set_notice(outcome.message)
         self._emit_state()
 
@@ -1974,14 +3061,6 @@ class ControllerViewModel(QObject):
         if not outcome.accepted:
             self._set_notice(f"Position move blocked — {outcome.message}")
 
-    @Slot()
-    def return_to_reference_and_close(self) -> None:
-        if not self.can_return_to_reference:
-            self._set_notice("Return to reference is unavailable until GRBL is Idle with a trusted position")
-            return
-        self._close_after_return_pending = True
-        self.return_to_reference()
-
     @Slot(QUrl)
     def load_gcode_file(self, selected_file: QUrl) -> None:
         if self.job_active:
@@ -1998,7 +3077,9 @@ class ControllerViewModel(QObject):
             return
         bounds = program.bounds
         size = bounds.size
-        self._preview_strokes = self._strokes_for_program(program)
+        has_raster = self._set_backend_program_preview()
+        self._preview_strokes = [] if has_raster else self._strokes_for_program(program)
+        self._set_preview_path_layers(program, has_raster)
         self._preview_model_strokes = []
         self._preview_stock_width = 0.0
         self._preview_stock_height = 0.0
@@ -2009,7 +3090,11 @@ class ControllerViewModel(QObject):
             f"Y {bounds.minimum.y:.3f}…{bounds.maximum.y:.3f}, Z {bounds.minimum.z:.3f}…{bounds.maximum.z:.3f} mm "
             f"(size {size.x:.3f} × {size.y:.3f} mm)"
         )
+        self._remember_backend_program_projection(program)
         self._guided_preflight_confirmed = False
+        self._review_acknowledged = False
+        if self._guided_step == 6:
+            self._guided_step = 5
         self._set_notice("G-code loaded and validated")
         self._emit_state()
 
@@ -2029,11 +3114,16 @@ class ControllerViewModel(QObject):
             return
         self._preview_strokes = self._strokes_for_qml(strokes)
         self._preview_model_strokes = []
+        has_raster = self._set_backend_program_preview()
+        self._set_preview_path_layers(program, has_raster)
+        if has_raster:
+            self._preview_strokes = []
         self._preview_stock_width = stock_width
         self._preview_stock_height = stock_height
         self._preview_summary = summary
         self._job_file_text = filename
         self._job_summary_text = summary
+        self._remember_backend_program_projection(program)
         self._guided_preflight_confirmed = False
         self._set_notice(f"Generated {filename} and loaded it for review")
         self._emit_state()
@@ -2043,13 +3133,26 @@ class ControllerViewModel(QObject):
         if not self.can_start_job or self.program is None:
             self._set_notice("Job blocked — connect, reference, confirm XYZ work zero, and load a fitting job")
             return
+        if not self._review_acknowledged:
+            self._set_notice("Job blocked — acknowledge the current validated path in Review")
+            return
+        if not self._guided_preflight_confirmed:
+            self._set_notice("Job blocked — complete physical preflight before starting")
+            return
         fits, reason = self.application.preflight()
         if not fits:
             self._set_notice(f"Job blocked — {reason}")
             return
+        authorization = self.application.authorize_job_start(
+            review_acknowledged=self._review_acknowledged,
+            physical_preflight_confirmed=self._guided_preflight_confirmed,
+        )
+        if not authorization.accepted:
+            self._set_notice(authorization.message)
+            return
         self._request_confirmation(
             "job_start",
-            None,
+            authorization.token,
             "Start engraving job?",
             f"{self.program.path.name}\n\n{reason}\n\nConfirm the material, tool, and physical emergency power are ready.",
         )
@@ -2099,12 +3202,13 @@ class ControllerViewModel(QObject):
         # aboutToQuit is the last reliable application lifecycle hook. Stop
         # polling before releasing the transport so no timer callback can race
         # the final socket/serial-handle cleanup.
+        self.stop_live_jog()
+        self._live_jog_renew_timer.stop()
         self._timer.stop()
         self.disable_live_access()
         self._camera_service.stop()
         self._remote_bridge.close()
         self.application.close()
-        self._close_after_return_pending = False
         self.status = None
         self._connection_text = "Disconnected"
         self._state_text = "Unknown"
@@ -2116,7 +3220,13 @@ class ControllerViewModel(QObject):
         self._emit_state()
 
     def _refresh_ports(self) -> None:
+        if self.application.simulation_active:
+            self._ports = []
+            self._ports_loaded = True
+            self.ports_changed.emit()
+            return
         self._ports = [f"{device} — {description}" for device, description in self.application.usb_ports()]
+        self._ports_loaded = True
         saved_port = self.application.settings.usb_port
         saved_label = next((label for label in self._ports if label.split(" ", 1)[0] == saved_port), "")
         if saved_label:
@@ -2126,24 +3236,91 @@ class ControllerViewModel(QObject):
         self.ports_changed.emit()
 
     def _auto_connect_last(self) -> None:
-        """Try the last successful endpoint once without opening a dialog."""
-        if self.connected:
+        """Ask the backend for one bounded saved physical connection plan."""
+        if self.connected or self._auto_connect_started:
             return
+        self._auto_connect_started = True
+        auto_connect = getattr(self.application, "auto_connect_saved", None)
+        if callable(auto_connect) and callable(getattr(self.application, "poll_backend", None)):
+            self._auto_connection_state = "trying"
+            self._auto_failure_reported = False
+            outcome = auto_connect()
+            if outcome.accepted:
+                self._auto_connection_attempts = list(
+                    getattr(getattr(self.application, "connection_service", None), "auto_connection_failures", ())
+                )
+                if self.connected:
+                    self._auto_connection_state = "connected"
+                else:
+                    self._set_notice(outcome.message)
+                self._emit_state()
+            else:
+                self._auto_connection_state = "failed"
+                self._auto_connection_attempts = list(
+                    getattr(getattr(self.application, "connection_service", None), "auto_connection_failures", ())
+                )
+                self._connection_text = outcome.message
+                self._set_notice(outcome.message)
+                self.auto_connection_failed.emit(outcome.message)
+                self._emit_state()
+            return
+
+        # Compatibility fallback for lightweight test doubles that predate
+        # the backend-owned automatic connection operation.
         settings = self.application.settings
         if settings.preferred_transport == "Wi-Fi TCP":
+            self._auto_connection_state = "trying"
             self._set_notice(f"Connecting automatically to {settings.wifi_host}:{settings.wifi_port}…")
             self.connect_to_wifi(settings.wifi_host, settings.wifi_port)
             return
-        if not settings.usb_port:
-            return
+        if not self._ports_loaded:
+            self._refresh_ports()
         available = {label.split(" ", 1)[0] for label in self._ports}
         if settings.usb_port not in available:
-            self._set_notice(f"Last USB connection {settings.usb_port} is not available")
+            self._auto_connection_state = "failed"
+            message = f"Last USB connection {settings.usb_port} is not available"
+            self._set_notice(message)
+            self.auto_connection_failed.emit(message)
             return
+        self._auto_connection_state = "trying"
         self._set_notice(f"Connecting automatically to {settings.usb_port}…")
         self.connect_to_usb(settings.usb_port)
 
     def _poll(self) -> None:
+        status_projection = (
+            bool(self.application.connected),
+            str(getattr(self.application, "status_state", "unavailable")),
+        )
+        if status_projection != self._last_status_projection:
+            self._last_status_projection = status_projection
+            self._emit_state()
+        # A backend-backed shell has no local transport/simulation loop to
+        # advance. Rebuild the presentation from the authoritative snapshot
+        # and ordered event cursor, and leave the persistent owner untouched.
+        backend_poll = getattr(self.application, "poll_backend", None)
+        if callable(backend_poll):
+            backend_poll()
+            backend_auto_state = str(getattr(self.application, "auto_connection_state", "idle"))
+            if self._auto_connect_started:
+                if self.connected:
+                    self._auto_connection_state = "connected"
+                elif backend_auto_state == "trying":
+                    self._auto_connection_state = "trying"
+                elif backend_auto_state == "failed":
+                    self._auto_connection_state = "failed"
+                    self._auto_connection_attempts = list(getattr(self.application, "auto_connection_failures", ()))
+                    if not self._auto_failure_reported:
+                        self._auto_failure_reported = True
+                        message = "Automatic connection failed"
+                        if self._auto_connection_attempts:
+                            message += " — " + " · ".join(self._auto_connection_attempts)
+                        self._connection_text = message
+                        self._set_notice(message)
+                        self.auto_connection_failed.emit(message)
+            if getattr(self.application, "backend_unavailable", False):
+                self._set_notice("Backend unavailable — machine state is read-only until reconnect")
+            self._emit_state()
+            return
         self._poll_wifi_result()
         self.application.poll_wifi_setup(time.monotonic())
         now = time.monotonic()
@@ -2199,7 +3376,7 @@ class ControllerViewModel(QObject):
             if watchdog_failure is not None:
                 self._disconnected(
                     "Controller stopped responding during the job. Motion and spindle state are uncertain; "
-                    "remove power if needed, then reconnect, re-establish reference, and reload the job. "
+                    "remove power if needed, then reconnect, home the machine, and reload the job. "
                     f"Details: {watchdog_failure}"
                 )
                 return
@@ -2214,6 +3391,9 @@ class ControllerViewModel(QObject):
         args = intent.get("arguments", {})
         args = args if isinstance(args, dict) else {}
         try:
+            # Legacy scenario traces may seed a trusted twin envelope through
+            # this private replay hook; the operator-facing ViewModel and
+            # backend action registry expose only guarded homing.
             if name == "establish_reference":
                 outcome = self.application.establish_reference()
             elif name == "jog":
@@ -2221,7 +3401,14 @@ class ControllerViewModel(QObject):
             elif name == "set_work_zero":
                 outcome = self.application.set_work_zero(str(args.get("axes", "XYZ")))
             elif name == "start_job":
-                outcome = self.application.start_job()
+                authorization = self.application.authorize_job_start(
+                    review_acknowledged=self._review_acknowledged,
+                    physical_preflight_confirmed=self._guided_preflight_confirmed,
+                )
+                outcome = (
+                    self.application.start_authorized_job(authorization.token)
+                    if authorization.accepted else authorization
+                )
             elif name == "pause_job":
                 outcome = self.application.pause_job()
             elif name == "resume_job":
@@ -2256,6 +3443,7 @@ class ControllerViewModel(QObject):
         except (OSError, ValueError):
             pass
         self._connection_text = outcome.message
+        self._arm_guided_completion(1)
         self._set_notice(self._connection_text)
         self._emit_state()
 
@@ -2287,9 +3475,6 @@ class ControllerViewModel(QObject):
                 self._simulation_active_hazard = projected
                 self._simulation_terminal_hazard = dict(projected)
                 self._simulation_hazards = [*self._simulation_hazards[-49:], projected["message"]]
-            if self._close_after_return_pending and self.at_reference:
-                self._close_after_return_pending = False
-                self.close_requested.emit()
             self._project_status(status)
         if reset:
             if self.status is not None:
@@ -2298,6 +3483,15 @@ class ControllerViewModel(QObject):
                 self._emit_state()
 
     def _project_status(self, status: GrblStatus) -> None:
+        self._update_status_projection(status)
+        homing = getattr(self.application, "homing", None)
+        homing_state = getattr(getattr(homing, "state", "idle"), "value", getattr(homing, "state", "idle"))
+        if str(homing_state).lower() == "complete":
+            self._unreferenced_jog_allowed = False
+            self._clear_terminal_simulation_hazard()
+        self._emit_state()
+
+    def _update_status_projection(self, status: GrblStatus) -> None:
         self._state_text = status.state
         self._connection_text = (
             f"DIGITAL TWIN — NO PHYSICAL MACHINE · GRBL {status.state}"
@@ -2313,20 +3507,52 @@ class ControllerViewModel(QObject):
         self._work_position_text = self._format_position(work)
         self._reference_text = "Trusted" if self.application.reference_trusted else "Position unknown"
         self._work_zero_text = "Confirmed" if self.application.work_zero_confirmed else "Not confirmed"
-        self._emit_state()
+        session_id = str(getattr(self.application, "backend_session_id", ""))
+        if not session_id:
+            session_id = str(getattr(self.application, "session_generation", ""))
+        changed = bool(session_id and self._backend_session_seen and session_id != self._backend_session_seen)
+        if session_id:
+            self._backend_session_seen = session_id
+        if changed:
+            self._envelope_marker = EnvelopeMarker(
+                "unknown", "Backend session changed; waiting for fresh MPos", session_id=session_id
+            )
+        else:
+            self._envelope_marker = project_machine_position(
+                # The travel envelope and move_to planner both use virtual
+                # coordinates relative to the trusted home reference. Feeding
+                # raw GRBL MPos here made canvas clicks select the wrong frame.
+                self.application.virtual_position if self.application.reference_trusted else status.machine_position,
+                self.application.profile.travel_x,
+                self.application.profile.travel_y,
+                self.application.profile.travel_z,
+                connected=bool(self.application.connected),
+                status_fresh=bool(getattr(self.application, "status_fresh", False)),
+                session_id=session_id,
+            )
 
     @staticmethod
     def _strokes_for_qml(strokes: tuple[tuple[tuple[float, float], ...], ...] | list[tuple[tuple[float, float], ...]]) -> list[list[list[float]]]:
         return [[[float(x), float(y)] for x, y in stroke] for stroke in strokes]
 
     @classmethod
-    def _strokes_for_program(cls, program: GCodeProgram) -> list[list[list[float]]]:
+    def _strokes_for_program(cls, program: GCodeProgram, *, rapid: bool | None = None) -> list[list[list[float]]]:
         return cls._strokes_for_qml(
             tuple(
                 ((segment.start.x, segment.start.y), (segment.end.x, segment.end.y))
                 for segment in program.segments
+                if rapid is None or bool(segment.rapid) is rapid
             )
         )
+
+    def _set_preview_path_layers(self, program: GCodeProgram, has_raster: bool) -> None:
+        if has_raster:
+            self._preview_cutting_strokes = []
+            self._preview_rapid_strokes = []
+            return
+        self._preview_cutting_strokes = self._strokes_for_program(program, rapid=False)
+        self._preview_rapid_strokes = self._strokes_for_program(program, rapid=True)
+        self._preview_path_layers_available = True
 
     @classmethod
     def _strokes_for_step_model(cls, model: StepPlanarModel) -> list[list[list[float]]]:
@@ -2507,12 +3733,12 @@ class ControllerViewModel(QObject):
     def _disconnected(self, reason: str) -> None:
         self.application.disconnect(reason)
         self.status = None
-        self._close_after_return_pending = False
         self._unreferenced_jog_allowed = False
         self._connection_text = "Disconnected"
         self._state_text = "Unknown"
         self._machine_position_text = "X—  Y—  Z—"
         self._work_position_text = "X—  Y—  Z—"
+        self._envelope_marker = EnvelopeMarker("unknown", "Controller disconnected")
         self._reference_text = "Position unknown"
         self._work_zero_text = "Not confirmed"
         self._spindle_text = "Off"
@@ -2524,6 +3750,11 @@ class ControllerViewModel(QObject):
         self._simulation_export_status = "No simulation evidence exported"
         self.simulation_changed.emit()
         self._guided_preflight_confirmed = False
+        self._review_acknowledged = False
+        self._guided_completion_pending = None
+        step = self._workflow().earliest_incomplete
+        self._guided_step = 5 if step == 4 else step
+        self._last_review_fingerprint = None
         self._issue = IssueSnapshot(
             severity="error",
             title="Controller disconnected",
@@ -2738,33 +3969,8 @@ class ControllerViewModel(QObject):
             self._set_notice("Pine Live settings could not be saved")
 
     def _guided_ready(self) -> tuple[bool, str]:
-        step = self._guided_step
-        if step == 0:
-            return True, "Safety guidance reviewed."
-        if step == 1:
-            return bool(self.connected and self.status is not None and self.status.can_jog), "Connect and wait for GRBL Idle with a machine position."
-        if step == 2:
-            try:
-                self.application.profile.validate()
-            except ValueError as exc:
-                return False, str(exc)
-            return True, "The configured machine profile is valid."
-        if step == 3:
-            return self.application.reference_trusted, "Establish the machine reference from the Machine workspace."
-        if step == 4:
-            return self.application.work_zero_confirmed, "Set XYZ work zero and wait for a fresh GRBL work-offset report."
-        if step == 5:
-            return self.program is not None, "Load G-code or create a text, plaque, or STEP job."
-        if step == 6:
-            fits, reason = self.application.preflight()
-            return bool(self.program is not None and fits), reason
-        if step == 7:
-            if not self._guided_preflight_confirmed:
-                return False, "Confirm the material, tool, spindle, safe Z, feed, and emergency power."
-            return True, "Physical preflight acknowledged."
-        if step == 8:
-            return True, "The guarded job-start confirmation is ready."
-        return False, "Unknown guided setup step."
+        step = self._workflow().steps[self._guided_step]
+        return step.continuable, step.reason
 
     def _set_notice(self, message: str) -> None:
         logging.getLogger("pine.ui").info(message)
@@ -2805,7 +4011,7 @@ class ControllerViewModel(QObject):
         if self.status is None or not self.status.can_jog:
             return ReadinessSnapshot(connection="complete", next_action="Wait for Idle", reason="Wait for a fresh GRBL Idle report.")
         if not self.application.reference_trusted:
-            return ReadinessSnapshot(connection="complete", reference="required", next_action="Establish reference", reason="Manually position the machine, then establish its trusted reference.")
+            return ReadinessSnapshot(connection="complete", reference="required", next_action="Home machine", reason="Home the machine to establish its trusted reference.")
         if not self.application.work_zero_confirmed:
             return ReadinessSnapshot(connection="complete", reference="complete", work_zero="required", next_action="Set work zero", reason="Jog to the material origin and set XYZ work zero.")
         if self.program is None:
@@ -2831,10 +4037,10 @@ class ControllerViewModel(QObject):
         if self.status is not None and self.status.state in {"Alarm", "Door", "Sleep"}:
             return IssueSnapshot(
                 title=f"Controller {self.status.state}",
-                explanation="Motion trust may be lost. Stop safely, inspect the machine, and re-establish the reference before moving again.",
+                explanation="Motion trust may be lost. Stop safely, inspect the machine, and home before moving again.",
                 reference_lost=True,
                 work_zero_lost=True,
-                actions=("Spindle off", "Establish reference", "Open console"),
+                actions=("Spindle off", "Home machine", "Open console"),
             )
         return None
 
@@ -2883,7 +4089,51 @@ class ControllerViewModel(QObject):
 
     def _emit_state(self) -> None:
         """Project state once, with narrow signals for high-frequency consumers."""
+        self._sync_controller_status_projection()
         self._sync_controller_operation()
+        self._sync_backend_program_projection()
+        # Warm the shared workflow projection before deriving acknowledgement
+        # state.  This keeps the controller callback and the QML-facing
+        # properties on one cache boundary, so loading a job performs one
+        # preflight for the state publication rather than one per consumer.
+        self._workflow()
+        # Review acknowledgement is a session-local claim about one exact
+        # machine/job/safety snapshot.  Any material change invalidates it;
+        # the acknowledgement itself does not alter this fingerprint.
+        try:
+            definition_fingerprint = self.application.machine_definition.fingerprint()
+        except (AttributeError, TypeError, ValueError):
+            definition_fingerprint = repr(self.application.machine_definition)
+        review_preflight_ok = bool(self._workflow_preflight[0]) if self.application.program is not None else False
+        review_fingerprint = (
+            definition_fingerprint,
+            self.application.program.path.as_posix() if self.application.program is not None else "",
+            tuple(self.application.program.commands) if self.application.program is not None else (),
+            self._preview_summary,
+            bool(self.application.reference_trusted),
+            bool(self.application.work_zero_confirmed),
+            repr(self.application.work_offset),
+            self._state_text,
+            bool(self.application.connected),
+            bool(self.simulation_hazard_active),
+            bool(self.simulation_estop_active),
+            bool(self.application.job_active),
+            review_preflight_ok,
+            bool(self.application.simulation_plate_commissioned),
+            str(self.application.auto_xyz_calibration_state),
+            bool(self.application.calibration.work_offset_confirmed),
+            bool(self.application.simulation_active),
+            tuple((key, repr(self._physical_safety_status().get(key))) for key in (
+                "state", "raw_state", "transition_id", "power_removal",
+                "blocks_motion", "latched", "commissioned", "reason")),
+        )
+        if self._last_review_fingerprint is None:
+            self._last_review_fingerprint = review_fingerprint
+        elif review_fingerprint != self._last_review_fingerprint:
+            self._last_review_fingerprint = review_fingerprint
+            if self._review_acknowledged:
+                self._review_acknowledged = False
+                self._set_notice("Review acknowledgement cleared — the machine or job state changed")
         self._live_snapshot = self.application.live_status_snapshot(
             camera_state=self._camera_service.state,
             remote_state="available" if self.live_access_enabled else "off",
@@ -2902,7 +4152,13 @@ class ControllerViewModel(QObject):
         if operation != self._last_operation_snapshot:
             self._last_operation_snapshot = operation
             self.operation_changed.emit()
-        position_projection = (self._machine_position_text, self._work_position_text)
+        position_projection = (
+            self._machine_position_text,
+            self._work_position_text,
+            self._envelope_marker.state,
+            self._envelope_marker.direction,
+            self._envelope_marker.session_id,
+        )
         now = time.monotonic()
         safety_changed = self._state_text in {"Alarm", "Door", "Sleep"} or self._spindle_text not in {"Off", "0 RPM"}
         if position_projection != self._last_position_projection and (safety_changed or now - self._position_emit_at >= 1 / 30):
@@ -2912,7 +4168,14 @@ class ControllerViewModel(QObject):
         preview_fingerprint = (
             self._preview_summary,
             self._job_file_text,
+            self._preview_image_url,
+            self._preview_cutting_image_url,
+            self._preview_rapid_image_url,
+            self._preview_image_note,
+            self._preview_path_layers_available,
             len(self._preview_strokes),
+            len(self._preview_cutting_strokes),
+            len(self._preview_rapid_strokes),
             len(self._preview_model_strokes),
             self._step_preview_valid,
         )
@@ -2920,6 +4183,11 @@ class ControllerViewModel(QObject):
             self._last_preview_fingerprint = preview_fingerprint
             self.preview_changed.emit()
         job_projection = (self.application.job_state, self.application.job_progress, self.application.job_active)
+        previous_job_state = self._last_job_projection[0] if self._last_job_projection else ""
+        if self.application.job_state == "complete" and not self.application.job_active and self._next_part_armed:
+            self._next_part_available = True
+        elif self.application.job_state in {"failed", "idle"} or not self.connected:
+            self._next_part_available = False
         if job_projection != self._last_job_projection:
             self._last_job_projection = job_projection
             self.job_changed.emit()
@@ -2927,7 +4195,173 @@ class ControllerViewModel(QObject):
         if connection_projection != self._last_connection_projection:
             self._last_connection_projection = connection_projection
             self.connection_changed.emit()
+        self._advance_guided_on_completion()
         self.state_changed.emit()
+
+    def _sync_backend_program_projection(self) -> None:
+        """Refresh job labels and preview when the persistent backend changes its job."""
+        if not callable(getattr(self.application, "poll_backend", None)):
+            return
+
+        program = self.application.program
+        projection = self._backend_program_projection_key(program)
+        if projection == self._backend_program_projection:
+            return
+        self._backend_program_projection = projection
+        self._review_acknowledged = False
+        self._guided_preflight_confirmed = False
+
+        if program is None:
+            self._job_provenance = {
+                "report_state": "unavailable", "file_sha256": "", "report_name": "",
+                "release_status": "", "bundle": "", "details": [], "header_notes": [],
+                "verification_text": "",
+                "notice": "No job is loaded.",
+            }
+            self._job_file_text = "No G-code loaded"
+            self._job_summary_text = "Load a metric, pre-sliced engraving file."
+            self._preview_strokes = []
+            self._preview_cutting_strokes = []
+            self._preview_rapid_strokes = []
+            self._preview_model_strokes = []
+            self._preview_image_url = ""
+            self._preview_cutting_image_url = ""
+            self._preview_rapid_image_url = ""
+            self._preview_path_layers_available = False
+            self._preview_image_note = ""
+            self._preview_stock_width = 0.0
+            self._preview_stock_height = 0.0
+            self._preview_summary = ""
+            return
+
+        bounds = program.bounds
+        size = bounds.size
+        command_count = len(program.commands)
+        provenance = getattr(self.application, "program_provenance", {})
+        self._job_provenance = {
+            "report_state": "unavailable", "file_sha256": "", "report_name": "",
+            "release_status": "", "bundle": "", "details": [], "header_notes": [],
+            "verification_text": "", "notice": "Review report details are unavailable.",
+        }
+        if isinstance(provenance, dict):
+            self._job_provenance.update(provenance)
+        else:
+            self._job_provenance.update({
+                "report_state": "unavailable", "file_sha256": str(getattr(program, "source_sha256", "")),
+                "details": [], "notice": "Review report details are unavailable.",
+            })
+        self._job_file_text = program.path.name or str(program.path)
+        self._job_summary_text = (
+            f"{command_count} commands; X {bounds.minimum.x:.3f}…{bounds.maximum.x:.3f}, "
+            f"Y {bounds.minimum.y:.3f}…{bounds.maximum.y:.3f}, Z {bounds.minimum.z:.3f}…{bounds.maximum.z:.3f} mm "
+            f"(size {size.x:.3f} × {size.y:.3f} mm)"
+        )
+        has_raster = self._set_backend_program_preview()
+        self._preview_strokes = [] if has_raster else self._strokes_for_program(program)
+        self._set_preview_path_layers(program, has_raster)
+        self._preview_model_strokes = []
+        self._preview_stock_width = 0.0
+        self._preview_stock_height = 0.0
+        self._preview_summary = f"{command_count} commands · {size.x:.1f} × {size.y:.1f} mm"
+
+    def _set_backend_program_preview(self) -> bool:
+        """Project the backend's complete, pixel-bounded preview when present."""
+        preview = getattr(self.application, "program_preview", {})
+        if not isinstance(preview, dict):
+            preview = {}
+        data_url = str(preview.get("data_url", ""))
+        if not data_url.startswith("data:image/png;base64,"):
+            self._preview_image_url = ""
+            self._preview_cutting_image_url = ""
+            self._preview_rapid_image_url = ""
+            self._preview_path_layers_available = False
+            self._preview_image_note = ""
+            return False
+        self._preview_image_url = data_url
+        cutting_data_url = str(preview.get("cutting_data_url", ""))
+        rapid_data_url = str(preview.get("rapid_data_url", ""))
+        self._preview_cutting_image_url = (
+            cutting_data_url if cutting_data_url.startswith("data:image/png;base64,") else ""
+        )
+        self._preview_rapid_image_url = (
+            rapid_data_url if rapid_data_url.startswith("data:image/png;base64,") else ""
+        )
+        self._preview_path_layers_available = bool(
+            preview.get("path_layers_available")
+            and self._preview_cutting_image_url
+            and self._preview_rapid_image_url
+        )
+        self._preview_image_note = str(preview.get(
+            "note", "Every move is projected into the XY raster preview."
+        ))
+        return True
+
+    @staticmethod
+    def _backend_program_projection_key(program) -> tuple[object, ...] | None:
+        if program is None:
+            return None
+        return (
+            str(program.path), len(program.commands), repr(program.bounds),
+            float(program.estimated_seconds), str(getattr(program, "source_sha256", "")),
+        )
+
+    def _remember_backend_program_projection(self, program) -> None:
+        if callable(getattr(self.application, "poll_backend", None)):
+            self._backend_program_projection = self._backend_program_projection_key(program)
+        provenance = getattr(self.application, "program_provenance", {})
+        self._job_provenance = {
+            "report_state": "unavailable", "file_sha256": "", "report_name": "",
+            "release_status": "", "bundle": "", "details": [], "header_notes": [],
+            "verification_text": "", "notice": "Review report details are unavailable.",
+        }
+        if isinstance(provenance, dict):
+            self._job_provenance.update(provenance)
+        else:
+            self._job_provenance.update({
+                "report_state": "unavailable", "file_sha256": str(getattr(program, "source_sha256", "")),
+                "details": [], "notice": "Review report details are unavailable.",
+            })
+
+    def _sync_controller_status_projection(self) -> None:
+        """Never present an old controller report as current machine state."""
+        if not self.application.connected:
+            return
+
+        state = str(getattr(self.application, "status_state", "unavailable"))
+        status = self.application.status
+        if state == "fresh" and status is not None:
+            self._update_status_projection(status)
+            return
+
+        setup_only = bool(getattr(self.application, "connection_setup_only", False))
+        service = getattr(self.application, "connection_service", None)
+        if service is not None:
+            mode = getattr(getattr(service, "mode", None), "value", "")
+            setup_only = setup_only or bool(
+                getattr(service, "usb_setup_only", False) and mode == "USB serial"
+            )
+        prefix = "USB setup connection — " if setup_only else "Connected — "
+        if state == "stale" and status is not None:
+            self._state_text = "Stale"
+            self._connection_text = prefix + "GRBL status is stale; waiting for a fresh report"
+            marker_reason = "GRBL status is stale; waiting for a fresh MPos"
+        else:
+            self._state_text = "Waiting"
+            self._connection_text = prefix + "waiting for the first GRBL status report"
+            marker_reason = "Waiting for the first fresh MPos report"
+
+        # Coordinates, spindle and input state from an old report are not
+        # authoritative once its freshness window expires or the new session
+        # has not reported yet.
+        self._machine_position_text = "X—  Y—  Z—"
+        self._work_position_text = "X—  Y—  Z—"
+        self._spindle_text = "Unknown"
+        self._feed_text = "—"
+        self._pins_text = "Unknown"
+        session_id = str(getattr(self.application, "backend_session_id", ""))
+        if not session_id:
+            session_id = str(getattr(self.application, "session_generation", ""))
+        self._envelope_marker = EnvelopeMarker("unknown", marker_reason, session_id=session_id)
 
     @staticmethod
     def _format_position(position: Position | None) -> str:

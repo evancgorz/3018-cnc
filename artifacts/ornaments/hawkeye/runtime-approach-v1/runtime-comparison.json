@@ -1,0 +1,38 @@
+{
+  "scope": "engraving only; no cutout, tool-change, acceleration or hardware timing",
+  "rapid_assumption_mm_per_min": 3000,
+  "same_source_depth_feeds_and_tool_width": true,
+  "approach_scenario": "Vertical rapid to +0.2 mm after XY travel at +3 mm; assumes verified flatness/clearance",
+  "baseline_two_pass": {
+    "cutting_minutes": 91.8120273333332,
+    "plunge_minutes": 498.76406249986576,
+    "rapid_minutes": 35.05008057431676,
+    "estimated_minutes": 625.6261704077866,
+    "plunges": 12518
+  },
+  "scheduling_only_two_pass_unchanged_settings": {
+    "cutting_minutes": 127.18905884670751,
+    "plunge_minutes": 104.86875000000528,
+    "rapid_minutes": 6.616329090312048,
+    "estimated_minutes": 238.6741379368635,
+    "plunges": 2632
+  },
+  "optimized_two_pass_with_illustrative_approach": {
+    "cutting_minutes": 104.26603332696287,
+    "plunge_minutes": 27.45437499999667,
+    "rapid_minutes": 15.223151515033688,
+    "estimated_minutes": 146.94355984189318,
+    "plunges": 5668
+  },
+  "single_pass_timing_projection_unverified": {
+    "cutting_minutes": 52.13301666344357,
+    "plunge_minutes": 15.941250000000524,
+    "rapid_minutes": 7.666411798624678,
+    "estimated_minutes": 75.74067846208231,
+    "plunges": 2834
+  },
+  "single_pass_caveat": "Requires max_stepdown 0.25 instead of 0.125; untested, not a cutting recommendation",
+  "artwork_inaccessible_fraction_unchanged": 0.09340922847992196,
+  "optimized_program_sha256": "0dd33e67efc200bc904642e3d1adb261798adcecb4a2e68494d018e6a74165c7",
+  "generator_sha256": "9070b60e4035b13b0e4b4742e3791ab4f6b36eb0214cfbdf678d8887e2b61544"
+}

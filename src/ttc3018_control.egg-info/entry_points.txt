@@ -1,0 +1,5 @@
+[console_scripts]
+pine-backend = ttc3018_control.backend.main:main
+pine-cli = ttc3018_control.backend.cli:main
+pine-cnc = ttc3018_control.qt.main:main
+ttc3018-control = ttc3018_control.qt.main:main

@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "bundle": "hawkeye-two-bit-endmill-cutout-review-stock-3p25",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "rebuildCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c045-stock-3p25/prepare-cutout.py",
+  "scope": "Endmill cutout leg only; shallow V-bit artwork engraving is a separate job and is not included in this file.",
+  "geometrySourceReference": {
+    "path": "artifacts/ornaments/hawkeye/single-bit/prepare.py",
+    "sha256": "42cf77ba7a24c1be31475a5a97be745b1b7a90b6be746a99c0d137849938cba3",
+    "note": "Reuses the frozen analytic circle/hanger-loop profile geometry and shared XY placement; art-pocket generation is excluded."
+  },
+  "geometry": {
+    "units": "mm",
+    "stock": {
+      "width": 110.0,
+      "height": 110.0,
+      "origin": "lower-left",
+      "thicknessMm": 3.25,
+      "thicknessMeasured": true,
+      "thicknessMeasurementSource": "user-reported measured plywood thickness"
+    },
+    "part": {
+      "shape": "analytic circle",
+      "nominalDiameter": 100.0,
+      "centerWorkXY": [
+        55.0,
+        55.0
+      ]
+    },
+    "hangerHole": {
+      "centerWorkXY": [
+        55.0,
+        100.0
+      ],
+      "nominalDiameter": 4.0,
+      "outerRimWebMm": 3.0,
+      "toolCenterlineDiameterMm": 0.8237,
+      "toolSweepDiameterMm": 3.9987,
+      "toolSweepDeviationFromNominalMm": -0.0013,
+      "nominalAreaMm2": 12.5664
+    },
+    "outerContour": {
+      "nominalDiameter": 100.0,
+      "toolCenterlineRadiusWorkMm": 51.5879,
+      "fullDepthSweepBoundsWorkXY": [
+        1.825,
+        1.825,
+        108.175,
+        108.175
+      ],
+      "tabs": {
+        "count": 4,
+        "widthMm": 4.0,
+        "heightMm": 0.8
+      }
+    },
+    "sharedPlacement": {
+      "modelOffsetXY": [
+        5.0,
+        5.0
+      ],
+      "holeAndOuterUseSameOffset": true,
+      "partCenterTransform": "local(50,50) + (5,5) = work(55,55)"
+    }
+  },
+  "tool": {
+    "type": "assumed flat endmill",
+    "reportedModel": "SHARPRO SPMS200-2ES-1/8",
+    "cuttingDiameterMm": 3.175,
+    "diameterVerified": false,
+    "fluteLengthVerified": false
+  },
+  "operations": [
+    {
+      "order": 1,
+      "kind": "hanger hole",
+      "diameterMm": 4.0,
+      "passes": 7,
+      "targetDepthMm": -3.4,
+      "maxStepdownMm": 0.5
+    },
+    {
+      "order": 2,
+      "kind": "tabbed outside profile",
+      "nominalDiameterMm": 100.0,
+      "passes": 7,
+      "targetDepthMm": -3.4,
+      "tabFloorMm": -2.45,
+      "maxStepdownMm": 0.5,
+      "tabs": {
+        "count": 4,
+        "widthMm": 4.0,
+        "heightMm": 0.8
+      }
+    }
+  ],
+  "toolpathReview": {
+    "stockWorkBoundsMm": [
+      0.0,
+      0.0,
+      110.0,
+      110.0
+    ],
+    "safeZMm": 3.0,
+    "cutFeedMmPerMin": 300.0,
+    "plungeFeedMmPerMin": 80.0,
+    "spindleStartIncluded": false,
+    "automaticToolchangeIncluded": false,
+    "feedDepthLevelsMm": [
+      -0.486,
+      -0.971,
+      -1.457,
+      -1.943,
+      -2.429,
+      -2.914,
+      -3.4
+    ],
+    "measuredMaxStepdownIncludingVerticalMovesMm": 0.5,
+    "inStockVerticalDescentCount": 12,
+    "largestInStockVerticalDescentMm": 0.5,
+    "insertedTabExitStepdownMoves": 4,
+    "holePassesCompleteBeforeOuterContour": true,
+    "tabLiftFeedSegmentCount": 16,
+    "tabIntervalsVerified": 4,
+    "tabCenterlineSpanLengthsMm": [
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "holeCutterSweepAreaMm2": 12.5161,
+    "outerFullDepthCutterSweepAreaMm2": 1029.0336,
+    "exactCombinedProgramEstimatedMinutes": 8.73,
+    "estimateSource": "parse_gcode(complete combined file).estimated_seconds; linear distance/feed model, not an observed cycle time",
+    "gcodeLineCount": 1488,
+    "m5Count": 2,
+    "initialM5": true,
+    "finalM5BeforeM2": true,
+    "m3Count": 0,
+    "m6Count": 0,
+    "programEndCount": 1
+  },
+  "unknownsBlockingProduction": [
+    "actual SPMS200 cutting diameter, runout and flute length",
+    "local stock flatness, thickness variation, veneer and spoilboard condition",
+    "validated feed, plunge and cut-depth settings for this machine/material; 1000 RPM was previously successful per user but was not re-tested here",
+    "fixture, clamp, spoilboard and full tool-clearance review",
+    "physical coupon, hole size, retained tabs and breakout results"
+  ],
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolNoM3NoM6": true,
+    "oneFinalProgramEnd": true,
+    "allEmittedCutterSweepsInsideStock": true,
+    "holeFinishesBeforeOuterStarts": true,
+    "sevenDepthLevelsAndMaxStepdownIncludingTabReentry": true,
+    "fourNominalTabIntervals": true
+  },
+  "artifacts": {
+    "source": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c045-stock-3p25/prepare-cutout.py",
+      "sha256": "0f3ddcd288c01ae7064a2ba101dead2500ef965a2d81488e15b6154a73326b53"
+    },
+    "gcode": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c045-stock-3p25/02-cutout-review.nc",
+      "sha256": "865312c7f547156afce7fc1c0966e0af01ebe6506963afaef5f9ccb35750b46e"
+    },
+    "preview": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c045-stock-3p25/cutout-preview.svg",
+      "sha256": "257352f23ab119748c085ae85a28f0f8a96f575114be199de3c5693b91b32192"
+    }
+  }
+}

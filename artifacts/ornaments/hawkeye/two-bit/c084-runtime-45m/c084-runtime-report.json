@@ -1,0 +1,357 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; not authorized or verified for cutting",
+  "source": {
+    "file": "artifacts\\ornaments\\hawkeye\\two-bit\\c069-flow\\01-detail-c069-flow-675-120-review-only.nc",
+    "sha256": "f38e959b21c83df37ca339e011a7d347516e2d3acccf41299060352bd2fa730b"
+  },
+  "generator": {
+    "file": "artifacts\\ornaments\\hawkeye\\two-bit\\c084-runtime-45m\\prepare-c084-broad-only.py",
+    "sha256": "e5b9dfef8c1e1416d4f00a6008f7bd550187ebb2eb46e556094f8ffd4b25b236"
+  },
+  "settingsFile": {
+    "file": "c084-settings.json",
+    "sha256": "990a9c74751cf9bac993d04cd45aa8f9c60dadb691cfecd60d07ddf44f25a935"
+  },
+  "comparison": {
+    "currentC069Commands": 107517,
+    "currentC069EstimateMinutes": 89.8519566500801,
+    "currentC069GenericParsedMotionAnalysis": {
+      "commands": 107517,
+      "bounds_mm": {
+        "min": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.625
+        },
+        "max": {
+          "x": 98.9343,
+          "y": 98.1448,
+          "z": 3.0
+        }
+      },
+      "feed_based_seconds": 5391.1173990048055,
+      "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+      "cut_distance_mm": 34005.08535652877,
+      "feed_distance_mm": 36284.61035652159,
+      "plunge_distance_mm": 2279.5249999998236,
+      "rapid_distance_mm": 61334.03225468318,
+      "rapid_xy_distance_mm": 32776.30725467625,
+      "rapid_z_distance_mm": 28557.725000000577,
+      "rapid_segments": 14078,
+      "retract_count": 4692,
+      "nonzero_cut_segments": 88676,
+      "median_cut_segment_mm": 0.14350000000000307,
+      "p95_cut_segment_mm": 1.3969000000000023,
+      "cut_segments_at_most_0_1mm": 35045,
+      "cut_segments_at_most_0_1mm_percent": 39.52027606116649,
+      "cut_segments_at_most_0_25mm": 60036,
+      "cut_segments_at_most_0_25mm_percent": 67.70264784158059,
+      "cut_junctions": 84050,
+      "cut_junctions_at_least_90_degrees": 75136,
+      "cut_junctions_at_least_90_degrees_percent": 89.39440809042237,
+      "cut_junctions_at_least_135_degrees": 20275,
+      "cut_junctions_at_least_135_degrees_percent": 24.122546103509816,
+      "retracts_per_1000_commands": 43.63961048020313
+    },
+    "currentC069AvailableBlackOmittedMm2": 23.602943864525756,
+    "broadOnlyAtCurrentToleranceOmittedMm2": 697.8289699157842,
+    "fineStagePaths": 3645,
+    "fineStageCutSegments": 70907,
+    "sameWorkFrameToolAndBroadDepths": true,
+    "observedThroughput": {
+      "referenceJob": "C-083 continuation telemetry before the operator stop",
+      "samples": [
+        {
+          "acceptedCommands": 3310,
+          "elapsedMinutes": 31.4
+        },
+        {
+          "acceptedCommands": 7626,
+          "elapsedMinutes": 68.8
+        }
+      ],
+      "estimatedCommandsPerMinute": [
+        105.41401273885351,
+        110.84302325581396
+      ],
+      "caveat": "Accepted commands are not a calibrated physical position or precise executed-motion measure; use only as a warning that the parser estimate is optimistic."
+    }
+  },
+  "variants": [
+    {
+      "file": "01-detail-c084-broad-only-008-review-only.nc",
+      "sha256": "60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718",
+      "preview": {
+        "file": "c084-broad-only-tolerance-008.svg",
+        "sha256": "25f3957b502821fa453f9b04fbad689d286c644afcc639627b503b79fc213ea1"
+      },
+      "chordToleranceMm": 0.08,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "effectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -0.6,
+        -1.2,
+        -1.625
+      ],
+      "feedMmPerMin": {
+        "cut": 675.0,
+        "plunge": 120.0
+      },
+      "spindleCommandRpm": 1000,
+      "boundsMm": {
+        "min": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.625
+        },
+        "max": {
+          "x": 98.5095,
+          "y": 97.72,
+          "z": 3.0
+        }
+      },
+      "motion": {
+        "commands": 19744,
+        "motionSegments": 19739,
+        "cutSegments": 18828,
+        "rapidSegments": 911,
+        "genericParsedMotionAnalysis": {
+          "commands": 19744,
+          "bounds_mm": {
+            "min": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": -1.625
+            },
+            "max": {
+              "x": 98.5095,
+              "y": 97.72,
+              "z": 3.0
+            }
+          },
+          "feed_based_seconds": 1983.4282117856376,
+          "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+          "cut_distance_mm": 19085.005503738124,
+          "feed_distance_mm": 19491.530503738097,
+          "plunge_distance_mm": 406.5249999999993,
+          "rapid_distance_mm": 4086.0389060042385,
+          "rapid_xy_distance_mm": 1979.7139060042205,
+          "rapid_z_distance_mm": 2106.324999999998,
+          "rapid_segments": 911,
+          "retract_count": 303,
+          "nonzero_cut_segments": 18459,
+          "median_cut_segment_mm": 0.7980607746280958,
+          "p95_cut_segment_mm": 2.8323,
+          "cut_segments_at_most_0_1mm": 777,
+          "cut_segments_at_most_0_1mm_percent": 4.2093287827076225,
+          "cut_segments_at_most_0_25mm": 2307,
+          "cut_segments_at_most_0_25mm_percent": 12.497968470664716,
+          "cut_junctions": 18120,
+          "cut_junctions_at_least_90_degrees": 12480,
+          "cut_junctions_at_least_90_degrees_percent": 68.87417218543047,
+          "cut_junctions_at_least_135_degrees": 6357,
+          "cut_junctions_at_least_135_degrees_percent": 35.08278145695364,
+          "retracts_per_1000_commands": 15.34643435980551
+        },
+        "runtimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 1983.4282117856376,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutDistanceMm3d": 19491.5305037378,
+        "rapidDistanceMm3d": 4086.038906004222,
+        "retracts": 303,
+        "pathLinking": {
+          "primitivePathsBefore": 349,
+          "emittedChainsPerPass": 101,
+          "safeStayDownLinksPerPass": 248,
+          "safeStayDownLinkDistanceMmPerPass": 304.6458198629624,
+          "maximumSafeStayDownLinkMm": 14.458064516129033,
+          "longestSafeStayDownLinkMm": 11.29332732014795,
+          "reversedPrimitivePaths": 135
+        },
+        "feedBasedEstimateMinutes": 33.05713686309396,
+        "estimateAssumptions": "Parser uses commanded feed and 3000 mm/min rapid; excludes acceleration, junction slowdown, controller streaming delay, setup and physical verification.",
+        "observedThroughputProjection": {
+          "acceptedCommandsPerMinuteObserved": [
+            105.41401273885351,
+            110.84302325581396
+          ],
+          "minutesAtObservedAcceptedCommandRate": [
+            178.1257802255442,
+            187.2995770392749
+          ],
+          "interpretation": "Historical acknowledged-command pacing projection, not measured physical cycle time; accepted commands do not prove completed motion or the candidate's exact pace."
+        }
+      },
+      "coverage": {
+        "availableBlackAreaMm2": 2409.2226060195076,
+        "fullDiameterSweepMm2": 1711.7433983061928,
+        "omittedAvailableBlackMm2": 697.4792077132755,
+        "omittedFraction": 0.28950384492101516,
+        "omissionIncreaseVersusFullC069Mm2": 673.8762638487498,
+        "sweepSymmetricDifferenceVsCurrentBroadMm2": 0.9584185222208913,
+        "fullDiameterContainedInApprovedArtAndOutsideHangerKeepout": true
+      },
+      "checks": {
+        "parses": true,
+        "rapidXYAtSafeZ": true,
+        "depthPassesUnchanged": true,
+        "broadPathIdenticalAcrossPasses": true,
+        "safePathLinksVerifiedAtFullFinalDepthCutterWidth": true,
+        "toolSweepContained": true,
+        "stockBoundsContained": true,
+        "fineResidualStageOmitted": true
+      }
+    },
+    {
+      "file": "02-detail-c084-broad-only-050-review-only.nc",
+      "sha256": "c409a7b0c0ad4bfb4536be95fa80d12dea443a0b639731c9f8b3560f5fc30466",
+      "preview": {
+        "file": "c084-broad-only-tolerance-050.svg",
+        "sha256": "3d0ebb8fb9522d14f034d5c96eea2ed7a6fe32e75b2c16a778e19b8a5a2b5d2c"
+      },
+      "chordToleranceMm": 0.5,
+      "tool": {
+        "angleDeg": 30.0,
+        "tipDiameterMm": 0.1,
+        "effectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+        "physicalToolConditionVerified": false
+      },
+      "depthPassesMm": [
+        -0.6,
+        -1.2,
+        -1.625
+      ],
+      "feedMmPerMin": {
+        "cut": 675.0,
+        "plunge": 120.0
+      },
+      "spindleCommandRpm": 1000,
+      "boundsMm": {
+        "min": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.625
+        },
+        "max": {
+          "x": 98.5095,
+          "y": 97.72,
+          "z": 3.0
+        }
+      },
+      "motion": {
+        "commands": 11404,
+        "motionSegments": 11399,
+        "cutSegments": 10488,
+        "rapidSegments": 911,
+        "genericParsedMotionAnalysis": {
+          "commands": 11404,
+          "bounds_mm": {
+            "min": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": -1.625
+            },
+            "max": {
+              "x": 98.5095,
+              "y": 97.72,
+              "z": 3.0
+            }
+          },
+          "feed_based_seconds": 1764.3824773822337,
+          "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+          "cut_distance_mm": 16620.740991699127,
+          "feed_distance_mm": 17027.265991699172,
+          "plunge_distance_mm": 406.5249999999993,
+          "rapid_distance_mm": 4086.0389060042385,
+          "rapid_xy_distance_mm": 1979.7139060042205,
+          "rapid_z_distance_mm": 2106.324999999998,
+          "rapid_segments": 911,
+          "retract_count": 303,
+          "nonzero_cut_segments": 10119,
+          "median_cut_segment_mm": 1.212055510279958,
+          "p95_cut_segment_mm": 5.130909877399915,
+          "cut_segments_at_most_0_1mm": 582,
+          "cut_segments_at_most_0_1mm_percent": 5.751556477912837,
+          "cut_segments_at_most_0_25mm": 888,
+          "cut_segments_at_most_0_25mm_percent": 8.77557070856804,
+          "cut_junctions": 9780,
+          "cut_junctions_at_least_90_degrees": 6873,
+          "cut_junctions_at_least_90_degrees_percent": 70.2760736196319,
+          "cut_junctions_at_least_135_degrees": 3990,
+          "cut_junctions_at_least_135_degrees_percent": 40.79754601226994,
+          "retracts_per_1000_commands": 26.569624693090145
+        },
+        "runtimeEstimate": {
+          "target_minutes": 45.0,
+          "machine_profile_key": "cnc3018-stock-spindle-vbit30-0.1-plywood3.25-cut675-plunge120-s1000",
+          "nominal_seconds": 1764.3824773822337,
+          "calibration_schema_version": 1,
+          "established_after_completed_runs": 3,
+          "target_comparison": null,
+          "status": "nominal_only",
+          "message": "No completed-run calibration was supplied; actual runtime cannot be projected.",
+          "completed_run_count": 0,
+          "projected_seconds": null
+        },
+        "cutDistanceMm3d": 17027.265991699198,
+        "rapidDistanceMm3d": 4086.038906004222,
+        "retracts": 303,
+        "pathLinking": {
+          "primitivePathsBefore": 349,
+          "emittedChainsPerPass": 101,
+          "safeStayDownLinksPerPass": 248,
+          "safeStayDownLinkDistanceMmPerPass": 304.6458198629624,
+          "maximumSafeStayDownLinkMm": 14.458064516129033,
+          "longestSafeStayDownLinkMm": 11.29332732014795,
+          "reversedPrimitivePaths": 135
+        },
+        "feedBasedEstimateMinutes": 29.406374623037227,
+        "estimateAssumptions": "Parser uses commanded feed and 3000 mm/min rapid; excludes acceleration, junction slowdown, controller streaming delay, setup and physical verification.",
+        "observedThroughputProjection": {
+          "acceptedCommandsPerMinuteObserved": [
+            105.41401273885351,
+            110.84302325581396
+          ],
+          "minutesAtObservedAcceptedCommandRate": [
+            102.8842381327039,
+            108.18296072507552
+          ],
+          "interpretation": "Historical acknowledged-command pacing projection, not measured physical cycle time; accepted commands do not prove completed motion or the candidate's exact pace."
+        }
+      },
+      "coverage": {
+        "availableBlackAreaMm2": 2409.2226060195076,
+        "fullDiameterSweepMm2": 1660.2311279735547,
+        "omittedAvailableBlackMm2": 748.9914780459372,
+        "omittedFraction": 0.3108851279141088,
+        "omissionIncreaseVersusFullC069Mm2": 725.3885341814115,
+        "sweepSymmetricDifferenceVsCurrentBroadMm2": 71.85345479965694,
+        "fullDiameterContainedInApprovedArtAndOutsideHangerKeepout": true
+      },
+      "checks": {
+        "parses": true,
+        "rapidXYAtSafeZ": true,
+        "depthPassesUnchanged": true,
+        "broadPathIdenticalAcrossPasses": true,
+        "safePathLinksVerifiedAtFullFinalDepthCutterWidth": true,
+        "toolSweepContained": true,
+        "stockBoundsContained": true,
+        "fineResidualStageOmitted": true
+      }
+    }
+  ]
+}

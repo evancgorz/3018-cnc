@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; not loaded or authorized for cutting",
+  "strategy": {
+    "componentOrder": "complete one connected compensated region before moving to the next",
+    "preferred": "concentric inward offsets",
+    "fallback": "boundary plus local alternating scanlines when rounded offset sweeps do not cover a component",
+    "concentric_components": 92,
+    "scanline_fallback_components": 0,
+    "component_local_stay_down_links": 5,
+    "components": 92,
+    "raw_paths_before_guarded_chord_simplification": 102,
+    "paths_after_guarded_chord_simplification": 102
+  },
+  "inputs": {
+    "source": "artifacts\\ornaments\\hawkeye\\approved-artwork-reference.png",
+    "sourceSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "sourcePixelSizeMm": 0.07177033492822966,
+    "baseline": "artifacts\\ornaments\\hawkeye\\two-bit\\c084-runtime-45m\\01-detail-c084-broad-only-008-review-only.nc",
+    "baselineSha256": "60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718",
+    "stockMm": [
+      110.0,
+      110.0,
+      3.25
+    ],
+    "tool": {
+      "includedAngleDeg": 30.0,
+      "tipDiameterMm": 0.1,
+      "effectiveDiameterAtFinalDepthMm": 0.9708348754011488
+    },
+    "adaptiveRadialStepoverMm": 0.7281261565508615,
+    "depthPassesMm": [
+      -0.6,
+      -1.2,
+      -1.625
+    ],
+    "feedMmPerMin": {
+      "cut": 675.0,
+      "plunge": 120.0
+    },
+    "spindleCommandRpm": 1000
+  },
+  "candidate": {
+    "file": "01-detail-c089-adaptive-regions-review-only.nc",
+    "sha256": "31c2773cf30017b15b62a66a2c54cffe5944c644823d37d2b8702210218f9f1a",
+    "preview": {
+      "file": "c089-adaptive-regions-preview.svg",
+      "sha256": "fffabecadfc600618f5377824a50b3cece990f7d3e4dfa50b7a713ce1afe4c25"
+    },
+    "commands": 7669,
+    "feedBasedEstimateMinutes": 13.618702680807246,
+    "motion": {
+      "commands": 7669,
+      "bounds_mm": {
+        "min": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.625
+        },
+        "max": {
+          "x": 98.5095,
+          "y": 97.72,
+          "z": 3.0
+        }
+      },
+      "feed_based_seconds": 817.1221608484348,
+      "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+      "cut_distance_mm": 5993.84861310884,
+      "feed_distance_mm": 6404.398613108827,
+      "plunge_distance_mm": 410.5499999999993,
+      "rapid_distance_mm": 3853.0308730492593,
+      "rapid_xy_distance_mm": 1725.8808730492449,
+      "rapid_z_distance_mm": 2127.1499999999987,
+      "rapid_segments": 920,
+      "retract_count": 306,
+      "nonzero_cut_segments": 6438,
+      "median_cut_segment_mm": 0.5604942461792094,
+      "p95_cut_segment_mm": 3.3616670209882455,
+      "cut_segments_at_most_0_1mm": 939,
+      "cut_segments_at_most_0_1mm_percent": 14.585274930102516,
+      "cut_segments_at_most_0_25mm": 1953,
+      "cut_segments_at_most_0_25mm_percent": 30.335507921714818,
+      "cut_junctions": 6132,
+      "cut_junctions_at_least_90_degrees": 1437,
+      "cut_junctions_at_least_90_degrees_percent": 23.434442270058707,
+      "cut_junctions_at_least_135_degrees": 243,
+      "cut_junctions_at_least_135_degrees_percent": 3.9628180039138945,
+      "retracts_per_1000_commands": 39.900899726170294
+    },
+    "fullDiameterSweepMm2": 1640.9966524932913,
+    "omittedApprovedArtworkMm2": 768.2259535261908,
+    "omittedApprovedArtworkFraction": 0.31886881337023715
+  },
+  "comparisonWithC084BroadOnly008": {
+    "commands": {
+      "baseline": 19744,
+      "candidate": 7669,
+      "delta": -12075
+    },
+    "feedBasedMinutes": {
+      "baseline": 33.05713686309396,
+      "candidate": 13.618702680807246,
+      "delta": -19.438434182286713
+    },
+    "motion": {
+      "baseline": {
+        "commands": 19744,
+        "bounds_mm": {
+          "min": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.625
+          },
+          "max": {
+            "x": 98.5095,
+            "y": 97.72,
+            "z": 3.0
+          }
+        },
+        "feed_based_seconds": 1983.4282117856376,
+        "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+        "cut_distance_mm": 19085.005503738124,
+        "feed_distance_mm": 19491.530503738097,
+        "plunge_distance_mm": 406.5249999999993,
+        "rapid_distance_mm": 4086.0389060042385,
+        "rapid_xy_distance_mm": 1979.7139060042205,
+        "rapid_z_distance_mm": 2106.324999999998,
+        "rapid_segments": 911,
+        "retract_count": 303,
+        "nonzero_cut_segments": 18459,
+        "median_cut_segment_mm": 0.7980607746280958,
+        "p95_cut_segment_mm": 2.8323,
+        "cut_segments_at_most_0_1mm": 777,
+        "cut_segments_at_most_0_1mm_percent": 4.2093287827076225,
+        "cut_segments_at_most_0_25mm": 2307,
+        "cut_segments_at_most_0_25mm_percent": 12.497968470664716,
+        "cut_junctions": 18120,
+        "cut_junctions_at_least_90_degrees": 12480,
+        "cut_junctions_at_least_90_degrees_percent": 68.87417218543047,
+        "cut_junctions_at_least_135_degrees": 6357,
+        "cut_junctions_at_least_135_degrees_percent": 35.08278145695364,
+        "retracts_per_1000_commands": 15.34643435980551
+      },
+      "candidate": {
+        "commands": 7669,
+        "bounds_mm": {
+          "min": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.625
+          },
+          "max": {
+            "x": 98.5095,
+            "y": 97.72,
+            "z": 3.0
+          }
+        },
+        "feed_based_seconds": 817.1221608484348,
+        "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+        "cut_distance_mm": 5993.84861310884,
+        "feed_distance_mm": 6404.398613108827,
+        "plunge_distance_mm": 410.5499999999993,
+        "rapid_distance_mm": 3853.0308730492593,
+        "rapid_xy_distance_mm": 1725.8808730492449,
+        "rapid_z_distance_mm": 2127.1499999999987,
+        "rapid_segments": 920,
+        "retract_count": 306,
+        "nonzero_cut_segments": 6438,
+        "median_cut_segment_mm": 0.5604942461792094,
+        "p95_cut_segment_mm": 3.3616670209882455,
+        "cut_segments_at_most_0_1mm": 939,
+        "cut_segments_at_most_0_1mm_percent": 14.585274930102516,
+        "cut_segments_at_most_0_25mm": 1953,
+        "cut_segments_at_most_0_25mm_percent": 30.335507921714818,
+        "cut_junctions": 6132,
+        "cut_junctions_at_least_90_degrees": 1437,
+        "cut_junctions_at_least_90_degrees_percent": 23.434442270058707,
+        "cut_junctions_at_least_135_degrees": 243,
+        "cut_junctions_at_least_135_degrees_percent": 3.9628180039138945,
+        "retracts_per_1000_commands": 39.900899726170294
+      }
+    }
+  },
+  "checks": {
+    "parsesExactOutput": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "sameThreeBroadDepths": true,
+    "identicalGeometryEachBroadDepth": true,
+    "fullDiameterSweepContainedInApprovedArtAndStock": true
+  },
+  "limitations": [
+    "This is a broad-only comparison: the shallow fine residual pass remains omitted.",
+    "Nominal time excludes acceleration, corner slowdown, controller throughput and setup.",
+    "No physical machine, backend, GUI or job state was changed."
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "source": {
+    "path": "artifacts\\ornaments\\hawkeye\\approved-artwork-reference.png",
+    "sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "pixelSizeMm": 0.07177033492822966
+  },
+  "candidate": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-speed-optimized-candidate-450-120.nc",
+    "sha256": "6f0ea17df84e2173e9d254cde1114e5fd0058d5ad8f8586aa8589682aef14c62"
+  },
+  "generator": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\prepare-speed-optimized-candidate.py",
+    "sha256": "a8928142330eae8a85d91d194e419fabd19dee075a41baa48dcd4f1709bbd937"
+  },
+  "baseArtifacts": {
+    "v6GcodeSha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1",
+    "v5BroadGcodeSha256": "2b1489bb011e52ddc9b34e4cb5167dc413dadfcca9f8c3dbb19c145269607df3"
+  },
+  "geometry": {
+    "broadSimplificationToleranceMm": 0.06,
+    "broadPathsBefore": 349,
+    "broadPathsAfter": 349,
+    "broadPathsSimplified": 81,
+    "broadXyVerticesPerPassBefore": 22635,
+    "broadXyVerticesPerPassAfter": 18171,
+    "broadXyVertexReductionPercent": 19.721669980119284,
+    "broadSweepBaselineMm2": 1741.942184414549,
+    "broadSweepCandidateMm2": 1736.0903857652343,
+    "broadSweepLostFromBaselineMm2": 5.929608019279594,
+    "broadSweepAddedVsBaselineMm2": 0.0778093699644335,
+    "broadSweepInsideApprovedArtworkAndOutsideKeepout": true,
+    "fineSweepInsideApprovedArtworkAndOutsideKeepout": true,
+    "combinedOmittedMm2": 16.426439572762927,
+    "combinedOmittedPercent": 0.6818149361425144,
+    "combinedOmissionChangeMm2": 0.42381304058998737,
+    "combinedOmissionChangePercentOfWorkRegion": 0.017591277764498765
+  },
+  "motion": {
+    "cutFeedMmPerMin": 450.0,
+    "plungeFeedMmPerMin": 120.0,
+    "spindleRpm": 1000,
+    "depthPassesMm": [
+      -0.6,
+      -1.2,
+      -1.625
+    ],
+    "finePassDepthMm": -0.04,
+    "lineCount": 252201,
+    "estimatedMinutes": 118.18117340369902,
+    "baselineEstimatedMinutesAt600_160": 94.36347042014411,
+    "parserBoundsMm": {
+      "minimum": [
+        0.0,
+        0.0,
+        -1.625
+      ],
+      "maximum": [
+        98.9343,
+        98.1448,
+        3.0
+      ]
+    },
+    "machineCommands": {
+      "m5": 1,
+      "m3": 1,
+      "m4": 0,
+      "m6": 0,
+      "program_end": 1
+    }
+  },
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "broadDepthGeometryRepeatedAtEachDepth": true,
+    "fineGeometryUnchanged": true,
+    "allConservativeSweepsContained": true,
+    "depthsUnchanged": true,
+    "cutFeed450Plunge120": true,
+    "spindleUnchangedAt1000Rpm": true,
+    "singleM3FinalM5M2NoM4M6": true
+  }
+}

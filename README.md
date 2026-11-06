@@ -38,7 +38,8 @@ blocking navigation or machine status updates.
 - Provides feed hold, resume, jog cancel, and confirmed soft reset.
 - Records every transmitted and received message in `logs/`.
 - Saves a versioned machine profile with measured X/Y/Z travel, safe Z, and optional hardware declarations; multiple profiles are supported.
-- Maintains a session-only virtual reference and coordinate display.
+- Establishes a session-only machine reference from a successful guarded home
+  cycle and displays the resulting coordinates.
 - Checks referenced jog endpoints against the configured virtual envelope.
 - Accepts virtual XYZ targets, rejects coordinates outside the configured travel,
   and reaches them by raising to safe Z before lateral motion.
@@ -57,11 +58,12 @@ blocking navigation or machine status updates.
 - Provides a plaque builder with title/subtitle layouts, six centerline border styles, and a live preview.
 - Stops sending on GRBL errors or alarms and requests spindle stop on completion or failure.
 
-This version deliberately has no arbitrary command box or automatic probe motion.
-Automatic `$H` homing and probing are capability-gated: they appear only after
-the hardware is declared, commissioned, and supported by the selected controller.
-The default TTC 3018 profile has every optional capability off, so its manual
-reference and work-zero workflow remains unchanged.
+This version deliberately has no arbitrary command box, manual Set Reference
+route, or automatic probe motion. `$H` homing and probing are capability-gated:
+homing appears only after all X/Y/Z switches are declared, commissioned, and
+supported by the selected controller. Incomplete switch configuration blocks
+homing, work-zero changes, and jobs; it never falls back to trusting a manually
+selected position.
 
 ## Application architecture
 
@@ -89,29 +91,24 @@ removing its guarded operation and monitoring responsibilities. See
 
 ## Manual setup and engraving workflow
 
-With no home switches or probe installed, machine reference and work zero are
-separate manual operations:
+For normal operation, start in the **Machine** workspace. The compact primary
+navigation contains only **Machine**, **Prepare**, **Review**, and **Run**. Machine
+contains connection recovery, contextual safety, homing, jog, work-zero, and the
+supported probe/calibration controls; Configure and the expert Console are small
+bottom utilities. The guarded workflow model remains state-gated internally, and
+all motion and spindle actions remain explicit operator actions.
 
-For normal operation, open **Guided setup** from the **Machine** workspace.
-Guided Wizard Mode presents the complete workflow as nine explained, state-gated
-steps: manual-operation safety, controller connection, measured machine profile,
-manual machine reference, XYZ work zero, G-code loading, preview/envelope review,
-physical preflight, and guarded job start. The wizard will not advance when the
-application cannot verify a required state. All motion and spindle actions remain
-explicit operator actions.
-
-1. Connect and wait for GRBL to report `Idle` with a machine position.
-2. Save a valid machine profile containing measured X/Y/Z usable travel and a
-   safe-Z position.
-3. With the spindle off, use cautious unreferenced jogs to place the machine at
-   the chosen X-negative, Y-negative, and Z-negative physical reference. Select
-   **Establish reference here**. The application assumes all usable travel is in
-   the positive direction from this location.
+1. Save a valid machine profile containing measured X/Y/Z usable travel and a
+   safe-Z position, then declare and commission the X/Y/Z homing switches.
+2. Connect and wait for GRBL to report `Idle` with a machine position.
+3. With the spindle off and the machine clear, select **Home machine**. Wait
+   for GRBL acknowledgement and a fresh `Idle` report before relying on the
+   trusted machine reference.
 4. Jog to the engraving's intended work origin. For a typical engraving this is
    an X/Y corner or center and the material surface for Z. Select **Zero XYZ** (or
    zero the axes individually). This changes work coordinates without moving.
-5. Wait for a fresh work-offset/status report, then open **Guided setup** and
-   select **Load existing job…** on its first page. Only pre-sliced metric
+5. Wait for a fresh work-offset/status report, then open **Prepare** and select
+   **Load existing job…**. Only pre-sliced metric
    G-code is accepted. Review the file name, bounds, and XY preview.
 6. If the file does not control the spindle itself, set the RPM and select
    **Start spindle…**. Secure the tool and material and keep physical emergency
@@ -122,14 +119,15 @@ explicit operator actions.
    GRBL; the job cannot resume, but references are retained while the controller
    stays connected and powered.
 
-For machines with declared switches or probes, use **Machine setup** first and
-then **Commissioning**. Commissioning records are tied to the machine profile;
-geometry, wiring, or probe changes make dependent evidence stale. **Home machine**
-is always an explicit operator action and requires a fresh successful controller
-report before the app trusts the new envelope.
+Use **Configure** first and then **Commissioning**. Commissioning records are
+tied to the machine profile; geometry, wiring, or probe changes make dependent
+evidence stale. **Home machine** is always an explicit operator action and
+requires a fresh successful controller report before the app trusts the new
+envelope. Machines with incomplete homing declarations remain blocked until
+their X/Y/Z switch configuration is completed.
 
 The MVP accepts common metric engraving programs using G0/G1 and I/J-form G2/G3
-arcs. Radius-form (`R`) arcs, inch mode, probing, automatic homing, tool changes,
+arcs. Radius-form (`R`) arcs, inch mode, uncommissioned homing, tool changes,
 and commands that alter coordinate references are rejected. Re-export such files
 from the CAM program with millimeters and I/J arc centers, or linearize the arcs.
 
@@ -310,24 +308,65 @@ and offers Rectangle, Rounded Rectangle, Double-line, Inset-corner, Scallop, and
 Simple Flourish borders. Its live preview is generated from the same centerline
 geometry that becomes G-code.
 
-The current TTC 3018 remains switchless and probe-less by default. Future
-controller and accessory ideas, including dual-motor squaring and auxiliary
-outputs, are tracked in [`docs/CNC_PLATFORM_BACKLOG.md`](docs/CNC_PLATFORM_BACKLOG.md)
-and are not advertised as implemented capabilities.
+The current TTC 3018 exposes its installed homing switches and supported probe
+routes through the Machine workspace. Future controller and accessory ideas,
+including dual-motor squaring and auxiliary outputs, are tracked in
+[`docs/CNC_PLATFORM_BACKLOG.md`](docs/CNC_PLATFORM_BACKLOG.md) and are not
+advertised as implemented capabilities.
 
-## Establishing the virtual reference
+### Guided operator flow and capability boundary
 
-1. Connect and wait for GRBL to report `Idle`.
-2. Use cautious unreferenced jogs to approach the chosen negative end of X, Y,
-   and Z. Do not drive an axis against its physical stop.
-3. Enter measured usable travel for all three axes and a safe Z between zero
-   and the entered Z travel, then select **Save profile**.
-4. Select **Establish reference here** and read the confirmation carefully.
+The primary shell is a four-workspace flow: **Machine → Prepare → Review → Run**.
+Load or create a validated metric job in Prepare, inspect the typed review facts,
+acknowledge that exact path, complete the per-run preflight, and confirm the
+one-use start prompt before streaming. Run keeps pause, resume, abort, drain,
+spindle-stop, completion, recovery, and explicit **Prepare next part** controls
+together; a failed job requires reload and review before another start.
 
-The current position becomes virtual `X0 Y0 Z0`, and the allowed envelope runs
-from zero to the configured travel in each positive direction. The reference is
-never restored across a disconnect or reset because this machine has no sensors
-that can prove its physical position.
+The following capability labels are intentional:
+
+On startup the persistent backend adopts an already-connected controller. If it
+is disconnected, it tries the last successful physical method first, then the
+other saved physical endpoint with bounded timeouts. A stale COM port is never
+guessed; multiple newly discovered COM ports are left for the recovery chooser.
+The digital twin is always an explicit choice. The Machine envelope preview
+shows only fresh authoritative machine coordinates (`MPos`), marks stale or
+unknown state honestly, and flags out-of-bounds motion at the relevant edge.
+
+The rounded workspace rail and typed Review/Run facts are projected by one shared
+workflow projection, so QML consumes the same safety and readiness facts instead
+of repeating preflight decisions. Healthy connection and safety state stays
+quiet; actionable recovery appears contextually in Machine and Run. Current
+executable evidence and limitations are
+indexed in [`docs/BATCH_EVIDENCE_INDEX.md`](docs/BATCH_EVIDENCE_INDEX.md).
+
+- **Supported:** guarded homing reference, manual per-axis/XYZ work zero, metric G-code
+  validation, review-bound job streaming, and fail-closed recovery on the
+  configured controller boundary.
+- **Simulation-only:** the loopback digital twin, independent supervisor,
+  declared homing/limit exercises, commissioned twin Auto XYZ, and deterministic
+  collision/fault evidence. These paths never authorize physical Auto XYZ.
+- **Declared but unavailable:** optional fixed tool setters, fixed XYZ probes,
+  and other configured accessories remain visible as declarations but are not
+  presented as executable production routes until commissioned.
+- **Hardware-commissioned:** none of the optional accessories or physical Auto
+  XYZ workflow is commissioned by this repository. Physical-vs-twin comparison
+  requires a separately authorized, supervised procedure.
+
+## Establishing the machine reference by homing
+
+1. Enter measured usable travel, a safe Z, and complete X/Y/Z homing-switch
+   declarations in Machine setup.
+2. Connect and wait for a fresh `Idle` report with the spindle off and inputs
+   released.
+3. Select **Home machine** and wait for the `$H` acknowledgement followed by a
+   fresh `Idle` position report.
+
+The successful homing position establishes the session's trusted virtual
+`X0 Y0 Z0` envelope according to each declared homing end. The reference is
+never restored across a disconnect or reset because a fresh homing cycle is the
+evidence that can prove the machine position. The old **Set Reference** control
+is intentionally not available.
 
 GRBL work zero is separate from this safety reference. Work zero describes the
 origin of the current part; the virtual reference describes the application's
@@ -428,8 +467,96 @@ The twin exposes these as deterministic, loopback-only capabilities; it never
 opens GPIO, reset pins, USB/COM, Wi-Fi, or non-loopback endpoints. Manual
 work-zero buttons remain separate from the capability-gated automated workflow.
 
+## Design to CNC job
+
+Use the [agent CNC workflow](docs/AGENT_CNC_JOB_WORKFLOW.md) to turn a saved
+design into review-only G-code, a cutter sweep SVG, and a report. The offline
+command covers text plaques, filled raster engraving, and shallow STEP pockets.
+See the [example designs](examples/agent-cam/).
+
+## Headless backend and CLI
+
+The controller can run as a persistent Qt-free process. `pine-backend` owns one
+`ApplicationController` and its transport; the GUI and `pine-cli` are
+restartable clients. The backend publishes authenticated, versioned JSON over
+`127.0.0.1` on an ephemeral port and writes its PID, session, token, and
+endpoint atomically to `pine-backend.json` under the application root. A stale
+record is cleaned only when its owner PID is dead; a live owner is probed with
+its token and a PID match alone is not sufficient. The root also has an atomic
+owner marker so two backend processes cannot bind the same application state.
+GUI close releases only client resources, while
+the explicit backend shutdown action is rejected during active work unless the
+operator explicitly requests the existing safe-abort route.
+
+Examples (run in separate terminals):
+
+```powershell
+pine-backend --root C:\path\to\pine-data
+pine-cli --root C:\path\to\pine-data status --json
+pine-cli --root C:\path\to\pine-data events --json
+pine-cli --root C:\path\to\pine-data capabilities --json
+pine-cli --root C:\path\to\pine-data safety-input-status --json
+pine-cli --root C:\path\to\pine-data jog X 1.0 --feed 300 --confirm --json
+pine-cli --root C:\path\to\pine-data shutdown --confirm --json
+```
+
+Read-only commands (`status`, `capabilities`, `safety-input-status`, `discover-usb`, `events`,
+`job-status`, `review`, and `preflight`) do not require confirmation. Motion,
+spindle, probing, physical connection, configuration apply, commissioning,
+and shutdown commands require `--confirm`; hold and abort remain reachable for
+recovery. Use `--revision N` to bind a command to the snapshot it was reviewed
+against and `--idempotency-key KEY` to retry one command safely. Configuration
+commands such as `save-profile` and `save-homing` first return a diff preview;
+add `--apply --confirm` only after reviewing it. `events --after N --limit M`
+replays the ordered backend audit cursor.
+
+The complete startup, reconnect, crash, shutdown, migration, and diagnostics
+contract is in [BACKEND_RECOVERY.md](docs/BACKEND_RECOVERY.md).
+The software-only independent safety-input contract and its physical
+commissioning boundary are in [SAFETY_INPUT_CONTRACT.md](docs/SAFETY_INPUT_CONTRACT.md).
+
+The supported machine is the Two Trees TTC 3018 with an MKS DLC32
+GRBL-compatible controller, 290/170/40 mm nominal travel, 30 mm safe Z,
+installed/planned X/Y/Z limit inputs, a movable Z plate, and a 12,000 RPM
+spindle. The E-stop remains `installed_uncommissioned`; saving declarations
+never commissions physical homing, hard limits, reset, or power removal.
+
 ## Tests
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 ```
+
+
+## USB bootstrap and Wi-Fi operation
+
+The production backend now restricts USB to read-only Wi-Fi bootstrap/recovery
+and emergency stops. USB cannot run cutting, motion, homing or spindle start.
+It requests the controller IP, verifies live GRBL status on the candidate Wi-Fi
+socket, then adopts that same socket and releases USB. Failure leaves USB in
+setup-only mode. Existing controller Wi-Fi credentials must already be set;
+bootstrap does not retrieve passwords or reboot the controller. Handoff clears
+reference/work-zero trust, so home and set zero again over Wi-Fi.
+See [Wi-Fi bootstrap](docs/WIFI_BOOTSTRAP.md) for states, validation and limits.
+
+
+## Held jogs and probe completion
+
+Held jogging uses a press-scoped backend lease renewed by the UI. Each leased
+segment is at most 0.2 seconds of programmed feed travel; a new segment requires
+its acknowledgment and a newer Idle report at its endpoint. A missing renewal
+expires after0.4 seconds and requests realtime cancel. Release, cancellation,
+window/focus loss and UI destruction stop renewal. Segments also stop when
+backend position/input trust is lost. This can be less smooth than one long
+jog, but never queues a full-travel jog for a held control. The machine's
+physical E-stop remains independent of software/network availability.
+
+Stop requests are not rejected because a display revision changed and never
+replay an old cached stop result. Confirmation facts exclude raw telemetry such
+as buffer counters; relevant program/position/work-zero/safety changes still
+require a new approval, with specific messages rather than time-expiry wording.
+
+Single-step XY controls are inside the jog rose, with Z steps inside the Z
+control group and shared0.1/1 mm selection. The known Z puck now has a result
+and removal dialog followed by an explicit spindle-off Z-only descent to work
+Z0. See [Z touch plate](docs/Z_TOUCH_PLATE.md).

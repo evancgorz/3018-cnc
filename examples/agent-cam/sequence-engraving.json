@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "concept": "Centered cross inside the matching 40 by 25 mm tabbed plate.",
+  "kind": "raster",
+  "source": "cross.pgm",
+  "settings": {
+    "crop": [
+      0,
+      0,
+      40,
+      40
+    ],
+    "outer_diameter": 70,
+    "art_diameter": 18,
+    "stock_margin": 5,
+    "engraving_depth": 0.3,
+    "v_angle": 30,
+    "tip_diameter": 0.1,
+    "stepover": 0.12,
+    "threshold": 128,
+    "stock_thickness": 3,
+    "max_stepdown": 0.25,
+    "safe_z": 3,
+    "cut_feed": 250,
+    "plunge_feed": 80,
+    "spindle_rpm": null
+  }
+}

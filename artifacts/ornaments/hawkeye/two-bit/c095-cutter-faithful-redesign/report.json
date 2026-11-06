@@ -1,0 +1,139 @@
+{
+  "status": "offline design review only; not loaded or released",
+  "baseline_report_sha256": "f7865c58774a0f548bbc6ba596dcf786638929e20839a1a361d6bf5ddebcc801",
+  "output_sha256": "a94dad45d99b92577aef5ac3692f14ec8753bc0e34c00e7a6e07a88a5d803bfb",
+  "settings": {
+    "crop": [
+      0,
+      0,
+      1270,
+      1270
+    ],
+    "outer_diameter": 100,
+    "art_diameter": 99,
+    "stock_thickness": 3.25,
+    "stock_margin": 5,
+    "engraving_depth": 1.625,
+    "v_angle": 30,
+    "tip_diameter": 0.1,
+    "stepover": 0.12,
+    "max_stepdown": 0.6,
+    "safe_z": 3,
+    "cut_feed": 675,
+    "plunge_feed": 120,
+    "spindle_rpm": 1000,
+    "threshold": 128,
+    "optimize_paths": true,
+    "approach_z": 0.2
+  },
+  "fine_settings": {
+    "crop": [
+      0,
+      0,
+      1270,
+      1270
+    ],
+    "outer_diameter": 100,
+    "art_diameter": 99,
+    "stock_thickness": 3.25,
+    "stock_margin": 5,
+    "engraving_depth": 0.04,
+    "v_angle": 30,
+    "tip_diameter": 0.1,
+    "stepover": 0.09,
+    "max_stepdown": 0.04,
+    "safe_z": 3,
+    "cut_feed": 675,
+    "plunge_feed": 120,
+    "spindle_rpm": 1000,
+    "threshold": 128,
+    "optimize_paths": true,
+    "approach_z": 0.2
+  },
+  "grid_mm": 0.025,
+  "strategy": {
+    "concentric_components": 142,
+    "scanline_fallback_components": 1,
+    "component_local_stay_down_links": 2134,
+    "components": 143
+  },
+  "rough_strategy": {
+    "concentric_components": 143,
+    "scanline_fallback_components": 0,
+    "component_local_stay_down_links": 225,
+    "components": 143
+  },
+  "fine_strategy": {
+    "concentric_components": 2277,
+    "scanline_fallback_components": 0,
+    "component_local_stay_down_links": 641,
+    "components": 2277
+  },
+  "motion": {
+    "commands": 128109,
+    "bounds_mm": {
+      "min": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -1.625
+      },
+      "max": {
+        "x": 103.0359,
+        "y": 103.6595,
+        "z": 3.0
+      }
+    },
+    "feed_based_seconds": 5312.338372628131,
+    "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+    "cut_distance_mm": 43623.24756874083,
+    "feed_distance_mm": 45409.24256873564,
+    "plunge_distance_mm": 1785.995000000036,
+    "rapid_distance_mm": 26985.943325867785,
+    "rapid_xy_distance_mm": 6946.548325867409,
+    "rapid_z_distance_mm": 20039.395000000415,
+    "rapid_segments": 9779,
+    "retract_count": 3259,
+    "nonzero_cut_segments": 115066,
+    "median_cut_segment_mm": 0.15233177606790171,
+    "p95_cut_segment_mm": 1.403100000000002,
+    "cut_segments_at_most_0_1mm": 53380,
+    "cut_segments_at_most_0_1mm_percent": 46.39076703804773,
+    "cut_segments_at_most_0_25mm": 89671,
+    "cut_segments_at_most_0_25mm_percent": 77.93005753219892,
+    "cut_junctions": 111807,
+    "cut_junctions_at_least_90_degrees": 76966,
+    "cut_junctions_at_least_90_degrees_percent": 68.83826594041518,
+    "cut_junctions_at_least_135_degrees": 5348,
+    "cut_junctions_at_least_135_degrees_percent": 4.783242551897466,
+    "retracts_per_1000_commands": 25.43927436792107
+  },
+  "edits": {
+    "raised_ray_width_mm": 1.0,
+    "raised_ray_count": 9,
+    "water_ripples": 5,
+    "unchanged_outside_sky_water_zones": true,
+    "plane_source_geometry_unchanged": true
+  },
+  "tool": {
+    "angle_deg": 30.0,
+    "flat_tip_mm": 0.1,
+    "target_depth_mm": 1.625,
+    "top_cut_width_mm": 0.9708348754011488,
+    "wall_horizontal_run_each_side_mm": 0.4354174377005744
+  },
+  "ideal_parallel_lane_cusp_mm": {
+    "0.27": 0.3172243186433546,
+    "0.15": 0.09330127018922192,
+    "0.13": 0.05598076211353316,
+    "0.12": 0.037320508075688756
+  },
+  "model": "analytic continuous-segment nearest distance; removal=max(0,depth-max(0,r-tip/2)/tan15), maximum over paths",
+  "limitations": [
+    "Height grid sampling .025mm; continuous cutter envelope checks separate.",
+    "Preview color is continuous depth color, not measured plywood ply color.",
+    "Ply-interface depth and layer colors have not been measured; second-ply contrast is not guaranteed.",
+    "Ideal lane cusp numbers do not bound corners, residual centers or irregular offset gaps; actual surface is rendered.",
+    "V-bit tapered walls round fine geometry and leave very shallow panel details pale rather than dark.",
+    "Smooth finish adds cutting distance; physical surface still depends on tool/runout/wood grain."
+  ]
+}

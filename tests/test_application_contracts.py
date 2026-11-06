@@ -587,6 +587,24 @@ def test_job_service_remaining_time_is_pause_aware_and_stops_at_motion_idle() ->
     assert service.elapsed_seconds == pytest.approx(15.0)
 
 
+def test_pause_confirmation_requires_a_post_request_complete_hold_report() -> None:
+    service = JobService(MachineSession(), lambda _line: None, lambda _realtime: None)
+    assert service.start(("G1 X1",)).accepted
+
+    # A previous Hold and the intermediate deceleration report cannot confirm
+    # the new pause request.
+    service.observe_status(GrblStatus("Hold:0"))
+    assert service.pause().accepted
+    assert not service.pause_status_confirmed
+    service.observe_status(GrblStatus("Hold:1"))
+    assert not service.pause_status_confirmed
+
+    service.observe_status(GrblStatus("Hold:0"))
+    assert service.pause_status_confirmed
+    assert service.resume().accepted
+    assert not service.pause_status_confirmed
+
+
 def test_job_service_rejects_mid_program_spindle_or_program_stop() -> None:
     service = JobService(MachineSession(), lambda _command: None, lambda _command: None)
 
@@ -616,6 +634,21 @@ def test_job_failure_resets_motion_and_blocks_implicit_restart(failure: str) -> 
 
     service.load_generated("G21\nG90\nG1 X1 F100\nM5\nM2\n", "reviewed.gcode")
     assert not service.restart_requires_reload
+    assert service.state == "idle"
+    assert service.streamer.error == ""
+    assert service.progress == 0.0
+    assert service.streamer.total == 0
+
+
+def test_job_service_does_not_clear_failure_while_an_operation_is_active() -> None:
+    service = JobService(MachineSession(), lambda _command: None, lambda _command: None)
+    assert service.start(("G1 X1",)).accepted
+
+    with pytest.raises(RuntimeError, match="job operation is active"):
+        service.load_generated("G21 G90\nG1 X2 F100\n", "next.gcode")
+
+    assert service.state == "running"
+    assert service.streamer.total == 1
 
 
 @pytest.mark.parametrize("state", ["Alarm", "Door", "Sleep"])

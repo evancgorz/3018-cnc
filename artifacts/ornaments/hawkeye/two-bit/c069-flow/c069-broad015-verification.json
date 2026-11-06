@@ -1,0 +1,28 @@
+{
+  "result": "review-required: omission increase exceeds 10 mm2",
+  "candidateSha256": "e9f71dde4d80d5258bbd78d77c8c63d82be031b10ac97a65bb0cf3fc0af977ff",
+  "segmentsBeforeAfter": [
+    158857,
+    86075
+  ],
+  "segmentReductionPercent": 45.81604839572697,
+  "medianSegmentBeforeAfterMm": [
+    0.07179999999999964,
+    0.14350000000000307
+  ],
+  "junctionsAtLeast90DegBeforeAfter": [
+    121605,
+    74680
+  ],
+  "combinedOmissionDeltaMm2": 10.20639001380026,
+  "changeVsC058OmissionMm2": 3.0298922662874403,
+  "within10Mm2IncreaseVsC057": false,
+  "checks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "depthsUnchanged": true,
+    "broadRepeatedAtAllThreeDepths": true,
+    "singleM3FinalM5M2NoM6": true
+  }
+}

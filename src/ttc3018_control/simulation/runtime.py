@@ -160,7 +160,7 @@ class SimulationRuntime:
                 self.estop_status = dict(item.get("safety", {}))
                 if self.estop_status.get("interlocked"):
                     hazard = Hazard(HazardKind.ESTOP_LATCHED,
-                                    "Digital-twin emergency stop latched; re-reference required", 0,
+                                    "Digital-twin emergency stop latched; homing required", 0,
                                     (0.0, 0.0, 0.0), source="backend")
                     key = (hazard.kind.value, "", "")
                     if key not in self._active_hazard_keys:
@@ -357,6 +357,15 @@ class SimulationRuntime:
                     and self._last_supervisor_heartbeat
                     and time.monotonic() - self._last_supervisor_heartbeat < 2.0)
 
+    @property
+    def active_hazards(self) -> tuple[Hazard, ...]:
+        """Current hazard episodes, excluding incidents already cleared."""
+        active = self._active_hazard_keys
+        return tuple(
+            hazard for hazard in self.hazards
+            if (hazard.kind.value, hazard.body_a, hazard.body_b) in active
+        )
+
     def start_scenario(self, intents: list[dict[str, Any]]) -> None:
         """Ask the independent supervisor to emit typed operator intents."""
         if not self.started or self._supervisor_control is None:
@@ -404,7 +413,12 @@ class SimulationRuntime:
         self._telemetry = self._supervisor_in = self._supervisor_out = None
         self._backend_control = self._supervisor_control = None
         self._backend_ready = self._supervisor_ready = None
-        self.trace.record(0, "runtime_stopped")
+        # Shutdown is part of the replayable evidence contract.  Preserve
+        # canonical timestamp ordering when the virtual clock has advanced;
+        # a terminal zero-time event would otherwise make an exported trace
+        # impossible to reload for review.
+        last_time_ns = self.trace.events[-1].time_ns if self.trace.events else 0
+        self.trace.record(last_time_ns, "runtime_stopped")
 
     def __enter__(self) -> "SimulationRuntime":
         self.start()

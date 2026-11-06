@@ -20,10 +20,8 @@ if errorlevel 1 (
     if errorlevel 1 goto :setup_failed
 )
 
-if /i "%~1"=="--check" goto :check
-
 echo Starting Pine...
-"%TTC3018_PYTHON%" "%CD%\run.py"
+"%TTC3018_PYTHON%" "%CD%\run.py" %*
 set "TTC3018_EXIT=%errorlevel%"
 
 if not "%TTC3018_EXIT%"=="0" (
@@ -34,10 +32,6 @@ if not "%TTC3018_EXIT%"=="0" (
 )
 
 exit /b %TTC3018_EXIT%
-
-:check
-"%TTC3018_PYTHON%" "%CD%\run.py" --check
-exit /b %errorlevel%
 
 :setup_failed
 echo.

@@ -1,0 +1,242 @@
+{
+  "status": "offline lettering study; no base CAM or machine interaction",
+  "font": {
+    "file": "C:\\Windows\\Fonts\\arialbd.ttf",
+    "sha256": "4d59199834e7439c67ea4949407639961060b21b173833f566eb60ac6fd8f5af",
+    "face": "Arial Bold",
+    "size_mm": 6.4,
+    "bold_expansion_mm_each_side": 0.03
+  },
+  "phrases": [
+    "DOME RIDERS",
+    "VAW-120 Key West"
+  ],
+  "letter_depth_mm": 0.45,
+  "maximum_cutter_width_mm": 0.34115427318801045,
+  "sweep_guard_mm": 0.45,
+  "line_spacing_mm": 0.05,
+  "centerline_paths": 3208,
+  "conservative_sweep_pixels_outside_mask": 0,
+  "glyphs_without_paths": 0,
+  "letter_components_lost_to_tool_clearance": 0,
+  "per_glyph": [
+    {
+      "phrase_index": 0,
+      "character_index": 0,
+      "character": "D",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 159,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 1,
+      "character": "O",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 156,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 2,
+      "character": "M",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 258,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 3,
+      "character": "E",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 110,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 5,
+      "character": "R",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 154,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 6,
+      "character": "I",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 82,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 7,
+      "character": "D",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 163,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 8,
+      "character": "E",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 132,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 9,
+      "character": "R",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 177,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 0,
+      "character_index": 10,
+      "character": "S",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 163,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 0,
+      "character": "V",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 87,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 1,
+      "character": "A",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 127,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 2,
+      "character": "W",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 221,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 3,
+      "character": "-",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 16,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 4,
+      "character": "1",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 79,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 5,
+      "character": "2",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 96,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 6,
+      "character": "0",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 158,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 8,
+      "character": "K",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 164,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 9,
+      "character": "e",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 100,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 10,
+      "character": "y",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 128,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 12,
+      "character": "W",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 225,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 13,
+      "character": "e",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 95,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 14,
+      "character": "s",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 104,
+      "components_lost_to_tool_clearance": 0
+    },
+    {
+      "phrase_index": 1,
+      "character_index": 15,
+      "character": "t",
+      "raw_components": 1,
+      "inset_components": 1,
+      "scanlines": 54,
+      "components_lost_to_tool_clearance": 0
+    }
+  ],
+  "mask_sha256": "79183c15d2beb21004076c34fba8ca8d255e77e5e253bd28b05fb1065a027bca",
+  "preview_sha256": "fd06e6f3537c1bbbd4d0b3d71e4c43070a87e0e32de28e676bea98472dd1b7b9"
+}

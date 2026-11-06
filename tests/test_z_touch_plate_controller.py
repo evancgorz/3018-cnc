@@ -1,5 +1,8 @@
+from dataclasses import replace
+
 from ttc3018_control.application.controller import ApplicationController
 from ttc3018_control.grbl import GrblStatus, Position
+from ttc3018_control.machine_config import AxisEnd
 from ttc3018_control.z_touch_plate import ZTouchPlateRecord
 
 
@@ -68,18 +71,23 @@ def test_z_probe_updates_only_z_offset_and_requires_removal_ack(tmp_path) -> Non
     controller.handle_response("[PRB:0,0,15:1]")
     controller.handle_response("ok")
     controller.handle_response("ok")
+    assert transport.sent[-1] == b"G91 G21 G1 Z1 F100\n"
     controller.apply_status(GrblStatus("Idle", Position(0, 0, 19), pins=""))
     controller.handle_response("[PRB:0,0,15:1]")
     controller.handle_response("ok")
-    assert transport.sent[-1] == b"G10 L20 P1 Z1.5\n"
+    assert transport.sent[-1] == b"G10 L2 P1 Z13.5\n"
     controller.handle_response("ok")
-    controller.apply_status(GrblStatus("Idle", Position(0, 0, 15), work_offset=Position(5, 6, 13.5)))
+    # The controller stopped slightly beyond the PRB trigger. L2 preserves
+    # the trigger-derived datum despite this deceleration overtravel.
+    controller.apply_status(GrblStatus("Idle", Position(0, 0, 14.972), work_offset=Position(5, 6, 13.5)))
     controller.handle_response("ok")
 
-    assert any(command == b"G10 L20 P1 Z1.5\n" for command in transport.sent)
+    assert any(command == b"G10 L2 P1 Z13.5\n" for command in transport.sent)
     assert not any(command.startswith(b"G10") and b"X" in command for command in transport.sent)
     assert controller.z_touch_plate_status == "remove_plate"
-    assert controller.acknowledge_z_touch_plate_removed().accepted
+    assert not controller.acknowledge_z_touch_plate_removed().accepted
+    controller.apply_status(GrblStatus("Idle", Position(0,0,17), work_offset=Position(5,6,13.5), spindle=0, feed=0))
+    assert controller.continue_z_probe_to_surface().accepted
 
 
 def test_connected_plate_polarity_save_applies_grbl_setting_six(tmp_path) -> None:
@@ -156,3 +164,28 @@ def test_three_supervised_samples_complete_commissioning_automatically(tmp_path)
     assert controller.z_touch_plate_status == "ready"
     assert controller.z_touch_plate_record is not None
     assert controller.z_touch_plate_record.commissioned
+
+
+def test_z_plate_probes_away_from_a_minimum_end_home(tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    assert controller.save_z_plate_capability(True).accepted
+    transport = Transport()
+    controller.set_transport_for_testing(transport)
+    definition = controller.machine_definition
+    axes = dict(definition.axes)
+    axes["Z"] = replace(axes["Z"], switch_end=AxisEnd.MIN)
+    controller._machine_definition = replace(definition, axes=axes)
+    controller.apply_status(GrblStatus("Idle", Position(0, 0, 0), work_offset=Position(0, 0, 0)))
+    assert controller.establish_reference().accepted
+    controller.apply_status(GrblStatus("Idle", Position(0, 0, 0), pins=""))
+    plate = controller.z_touch_plate_definition
+    controller._z_touch_plate_record = ZTouchPlateRecord(
+        controller.machine_id or "", (), plate.tolerance,
+        controller.z_touch_plate_fingerprint, input_tested=True,
+    )
+
+    assert controller.start_z_touch_plate_commissioning_sample().accepted
+    assert transport.sent[-1] == b"G91 G21 G38.2 Z5 F100\n"
+    controller.handle_response("[PRB:0,0,25:1]")
+    controller.handle_response("ok")
+    assert transport.sent[-1] == b"G91 G21 G1 Z-2 F100\n"

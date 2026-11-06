@@ -17,12 +17,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from ttc3018_control.qt.main import build_engine
 from ttc3018_control.qt.view_model import ControllerViewModel
 from ttc3018_control.application.controller import ApplicationController
+from ttc3018_control.application.homing_service import HomingState
+from ttc3018_control.application.job_service import JobService
 from ttc3018_control.grbl import GrblStatus, Position
 from ttc3018_control.machine_state import MachineProfile
 from ttc3018_control.serial_connection import SerialEvent
 from ttc3018_control.step_geometry import PlanarLoop, Point2D, StepPlanarModel, load_step_isolated
 from ttc3018_control.z_touch_plate import ZTouchPlateRecord
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QObject, QUrl, Qt
 from PySide6.QtTest import QTest
 
 
@@ -51,6 +53,7 @@ def test_qt_shell_loads(qapp) -> None:
     roots = engine.rootObjects()
     assert len(roots) == 1
     assert roots[0].property("title") == "Pine"
+    assert roots[0].property("guidedIndex") == 1
     assert not roots[0].icon().isNull()
     assert view_model.connection_text == "Disconnected"
 
@@ -100,7 +103,7 @@ def test_gcode_picker_binding_and_filter_are_public_and_validated() -> None:
     )
     picker = qml[qml.index("id: gcodeFileDialog"):qml.index("id: saveGcodeDialog")]
     assert 'title: "Load existing job"' in picker
-    assert 'G-code files (*.nc *.gcode *.tap *.cnc *.txt)' in picker
+    assert 'CNC jobs (*.nc *.gcode *.tap *.cnc *.txt *.json)' in picker
     assert 'onAccepted: appViewModel.load_gcode_file(selectedFile)' in picker
 
 
@@ -132,6 +135,30 @@ def test_gcode_picker_replaces_valid_job_and_preserves_it_on_rejection(qapp, tmp
     assert controller.program.path.name == "second.gcode"
     assert view_model.job_file == "second.gcode"
     assert notices[-1] == "G-code loaded and validated"
+
+
+def test_loading_new_job_clears_previous_failure_issue(qapp, tmp_path) -> None:
+    controller = ApplicationController(tmp_path)
+    # A fake connected transport lets the presentation path expose a job issue
+    # without opening or interacting with physical hardware.
+    controller.connection_service.transport = _FakeConnection()
+    view_model = ControllerViewModel(controller)
+    service = JobService(controller.session, lambda _command: None, lambda _command: None)
+    controller.job = service
+
+    assert service.start(("G1 X1",)).accepted
+    assert service.handle_response("error:2")
+    view_model._emit_state()
+    assert view_model.has_issue
+    assert view_model.issue_title == "Job stopped"
+
+    controller.load_generated("G21 G90\nG1 X2 F100\n", "replacement.gcode")
+    view_model._emit_state()
+
+    assert controller.job_state == "idle"
+    assert not view_model.has_issue
+    assert view_model.job_state == "Idle"
+    view_model.close()
 
 
 def test_gcode_picker_empty_selection_and_active_job_are_truthful(qapp, tmp_path) -> None:
@@ -168,7 +195,7 @@ def test_qml_keyboard_focus_reaches_actionable_controls_offscreen(qapp) -> None:
     qapp.processEvents()
 
     focused_labels: list[str] = []
-    for _ in range(5):
+    for _ in range(2):
         QTest.keyClick(root, Qt.Key_Tab)
         qapp.processEvents()
         focused = root.activeFocusItem()
@@ -177,12 +204,12 @@ def test_qml_keyboard_focus_reaches_actionable_controls_offscreen(qapp) -> None:
         assert isinstance(text, str) and text.strip(), type(focused).__name__
         focused_labels.append(text)
 
-    assert focused_labels[:3] == ["Connect", "Prepare", "Preview & Run"]
+    assert focused_labels == ["Machine", "Job"]
     root.close()
     view_model.close()
 
 
-def test_real_qml_shell_constrained_size_and_workspace_transitions_offscreen(qapp, tmp_path, caplog) -> None:
+def test_real_qml_shell_constrained_size_and_guided_transitions_offscreen(qapp, tmp_path, caplog) -> None:
     factory_calls: list[str] = []
 
     def forbidden_usb():
@@ -210,10 +237,10 @@ def test_real_qml_shell_constrained_size_and_workspace_transitions_offscreen(qap
         assert root.width() == 1180
         assert root.height() == 720
 
-        for workspace in (0, 1, 2, 0):
-            root.setProperty("workspace", workspace)
+        for guided_step in (0, 1, 5, 0):
+            view_model.select_guided_step(guided_step)
             qapp.processEvents()
-            assert root.property("workspace") == workspace
+            assert root.property("guidedIndex") == guided_step
             assert root.width() == 1180
             assert root.height() == 720
 
@@ -222,6 +249,120 @@ def test_real_qml_shell_constrained_size_and_workspace_transitions_offscreen(qap
         assert controller.simulation_runtime is None
         assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
 
+    root.close()
+    view_model.close()
+
+
+def test_ux2_guided_shell_and_projection_traverse_offscreen(qapp, tmp_path, caplog) -> None:
+    factory_calls: list[str] = []
+    controller = ApplicationController(
+        tmp_path,
+        usb_factory=lambda: factory_calls.append("usb"),
+        wifi_factory=lambda: factory_calls.append("wifi"),
+    )
+    with caplog.at_level(logging.WARNING, logger="pine.qt"):
+        engine, view_model = build_engine(visible=False, application=controller)
+        root = engine.rootObjects()[0]
+        root.resize(1180, 720)
+        root.show()
+        qapp.processEvents()
+        assert root.property("guidedIndex") == 1
+        assert root.property("guidedContentIndex") == 3
+        assert len(view_model.workflow_steps) == 7
+        assert [item["name"] for item in view_model.workflow_steps] == [
+            "Configure", "Connect", "Home", "Work Zero", "Prepare Job", "Review", "Run"
+        ]
+        for index in range(7):
+            button = root.findChildren(QObject, "configureUtility" if index == 0 else f"guidedStep{index}")[0]
+            if index:
+                assert str(button.property("text")) in ("Connect", "Home", "Work Zero", "CAM tools…", "Review", "Run")
+            assert button.property("enabled") is True
+        for guided_step in range(7):
+            view_model.select_guided_step(guided_step)
+            qapp.processEvents()
+            assert root.width() == 1180 and root.height() == 720
+            assert view_model.guided_step == guided_step
+            assert not root.findChildren(QObject, "connectionDialog")[0].property("visible")
+        assert not root.findChildren(QObject, "machineStepPanel")
+        assert not root.findChildren(QObject, "machineStep0")
+        assert not root.findChildren(QObject, "selectedMachineStep")
+        assert not factory_calls
+        assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
+    root.close()
+    view_model.close()
+
+
+def test_ux2_single_content_surface_and_named_rail_at_constrained_sizes(qapp, tmp_path, caplog) -> None:
+    controller = ApplicationController(tmp_path, usb_factory=lambda: (_ for _ in ()).throw(AssertionError("USB")),
+                                        wifi_factory=lambda: (_ for _ in ()).throw(AssertionError("Wi-Fi")))
+    with caplog.at_level(logging.WARNING, logger="pine.qt"):
+        engine, view_model = build_engine(visible=False, application=controller)
+        root = engine.rootObjects()[0]
+        for width, height in ((1180, 720), (1500, 920)):
+            root.resize(width, height)
+            for index in range(7):
+                # guidedIndex is bound to the ViewModel. Exercise the same
+                # selection path used by the workspace controls so the binding
+                # remains live while the test checks each page projection.
+                view_model.select_guided_step(index)
+                qapp.processEvents()
+                assert root.width() == width and root.height() == height
+                assert root.property("guidedIndex") == index
+                assert root.findChildren(QObject, "configureUtility" if index == 0 else f"guidedStep{index}")[0].property("checked") is True
+                pages = [root.findChildren(QObject, name)[0].property("visible") for name in
+                         ("setupPage", "machinePage", "guidedPreparePage", "guidedReviewPage", "guidedRunPage")]
+                expected = [index == 0, 1 <= index <= 3, index == 4, index == 5, index == 6]
+                assert pages == expected
+                assert root.findChildren(QObject, "guidedReviewPage")[0].property("visible") is (index == 5)
+                assert root.findChildren(QObject, "guidedRunPage")[0].property("visible") is (index == 6)
+                assert root.findChildren(QObject, "acknowledgeReview")[0].property("visible") is (index == 5)
+                assert root.findChildren(QObject, "physicalPreflight")[0].property("visible") is (index == 6)
+        assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
+    root.close()
+    view_model.close()
+
+
+def test_ux2_configure_sections_and_step_rail_are_interactive_at_both_layouts(qapp, tmp_path, caplog) -> None:
+    controller = ApplicationController(tmp_path, usb_factory=lambda: (_ for _ in ()).throw(AssertionError("USB")),
+                                        wifi_factory=lambda: (_ for _ in ()).throw(AssertionError("Wi-Fi")))
+    with caplog.at_level(logging.WARNING, logger="pine.qt"):
+        engine, view_model = build_engine(visible=False, application=controller)
+        root = engine.rootObjects()[0]
+        for width, height in ((1180, 720), (1500, 920)):
+            root.resize(width, height)
+            view_model.select_guided_step(0)
+            qapp.processEvents()
+            for index in range(5):
+                button = root.findChildren(QObject, f"setupSection{index}")[0]
+                button.clicked.emit()
+                qapp.processEvents()
+                assert root.property("setup_section_index") == index
+                assert button.property("checked") is True
+                setup_name = ("setupMachineSection", "setupAxesSection", "setupProbeSection", "setupCommissioningSection", "setupTwinSection")[index]
+                setup_section = root.findChildren(QObject, setup_name)[0]
+                assert setup_section.property("visible") is True
+                if index == 0:
+                    assert root.findChildren(QObject, "editProfile")[0].property("visible") is True
+                elif index == 1:
+                    assert root.findChildren(QObject, "axisDeclarationX")[0].property("visible") is True
+                    assert root.findChildren(QObject, "editAxesLimits")[0].property("visible") is True
+                elif index == 2:
+                    assert root.findChildren(QObject, "probeDeclarationSummary")[0].property("visible") is True
+                    assert root.findChildren(QObject, "editProbesSafety")[0].property("visible") is True
+                elif index == 3:
+                    assert root.findChildren(QObject, "openCommissioning")[0].property("visible") is True
+                else:
+                    assert root.findChildren(QObject, "connectDigitalTwin")[0].property("visible") is True
+                assert not root.findChildren(QObject, "connectionDialog")[0].property("visible")
+            for index in range(8):
+                view_model.select_guided_step(index)
+                qapp.processEvents()
+                # Navigation remains available; actions inside each page keep
+                # enforcing their own prerequisites.
+                if index < 7:
+                    assert root.property("guidedIndex") == index
+                assert not root.findChildren(QObject, "connectionDialog")[0].property("visible")
+        assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
     root.close()
     view_model.close()
 
@@ -304,9 +445,12 @@ def test_terminal_simulation_hazard_survives_clear_until_safe_recovery(qapp, tmp
     assert view_model.simulation_collision_state == "FIRST CONTACT — INTERLOCK ACTIVE"
     assert view_model.simulation_collision_point == "X2.00  Y3.00  Z4.00"
 
-    # A fresh reference is an explicit safe recovery boundary.
-    controller.establish_reference = lambda: SimpleNamespace(accepted=True, message="Reference established")  # type: ignore[method-assign]
-    view_model.establish_reference()
+    # A successful home plus a fresh Idle report is the explicit safe recovery
+    # boundary. Seed the session envelope directly because this test's fake
+    # supervisor does not implement the full homing transaction.
+    controller.session.envelope.establish(Position(0, 0, 0), controller.session.profile)
+    controller.homing.state = HomingState.COMPLETE
+    view_model.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
     assert not view_model.simulation_hazard_active
 
     # Ordinary warning edges still clear without a recovery action.
@@ -325,12 +469,49 @@ def test_simulation_show_action_is_connected_only_and_raises_window() -> None:
     assert "simulationWindow.visible = true" in qml
     assert "simulationWindow.raise()" in qml
     assert "simulationWindow.requestActivate()" in qml
-    assert 'SecondaryButton { visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"; onClicked: window.showSimulator() }' in qml
+    assert 'objectName: "showSimulator"' in qml
+    assert 'visible: appViewModel && appViewModel.simulation_active && appViewModel.expert_mode' in qml
     assert 'text: "Hide simulator"; onClicked: simulationWindow.visible = false' in qml
     assert 'visible: appViewModel && appViewModel.simulation_active; text: "Hide simulator"' in qml
     assert 'if (appViewModel && appViewModel.job_active)' in qml
     assert 'enabled: appViewModel && appViewModel.simulation_export_available' in qml
-    assert 'visible: appViewModel && appViewModel.simulation_active; text: "Show simulator"' in qml
+    assert 'text: "Show simulator"' in qml
+    assert 'text: "Review"; onClicked: window.selectGuidedStep(6)' not in qml
+    assert 'id: readinessStrip' not in qml
+    assert 'readinessEntries' not in qml
+    assert 'routeReadinessAction' not in qml
+
+
+def test_simulator_inspection_is_expert_only_in_the_offscreen_header(qapp, tmp_path, caplog) -> None:
+    controller = ApplicationController(tmp_path, usb_factory=lambda: (_ for _ in ()).throw(AssertionError("USB")),
+                                        wifi_factory=lambda: (_ for _ in ()).throw(AssertionError("Wi-Fi")))
+    with caplog.at_level(logging.WARNING, logger="pine.qt"):
+        engine, view_model = build_engine(visible=False, application=controller)
+        root = engine.rootObjects()[0]
+        root.resize(1180, 720)
+        view_model.set_expert_mode(False)
+        view_model.configure_simulation("10×", "Pocket + retained island")
+        view_model.connect_to_simulation()
+        QTest.qWait(700)
+        qapp.processEvents()
+        simulator_button = root.findChildren(QObject, "showSimulator")[0]
+        assert view_model.simulation_active
+        assert simulator_button.property("visible") is False
+        issue_banner = root.findChildren(QObject, "issueBanner")[0]
+        for width, height in ((1180, 720), (1500, 920)):
+            root.resize(width, height)
+            qapp.processEvents()
+            assert root.width() == width and root.height() == height
+            assert issue_banner.property("x") == 18
+            assert issue_banner.property("width") > 0
+            assert issue_banner.property("y") == 198
+        view_model.set_expert_mode(True)
+        qapp.processEvents()
+        assert simulator_button.property("visible") is True
+        assert not [record for record in caplog.records if record.name == "pine.qt" and record.levelno >= logging.WARNING]
+    root.close()
+    view_model.close()
+    controller.close()
 
 
 def test_simulator_safety_and_evidence_column_is_bounded_and_scrollable() -> None:
@@ -339,7 +520,7 @@ def test_simulator_safety_and_evidence_column_is_bounded_and_scrollable() -> Non
     assert "id: simulatorControlsScroll" in qml
     assert "contentWidth: simulatorControlsScroll.width" in qml
     assert "width: simulatorControlsScroll.width" in qml
-    simulator_panel = qml[qml.index("id: simulatorControlsScroll"):qml.index("    MachineSetupDialog", qml.index("id: simulatorControlsScroll"))]
+    simulator_panel = qml[qml.index("id: simulatorControlsScroll"):qml.index("    Dialog {", qml.index("id: simulatorControlsScroll"))]
     assert "availableWidth" not in simulator_panel
     assert "ScrollBar.vertical.policy: ScrollBar.AsNeeded" in qml
     assert "Layout.preferredHeight: 120" in qml
@@ -359,11 +540,22 @@ def test_simulation_safety_capabilities_are_public_and_fail_closed(qapp, tmp_pat
     assert "Preview Auto XYZ calibration plate (commissioning required)" in qml
     assert "enabled: appViewModel && appViewModel.simulation_auto_xyz_available" in qml
     assert '"Stock metrics " + (appViewModel ? appViewModel.simulation_stock_metrics_json : "{}")' in qml
-    assert 'text: "Pause"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.pause_job()' in qml
-    assert 'text: "Resume"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.resume_job()' in qml
-    assert 'text: "Abort"; enabled: appViewModel && appViewModel.job_active; onClicked: appViewModel.abort_job()' in qml
-    assert 'appViewModel.requires_exit_prompt' in qml
-    assert 'closeEvent.accepted = false' in qml
+    assert 'RowLayout { visible: appViewModel && appViewModel.job_active' in qml
+    assert 'text: "Pause"; onClicked: appViewModel.pause_job()' in qml
+    assert 'text: "Resume"; onClicked: appViewModel.resume_job()' in qml
+    assert 'text: "Abort"; dangerous: true; onClicked: appViewModel.abort_job()' in qml
+    assert 'appViewModel.requires_exit_prompt' not in qml
+    assert 'id: exitDialog' not in qml
+    assert 'Home, then close' not in qml
+
+
+def test_run_recovery_exposes_confirmed_pause_bookmark_and_review_fence() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    assert 'objectName: "confirmedPauseBookmark"' in qml
+    assert 'bookmark["live_hold_confirmed"]' in qml
+    assert 'tool["reported_tool_details"]' in qml
+    assert "Automatic resume is disabled" in qml
+    assert "after disconnect or restart" in qml
 
 
 def test_simulation_projection_clears_stale_hazard_stock_and_export_state_on_disconnect(qapp, tmp_path) -> None:
@@ -562,23 +754,25 @@ def test_qt_auto_connects_to_last_successful_wifi_endpoint(qapp, tmp_path) -> No
 def test_guided_setup_is_state_gated_and_advances_in_order(qapp) -> None:
     _engine, view_model = build_engine()
 
-    assert view_model.guided_step == 0
-    assert view_model.guided_step_count == 9
-    assert view_model.guided_step_names[0] == "Safety"
-    assert view_model.guided_step_ready
+    assert view_model.guided_step == 1
+    assert view_model.guided_step_count == 7
+    assert view_model.guided_step_names[0] == "Configure"
+    assert view_model.guided_step_names[-1] == "Run"
+    assert not view_model.guided_step_ready
 
+    view_model.select_guided_step(0)
     view_model.guided_next()
     assert view_model.guided_step == 1
     assert not view_model.guided_step_ready
-    assert "Connect" in view_model.guided_step_reason
+    assert "controller" in view_model.guided_step_reason
 
-    view_model.guided_next()
+    view_model.guided_continue()
     assert view_model.guided_step == 1
 
-    view_model.guided_previous()
+    view_model.guided_back()
     assert view_model.guided_step == 0
     view_model.guided_reset()
-    assert view_model.guided_step == 0
+    assert view_model.guided_step == 1
     assert not view_model.guided_preflight_confirmed
 
 
@@ -593,31 +787,134 @@ def test_production_launcher_has_no_legacy_tk_presentation() -> None:
     assert "--enable-plugin=pyside6" in build_script
 
 
-def test_reference_controls_follow_operator_workflow_order() -> None:
+def test_home_step_leads_with_only_the_home_action() -> None:
     qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
         encoding="utf-8"
     )
 
-    establish = qml.index('text: "Establish reference"')
-    go_to = qml.index('text: "Go to reference"')
-    safe_z = qml.index('text: "Retract to safe Z"')
-    work_zero = qml.index('text: "Return to work zero"')
-    zero_x = qml.index('text: "Zero X"')
+    assert 'text: "Establish reference"' not in qml
+    assert 'text: "Go to reference"' not in qml
+    assert 'text: "Retract to safe Z"' not in qml
+    motion_panel = qml.index('objectName: "machineMotionPanel"')
+    home = qml.index('objectName: "panelHomeMachineIcon"', motion_panel)
+    jog_pad = qml.index('id: xyJogPad', motion_panel)
+    assert home < jog_pad
 
-    assert establish < go_to < safe_z < zero_x < work_zero
+
+def test_disabled_actions_show_current_inline_guidance_offscreen(qapp, tmp_path) -> None:
+    controller = ApplicationController(
+        tmp_path,
+        usb_factory=lambda: (_ for _ in ()).throw(AssertionError("USB")),
+        wifi_factory=lambda: (_ for _ in ()).throw(AssertionError("Wi-Fi")),
+    )
+    engine, view_model = build_engine(visible=False, application=controller)
+    root = engine.rootObjects()[0]
+    try:
+        root.show()
+        qapp.processEvents()
+        find = lambda name: root.findChildren(QObject, name)[0]
+
+        continue_button = find("guidedContinue")
+        assert not continue_button.property("enabled")
+        assert continue_button.property("disabledReason") == view_model.guided_step_reason
+
+        root.setProperty("guidedIndex", 2)
+        qapp.processEvents()
+        home_reason = find("homeMachineGateMessage")
+        assert home_reason.property("visible")
+        assert "Connect" in home_reason.property("text")
+
+        root.setProperty("guidedIndex", 3)
+        qapp.processEvents()
+        jog_reason = find("jogGateMessage")
+        assert jog_reason.property("visible")
+        assert "Connect" in jog_reason.property("text")
+        machine_page = find("machinePage")
+        machine_page.setProperty("coordinatesExpanded", True)
+        qapp.processEvents()
+        move_reason = find("moveSafelyGateMessage")
+        assert move_reason.property("visible")
+        assert "Connect" in move_reason.property("text")
+
+        root.setProperty("guidedIndex", 6)
+        qapp.processEvents()
+        start_button = find("startJob")
+        start_reason = find("startJobGateMessage")
+        assert not start_button.property("enabled")
+        assert start_reason.property("visible")
+        assert "Review" in start_reason.property("text")
+
+        view_model._review_acknowledged = True
+        view_model._emit_state()
+        qapp.processEvents()
+        assert "Connect" in start_reason.property("text")
+        assert start_button.property("disabledReason") == start_reason.property("text")
+    finally:
+        root.close()
+        view_model.close()
 
 
-def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
+def test_fresh_alarm_keeps_home_action_available_in_projection_and_qml(qapp, tmp_path) -> None:
+    from dataclasses import replace
+
+    from ttc3018_control.application.state import ConnectionMode
+    from ttc3018_control.machine_config import SwitchMode
+
+    controller = ApplicationController(tmp_path)
+    controller._wifi_only_operations = False
+    controller.connection_service.mode = ConnectionMode.WIFI
+    controller.connection_service.transport = _FakeConnection()
+    definition = controller.machine_definition
+    axes = {
+        axis: replace(definition.axes[axis], switch_mode=SwitchMode.SINGLE, input_pin=axis)
+        for axis in "XYZ"
+    }
+    controller._machine_definition = replace(definition, axes=axes)
+    controller.apply_status(GrblStatus(
+        "Alarm", machine_position=Position(10, 20, 3), spindle=0, pins="",
+    ))
+    assert controller.can_home_machine
+
+    engine, view_model = build_engine(visible=False, application=controller)
+    root = engine.rootObjects()[0]
+    try:
+        root.show()
+        qapp.processEvents()
+        assert view_model.workflow_steps[2]["state"] == "required"
+        assert root.findChildren(QObject, "panelHomeMachineIcon")[0].property("enabled")
+    finally:
+        root.close()
+        view_model.close()
+
+
+def test_machine_page_makes_xyz_probe_plate_discoverable() -> None:
     qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
         encoding="utf-8"
     )
 
-    assert 'model: ["Prepare", "Preview & Run", "Machine"]' in qml
+    assert 'text: "XYZ probe plate"' in qml
+    assert 'text: "Commission plate"' in qml
+    assert 'text: "Open Auto XYZ"' in qml
+    assert 'label: "DIGITAL TWIN"' in qml
+    assert 'appViewModel.simulation_auto_xyz_status' in qml
+
+
+def test_qml_guided_flow_and_creation_flow_are_consolidated() -> None:
+    qml = (Path(__file__).parents[1] / "src" / "ttc3018_control" / "qt" / "qml" / "Main.qml").read_text(
+        encoding="utf-8"
+    )
+
+    for label in ("Configure", "Machine", "Connect", "Home", "Work Zero", "Prepare", "Job", "Review", "Run"):
+        assert label in qml
     assert 'text: "Engraving designer"' in qml
     assert 'id: engravingDialog' in qml
     assert 'model: ["Plain text", "Plaque"]' in qml
-    assert 'text: "Load existing job…"' in qml
-    assert 'id: guidedSetupDialog' in qml
+    assert 'title: "Load existing job"' in qml
+    assert 'id: retiredGuidedWorkflowDialog' not in qml
+    assert 'id: retiredMachineSettingsDialog' not in qml
+    assert 'Machine settings' not in qml
+    assert 'Guided setup' not in qml
+    assert 'text: "Guided setup"' not in qml
     assert '"Move to coordinates"' in qml
     assert 'property bool coordinatesExpanded: false' in qml
     assert 'appViewModel.job_estimate' in qml
@@ -626,10 +923,14 @@ def test_qml_workspaces_and_creation_flow_are_consolidated() -> None:
     assert 'id: plaqueDialog' not in qml
     assert '"Guided Setup"]' not in qml
     assert 'PineLiveCard { Layout.fillWidth: true; palette: window.palette }' in qml
-    assert 'text: "Machine settings…"' in qml
+    assert 'text: "Open Configure"' not in qml
+    assert 'objectName: "guidedReviewPage"' in qml
+    assert 'objectName: "guidedRunPage"' in qml
+    assert 'id: machineStepPanel' not in qml
+    assert 'selectedMachineStep' not in qml
     assert "window.usableContentHeight - height" in qml
     assert 'set_physical_preflight_confirmed(checked)' in qml
-    assert 'index === 3 ?' not in qml
+    assert 'readonly property int guidedContentIndex' in qml
     engraving_dialog = qml.split("id: engravingDialog", 1)[1].split("id: wifiSetupDialog", 1)[0]
     assert 'SectionTitle { text: "Live preview"' in engraving_dialog
     assert 'ToolpathCanvas { Layout.fillWidth: true; Layout.fillHeight: true' in engraving_dialog
@@ -709,6 +1010,31 @@ def test_z_probe_status_distinguishes_input_verification_from_samples(qapp, tmp_
     assert view_model.z_touch_plate_status_text == "Input verified — 3 supervised probe samples required"
 
 
+def test_z_probe_action_stays_clickable_and_shows_current_gate(qapp, tmp_path) -> None:
+    from PySide6.QtCore import QObject
+
+    controller = ApplicationController(tmp_path)
+    assert controller.save_z_plate_capability(True).accepted
+    engine, view_model = build_engine(visible=False, application=controller)
+    view_model._guided_step = 3
+    view_model._emit_state()
+    root = engine.rootObjects()[0]
+    buttons = root.findChildren(QObject, "probeWorkZ")
+    assert buttons
+    assert buttons[0].property("enabled")
+    method = next(item for item in view_model.work_zero_methods if item["key"] == "movable_z_plate")
+    assert not method["available"]
+
+    notices: list[str] = []
+    view_model.toast_requested.connect(notices.append)
+    try:
+        view_model.probe_work_z()
+        assert notices[-1] == controller.probe_work_z().message
+        assert "touch plate is needs input test" in notices[-1].lower()
+    finally:
+        view_model.close()
+
+
 def test_step_import_runs_without_blocking_and_reports_completion(qapp, tmp_path) -> None:
     _engine, view_model = build_engine()
     path = tmp_path / "part.step"
@@ -786,7 +1112,9 @@ def test_native_step_chooser_uses_real_fixture_and_public_acceptance_binding(qap
     assert fixture.is_file()
     view_model = ControllerViewModel(ApplicationController(tmp_path))
     view_model.import_step_file(QUrl.fromLocalFile(str(fixture)))
-    deadline = time.monotonic() + 5
+    # STEP/OCP import is intentionally asynchronous; allow the bounded
+    # offscreen worker a little headroom when the full safety suite is busy.
+    deadline = time.monotonic() + 10
     while view_model.step_importing and time.monotonic() < deadline:
         qapp.processEvents()
         time.sleep(0.01)
@@ -827,6 +1155,47 @@ def test_qt_view_model_projects_grbl_status(qapp) -> None:
     assert view_model.machine_position == "X10.00  Y20.00  Z3.00"
     assert view_model.work_position == "X1.00  Y2.00  Z3.00"
     assert view_model.spindle == "12000 RPM"
+
+
+def test_qt_view_model_marks_stale_and_missing_usb_setup_status(qapp, tmp_path) -> None:
+    from ttc3018_control.application.state import ConnectionMode
+
+    controller = ApplicationController(tmp_path)
+    # Keep this an isolated presentation test; the production backend would
+    # automatically start Wi-Fi bootstrap while setup-only USB is connected.
+    controller._wifi_only_operations = False
+    controller.connection_service.usb_setup_only = True
+    controller.connection_service.mode = ConnectionMode.USB
+    controller.connection_service.transport = SimpleNamespace(
+        connected=True, events=queue.Queue(), send_line=lambda *_args, **_kwargs: None,
+        send_realtime=lambda *_args, **_kwargs: None,
+    )
+    view_model = ControllerViewModel(controller)
+    try:
+        controller.apply_status(
+            GrblStatus("Idle", machine_position=Position(10, 20, 3), spindle=0, pins="X")
+        )
+        view_model._emit_state()
+        assert view_model.connection_text == "Connected — GRBL Idle"
+        assert view_model.machine_position == "X10.00  Y20.00  Z3.00"
+
+        controller._last_status_received_at = time.monotonic() - 3.0
+        view_model._emit_state()
+        assert view_model.grbl_state == "Stale"
+        assert "USB setup connection" in view_model.connection_text
+        assert "stale" in view_model.connection_text.lower()
+        assert view_model.machine_position == "X—  Y—  Z—"
+        assert view_model.spindle == "Unknown"
+
+        controller.status = None
+        controller._status_generation = -1
+        view_model._emit_state()
+        assert view_model.grbl_state == "Waiting"
+        assert view_model.connection_text == (
+            "USB setup connection — waiting for the first GRBL status report"
+        )
+    finally:
+        view_model._timer.stop()
 
 
 def test_qt_generator_preview_and_load_use_shared_parser(qapp) -> None:
@@ -998,78 +1367,33 @@ def test_qt_prepare_defaults_persist_across_controllers(qapp, tmp_path) -> None:
     assert restored.step_default_spindle_rpm == 12000
 
 
-def test_qt_live_jog_stops_at_whole_millimeter(qapp) -> None:
-    _engine, view_model = build_engine()
-    view_model.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
-    connection = _FakeConnection()
-    view_model.connection = connection
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
-    view_model.establish_reference()
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
-
-    view_model.start_live_jog("X", 1)
-    assert connection.lines[-1] == b"$J=G91 G21 X1 F500\n"
-    # A live GRBL status changes from Idle to Jog. The outer button must remain
-    # enabled while held; otherwise QML cancels the press after one segment.
-    view_model.apply_status(GrblStatus("Jog", machine_position=Position(10.40, 0, 0)))
-    assert view_model.can_live_jog
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    assert connection.lines == [b"$J=G91 G21 X1 F500\n", b"$J=G91 G21 X1 F500\n"]
-
-    view_model.apply_status(GrblStatus("Hold", machine_position=Position(10.40, 0, 0)))
-    assert not view_model.can_live_jog
-    view_model.apply_status(GrblStatus("Jog", machine_position=Position(10.40, 0, 0)))
-
-    view_model.stop_live_jog()
+def test_qt_live_jog_bounded_press_release_and_no_revival(qapp) -> None:
+    _engine, vm = build_engine()
+    vm.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
+    connection = _FakeConnection(); vm.connection = connection
+    vm.apply_status(GrblStatus("Idle", machine_position=Position(0,0,0)))
+    vm.session.establish_reference()
+    vm.apply_status(GrblStatus("Idle", machine_position=Position(10.25,0,0)))
+    vm.start_live_jog("X", 1)
+    assert connection.lines[-1] == b"$J=G91 G21 X1.66667 F500\n"
+    vm._handle_event(SerialEvent("rx", "ok", datetime.now()))
+    assert len(connection.lines) == 1
+    vm.stop_live_jog(); vm.stop_live_jog(); vm._renew_live_jog_lease()
     assert connection.realtime[-1] == b"\x85"
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    # Snap forward from the settled position after deceleration. A positive
-    # hold must never reverse after the operator releases the control.
-    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:11.40,0,0>", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X0.6 F500\n"
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10.25, 0, 0)))
-    view_model.start_live_jog("X", -1)
-    assert connection.lines[-1] == b"$J=G91 G21 X-1 F500\n"
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X-1 F500\n"
-    view_model.stop_live_jog()
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:10.25,0,0>", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 X-0.25 F500\n"
-
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10, 0, 0)))
-    view_model.jog("X", 0.1)
-    assert connection.lines[-1] == b"$J=G91 G21 X0.1 F500\n"
+    assert not vm._live_jog_lease_token and not vm._live_jog_renew_timer.isActive()
+    assert len(connection.lines) == 1
 
 
-def test_qt_live_z_jog_is_bounded_in_both_directions(qapp) -> None:
-    _engine, view_model = build_engine()
-    view_model.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
-    connection = _FakeConnection()
-    view_model.connection = connection
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(0, 0, 0)))
-    view_model.establish_reference()
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10, 10, 10)))
-
-    view_model.start_live_jog("Z", 1)
-    assert connection.lines[-1] == b"$J=G91 G21 Z1 F500\n"
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    assert connection.lines[-1] == b"$J=G91 G21 Z1 F500\n"
-
-    view_model.stop_live_jog()
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model._handle_event(SerialEvent("rx", "<Idle|MPos:11,10,11>", datetime.now()))
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10, 10, 10)))
-
-    view_model.start_live_jog("Y", 1)
-    assert connection.lines[-1] == b"$J=G91 G21 Y1 F500\n"
-    view_model.stop_live_jog()
-    view_model._handle_event(SerialEvent("rx", "ok", datetime.now()))
-    view_model.apply_status(GrblStatus("Idle", machine_position=Position(10, 10, 10)))
-
-    view_model.start_live_jog("Z", -1)
-    assert connection.lines[-1] == b"$J=G91 G21 Z-1 F500\n"
+@pytest.mark.parametrize("axis,direction", [("X",1),("X",-1),("Y",1),("Y",-1),("Z",1),("Z",-1)])
+def test_qt_live_jog_segments_bounded_each_direction(qapp, axis, direction) -> None:
+    _engine, vm = build_engine()
+    vm.session.profile = MachineProfile(travel_x=100, travel_y=100, travel_z=50, safe_z=3)
+    connection = _FakeConnection(); vm.connection = connection
+    vm.apply_status(GrblStatus("Idle", machine_position=Position(0,0,0)))
+    vm.session.establish_reference()
+    vm.apply_status(GrblStatus("Idle", machine_position=Position(10,10,10)))
+    vm.start_live_jog(axis, direction)
+    expected = f"$J=G91 G21 {axis}{'1.66667' if direction > 0 else '-1.66667'} F500\n".encode()
+    assert connection.lines[-1] == expected
+    vm.stop_live_jog()
+    assert connection.realtime[-1] == b"\x85"

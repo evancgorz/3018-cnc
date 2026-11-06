@@ -1,0 +1,14 @@
+{
+  "status": "offline_uncommissioned",
+  "generator_sha256": "9070b60e4035b13b0e4b4742e3791ab4f6b36eb0214cfbdf678d8887e2b61544",
+  "parse_clearance_nonnegative_XY": "passed",
+  "no_spindle_start_or_M6": true,
+  "max_line_bytes": 31,
+  "tests": "123 passed in 42.62s",
+  "files_sha256": {
+    "engraving.nc": "bbf8ef184cb4e7954c321a2beb4d344612cce3bc93bb37f277e0be495e494496",
+    "report.json": "ec573cbd137969d775103e943f58bbd4874803faae96fdd4517cab357e273a81",
+    "engraving-preview.svg": "3251b8d6ff8448f746d60f4e596984bfef5ebbfd4bcc4de5d9c860372e5a2786",
+    "runtime-comparison.json": "f54b6436109f8812d8833290e3ea5bc71722ffc1c9629df0edd85cc9469424f0"
+  }
+}

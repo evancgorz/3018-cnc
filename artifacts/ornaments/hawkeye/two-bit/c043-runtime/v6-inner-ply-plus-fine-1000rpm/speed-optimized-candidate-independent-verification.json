@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "result": "passed",
+  "scope": "offline file verification and dummy-sender streamer exercise only; no app UI, controller, or hardware access",
+  "releaseStatus": "offline-review-only; not authorization for cutting",
+  "files": {
+    "sourceImage": "artifacts\\ornaments\\hawkeye\\approved-artwork-reference.png",
+    "v6Nc": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-stream-compatible-inner-ply-plus-fine-600-160.nc",
+    "base450120Nc": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-review-450-120.nc",
+    "candidateNc": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\01-detail-speed-optimized-candidate-450-120.nc",
+    "verifier": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\v6-inner-ply-plus-fine-1000rpm\\verify-speed-optimized-candidate-independent.py"
+  },
+  "hashes": {
+    "sourceImageSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "v6NcSha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1",
+    "base450120NcSha256": "9bd1419576f09da099a75ecd9ef6abe0079ca086450e9ff127ee0cf0330ca5f3",
+    "candidateNcSha256": "6f0ea17df84e2173e9d254cde1114e5fd0058d5ad8f8586aa8589682aef14c62",
+    "candidateBuilderSha256": "a8928142330eae8a85d91d194e419fabd19dee075a41baa48dcd4f1709bbd937",
+    "verifierSha256": "e87c9f6ab2953a87d8cfd608b3f4c9f397008b8adb6b97e8056d7b66b32a306d",
+    "candidateReportSha256": "4d8ad6011cf0f02aa9ef1af1e485c8695ee938028f8d829986f2cf8600fac3d3",
+    "v6ReportSha256": "9cc2897015ab7a600eec08a2856fd246f2b21331d71d855d92655fe1c027ce05"
+  },
+  "hashChecks": {
+    "sourceMatchesV6Report": true,
+    "v6NcMatchesV6Report": true,
+    "sourceMatchesCandidateReport": true,
+    "candidateMatchesCandidateReport": true,
+    "v6NcMatchesCandidateBaseHash": true,
+    "builderMatchesCandidateReport": true
+  },
+  "geometry": {
+    "sourcePixelSizeMm": 0.07177033492822966,
+    "availableApprovedBlackMm2": 2409.2226060195076,
+    "tool": {
+      "includedAngleDegrees": 30.0,
+      "tipDiameterMm": 0.1,
+      "broadDepthMm": 1.625,
+      "broadEffectiveDiameterMm": 0.9708348754011488,
+      "fineDepthMm": 0.04,
+      "fineEffectiveDiameterMm": 0.12143593539448982,
+      "conservativeSweepIncludesPolygonGuard": true
+    },
+    "coverage": {
+      "v6_600_160": {
+        "broadSweepMm2": 1741.942184414549,
+        "fineSweepMm2": 785.3981982014557,
+        "combinedOmittedMm2": 16.00262653217294,
+        "combinedOmittedPercentOfAvailableBlack": 0.6642236583780157
+      },
+      "candidate_450_120": {
+        "broadSweepMm2": 1736.0903857652343,
+        "fineSweepMm2": 785.3981982014557,
+        "combinedOmittedMm2": 16.426439572762927,
+        "combinedOmittedPercentOfAvailableBlack": 0.6818149361425144
+      }
+    },
+    "candidateMinusV6OmittedMm2": 0.42381304058998737,
+    "candidateMinusV6OmittedPercentagePoints": 0.01759127776449876,
+    "containment": {
+      "v6_600_160": {
+        "broadSweepInsideApprovedBlackOutsideKeepout": true,
+        "fineSweepInsideApprovedBlackOutsideKeepout": true,
+        "broadSweepInsideStock": true,
+        "fineSweepInsideStock": true
+      },
+      "candidate_450_120": {
+        "broadSweepInsideApprovedBlackOutsideKeepout": true,
+        "fineSweepInsideApprovedBlackOutsideKeepout": true,
+        "broadSweepInsideStock": true,
+        "fineSweepInsideStock": true
+      }
+    },
+    "pathSummary": {
+      "v6_600_160": {
+        "z-1.6250": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-1.2000": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-0.6000": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-0.0400": {
+          "pathCount": 3645,
+          "xyVertices": 183590,
+          "xyLengthMm": 16293.828824410968
+        }
+      },
+      "base_450_120": {
+        "z-1.6250": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-1.2000": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-0.6000": {
+          "pathCount": 349,
+          "xyVertices": 22635,
+          "xyLengthMm": 6496.409408922754
+        },
+        "z-0.0400": {
+          "pathCount": 3645,
+          "xyVertices": 183590,
+          "xyLengthMm": 16293.828824410968
+        }
+      },
+      "candidate_450_120": {
+        "z-1.6250": {
+          "pathCount": 349,
+          "xyVertices": 18171,
+          "xyLengthMm": 6374.7918730217025
+        },
+        "z-1.2000": {
+          "pathCount": 349,
+          "xyVertices": 18171,
+          "xyLengthMm": 6374.7918730217025
+        },
+        "z-0.6000": {
+          "pathCount": 349,
+          "xyVertices": 18171,
+          "xyLengthMm": 6374.7918730217025
+        },
+        "z-0.0400": {
+          "pathCount": 3645,
+          "xyVertices": 183590,
+          "xyLengthMm": 16293.828824410968
+        }
+      }
+    },
+    "actualChangedBroadPaths": 81,
+    "broadVerticesPerPassBeforeAfter": [
+      22635,
+      18171
+    ]
+  },
+  "motionAndFeeds": {
+    "feeds": {
+      "v6_600_160": {
+        "xyCutMoveCount": 246803,
+        "plungeMoveCount": 4692,
+        "xyCutFeedsMmPerMin": [
+          600.0
+        ],
+        "plungeFeedsMmPerMin": [
+          160.0
+        ]
+      },
+      "base_450_120": {
+        "xyCutMoveCount": 246803,
+        "plungeMoveCount": 4692,
+        "xyCutFeedsMmPerMin": [
+          450.0
+        ],
+        "plungeFeedsMmPerMin": [
+          120.0
+        ]
+      },
+      "candidate_450_120": {
+        "xyCutMoveCount": 233411,
+        "plungeMoveCount": 4692,
+        "xyCutFeedsMmPerMin": [
+          450.0
+        ],
+        "plungeFeedsMmPerMin": [
+          120.0
+        ]
+      }
+    },
+    "parserCommandCounts": {
+      "v6_600_160": 265578,
+      "base_450_120": 265578,
+      "candidate_450_120": 252186
+    },
+    "lineCounts": {
+      "v6_600_160": 265593,
+      "base_450_120": 265593,
+      "candidate_450_120": 252201
+    },
+    "estimatedMinutes": {
+      "v6_600_160": 94.36347042014411,
+      "base_450_120": 118.99195697637406,
+      "candidate_450_120": 118.18117340369902
+    },
+    "candidateSavingsVsBase450120Minutes": 0.8107835726750352,
+    "candidateSavingsVsBase450120Percent": 0.6813767865302164,
+    "candidateVsV6Minutes": 23.81770298355491
+  },
+  "parserAndStreamer": {
+    "parsedAllThreeNcFiles": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "singleM3M5M2NoM4M6": true,
+    "candidateDryRun": {
+      "inputCommands": 252186,
+      "preparedMotionCommands": 252184,
+      "dummySentAndAcknowledged": 252184,
+      "rxCapacityBytes": 127,
+      "maxSingleLineBytesIncludingNewline": 31,
+      "maxBufferedBytes": 127
+    }
+  },
+  "builderReportConsistency": {
+    "checks": {
+      "broadSweepBaselineMm2": true,
+      "broadSweepCandidateMm2": true,
+      "combinedOmittedMm2": true,
+      "combinedOmittedPercent": true,
+      "combinedOmissionChangeMm2": true,
+      "broadPathsSimplifiedMeansActuallyChanged": true
+    },
+    "allChecksMatch": true
+  }
+}

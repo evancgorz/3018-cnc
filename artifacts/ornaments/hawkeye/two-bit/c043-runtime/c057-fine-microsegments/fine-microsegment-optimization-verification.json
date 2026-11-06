@@ -1,0 +1,31 @@
+{
+  "result": "passed",
+  "candidateSha256": "fd0856cd72fcfa14fee45871f47fe5287b1a398442bc92f09937a5fbe1498995",
+  "xyMoveSegmentsBeforeAfter": [
+    179945,
+    105457
+  ],
+  "xyMoveReductionPercent": 41.3949,
+  "fullFineEffectiveDiameterMm": 0.12143593539448982,
+  "fineSweepLostAddedMm2": [
+    0.062087333300463725,
+    0.5578179467996134
+  ],
+  "fineSweepSymmetricDifferenceMm2": 0.6199052801000771,
+  "combinedApprovedBlackOmissionChangeMm2": 6.5442500094547995e-06,
+  "estimatedMinutes": 118.17874606365623,
+  "offlineChecks": {
+    "v6AndSpeedCandidateHashesMatchReports": true,
+    "speedCandidateFineGeometryMatchesV6": true,
+    "broadGeometryUnchangedAtEveryDepth": true,
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "fullDiameterFineSweepContainedInArtworkOutsideKeepoutAndStock": true,
+    "fullDiameterSweepComparedByExactSymmetricDifference": true,
+    "combinedApprovedBlackOmissionChangeWithin0p10Mm2": true,
+    "cutFeed450Plunge120": true,
+    "spindleUnchangedAt1000Rpm": true,
+    "singleM3FinalM5M2NoM4M6": true
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "bundle": "hawkeye-single-bit-review-draft",
+  "rebuildCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/single-bit/prepare.py",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "sourceReferences": {
+    "approvedArtwork": {
+      "pathFromRepositoryRoot": "artifacts/ornaments/hawkeye/approved-artwork-reference.png",
+      "sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+      "role": "fine-line visual reference; not raster-converted into toolpaths"
+    },
+    "approvedWoodMockup": {
+      "filename": "exec-f73bdb31-af8a-4175-89fc-8faf34ffc33b.png",
+      "path": "C:\\Users\\Evan Gorczynski\\.codex\\generated_images\\01a1973e-59f6-7913-babe-932570c6d115\\exec-f73bdb31-af8a-4175-89fc-8faf34ffc33b.png",
+      "sha256": "9a77230ca25347d61c2cd6f7c7134c24f439303458162452b748e39fb69de466",
+      "role": "appearance reference only; never converted to machining geometry"
+    }
+  },
+  "simplification": {
+    "strategy": "hand-built vector silhouette and monoline letters, processed by the existing STEP pocket and tabbed profile generators",
+    "retainedLetteringExact": [
+      "DOME RIDERS",
+      "VAW-120 KEY WEST"
+    ],
+    "letteringRenderCase": "uppercase",
+    "includedMotifs": [
+      "connected E-2 Hawkeye side silhouette",
+      "radar dome and joined stalk",
+      "paired engine bulges",
+      "two broad propeller disks without blade detail",
+      "seven sun rays",
+      "water",
+      "palm",
+      "sailboat"
+    ],
+    "removedReferenceDetails": [
+      "curved filled display lettering",
+      "fine aircraft panel/window lines",
+      "fine palm fronds",
+      "small water streaks",
+      "thin circle border"
+    ],
+    "notes": "This is a vector-native, one-tool redraw. It does not reproduce the photograph's carved shading or the approved line-art's fine contours. Closed counters are retained wood; their size is listed for visual/wood-web review and does not need cutter clearance.",
+    "titleArcLengthMm": 108.5,
+    "bottomArcLengthMm": 122.7,
+    "measuredMinimumGlyphGapMm": 0.9069,
+    "upperWordGapAtTwelveOclockMm": 6.6616,
+    "minimumMotifToLetterClearanceMm": 2.5412,
+    "motifRadialBoundsMm": [
+      1.8113,
+      31.5913
+    ],
+    "letteringRadialBoundsMm": [
+      34.0,
+      44.4228
+    ],
+    "aircraftSilhouette": {
+      "connectedComponentCount": 1,
+      "boundsLocalXYMm": [
+        24.0,
+        43.7,
+        77.0,
+        58.2
+      ],
+      "nacellesJoinedToBody": true,
+      "propellerDisks": 2,
+      "propellerDiskSizeMm": [
+        4.0,
+        9.0
+      ],
+      "propellerBladesDetailed": false,
+      "radarStalkJoinsWing": true,
+      "tailFinMinimumBoundingWidthMm": 4.0
+    }
+  },
+  "geometry": {
+    "units": "mm",
+    "stock": {
+      "width": 110.0,
+      "height": 110.0,
+      "origin": "lower-left",
+      "assumedThickness": 3.0,
+      "thicknessMeasured": false
+    },
+    "part": {
+      "shape": "analytic circle",
+      "nominalDiameter": 100.0,
+      "centerWorkXY": [
+        55.0,
+        55.0
+      ]
+    },
+    "hangerHole": {
+      "centerWorkXY": [
+        55.0,
+        100.0
+      ],
+      "nominalDiameter": 4.0,
+      "outerEdgeWebMm": 3.0,
+      "toolSweepDiameterMm": 3.9987,
+      "artworkToHoleEdgeClearanceMm": 3.3349
+    },
+    "sharedPlacement": {
+      "modelOffsetXY": [
+        5.0,
+        5.0
+      ],
+      "pocketAndProfileUseSameOffset": true,
+      "partCenterTransform": "local(50,50) + (5,5) = work(55,55)"
+    },
+    "artworkRimClearanceMm": 5.577,
+    "letteringFitReview": {
+      "status": "Closed counters remain as retained wood; review visible sizes in SVG. Split-apex A uses an open stencil form.",
+      "counterCount": 4,
+      "toolDiameterMm": 3.175,
+      "counterChecks": [
+        {
+          "textGroup": "title",
+          "areaMm2": 10.5,
+          "shortSideMm": 3.0,
+          "longSideMm": 3.5
+        },
+        {
+          "textGroup": "title",
+          "areaMm2": 10.5,
+          "shortSideMm": 3.0,
+          "longSideMm": 3.5
+        },
+        {
+          "textGroup": "title",
+          "areaMm2": 10.5,
+          "shortSideMm": 3.0,
+          "longSideMm": 3.5
+        },
+        {
+          "textGroup": "bottom",
+          "areaMm2": 10.5,
+          "shortSideMm": 3.0,
+          "longSideMm": 3.5
+        }
+      ],
+      "smallestCounterShortSideMm": 3.0,
+      "counterClearanceIsNotACutterAccessRequirement": true,
+      "titleTargetAreaMm2": 715.0905,
+      "titleAreaUncutByEmittedSweepMm2": 1.1217,
+      "titleAreaUncutPercent": 0.157,
+      "bottomTextTargetAreaMm2": 732.3198,
+      "bottomTextAreaUncutByEmittedSweepMm2": 1.7648,
+      "bottomTextAreaUncutPercent": 0.241,
+      "allLetteringTargetAreaUncutPercent": 0.199
+    }
+  },
+  "tool": {
+    "type": "assumed flat endmill",
+    "reportedModel": "SHARPRO SPMS200-2ES-1/8",
+    "cuttingDiameterMm": 3.175,
+    "diameterVerified": false,
+    "fluteLengthVerified": false
+  },
+  "operations": [
+    {
+      "order": 1,
+      "kind": "shallow pockets",
+      "targetDepthMm": -0.4,
+      "passes": 1,
+      "feedMmPerMin": 300.0,
+      "plungeMmPerMin": 80.0,
+      "spindleStart": false
+    },
+    {
+      "order": 2,
+      "kind": "hanger hole",
+      "targetDepthMm": -3.15,
+      "cutoutDiameterMm": 4.0,
+      "passes": 7,
+      "maxStepdownMm": 0.5
+    },
+    {
+      "order": 3,
+      "kind": "outer profile",
+      "targetDepthMm": -3.15,
+      "nominalDiameterMm": 100.0,
+      "passes": 7,
+      "maxStepdownMm": 0.5,
+      "tabs": {
+        "count": 4,
+        "widthMm": 4.0,
+        "heightMm": 0.8
+      }
+    }
+  ],
+  "toolpathReview": {
+    "xyRapidSafeZMm": 3.0,
+    "stockEnvelopeContainsAllEmittedCutterSweeps": true,
+    "maxWorkXyMm": [
+      106.5879,
+      106.5879
+    ],
+    "minWorkXyMm": [
+      0.0,
+      0.0
+    ],
+    "pocketSweepAreaMm2": 2387.5103,
+    "shallowTargetToolReachableAreaMm2": 416.3948,
+    "shallowToolReachableAreaUncoveredMm2": 0.0,
+    "shallowTargetCenterlineInaccessibleAreaMm2": 2012.659,
+    "shallowTargetAreaMm2": 2429.0538,
+    "shallowTargetAreaUncutByEmittedSweepMm2": 41.5514,
+    "shallowTargetAreaUncutPercent": 1.711,
+    "profileHoleCenterlineDiameterMm": 0.8237,
+    "profileHoleSweptDiameterMm": 3.9987,
+    "outerProfileCenterlineSweepRadiusMm": 51.5879,
+    "exactCutterSweepBoundsWorkXY": [
+      1.825,
+      1.825,
+      108.175,
+      108.175
+    ],
+    "profileFeedDepthLevelsMm": [
+      -0.45,
+      -0.9,
+      -1.35,
+      -1.8,
+      -2.25,
+      -2.7,
+      -3.15
+    ],
+    "profileMaxStepdownMm": 0.5,
+    "profileMeasuredMaxStepdownMm": 0.5,
+    "profileVerticalInStockDescentCount": 16,
+    "profileMaxVerticalInStockDescentMm": 0.5,
+    "insertedStepdownMovesAtTabExits": 4,
+    "holeDepthPasses": 7,
+    "outerProfileDepthPasses": 7,
+    "holePassesAllCompleteBeforeOuterProfile": true,
+    "tabLiftFeedSegments": 24,
+    "holeFirstOuterLast": true,
+    "tabLiftSegments": 24,
+    "estimatedMinutes": 14.955,
+    "estimateAssumptions": "3000 mm/min rapid model; excludes spindle start, acceleration, real GRBL limits and wood/material effects",
+    "gcodeLineCount": 3962,
+    "m3Count": 0,
+    "m6Count": 0,
+    "m5Count": 2,
+    "finalProgramEndCount": 1
+  },
+  "unknownsBlockingProduction": [
+    "actual endmill cutting diameter and flute length",
+    "measured plywood thickness, flatness and veneer quality",
+    "verified cut and plunge feeds, RPM and depth limits",
+    "stock/clamp/spoilboard placement and clearance",
+    "physical coupon results, tab retention and wood tear-out"
+  ],
+  "artifacts": {
+    "source": {
+      "path": "artifacts/ornaments/hawkeye/single-bit/prepare.py",
+      "sha256": "42cf77ba7a24c1be31475a5a97be745b1b7a90b6be746a99c0d137849938cba3"
+    },
+    "artworkSvg": {
+      "path": "artifacts/ornaments/hawkeye/single-bit/artwork-reference.svg",
+      "sha256": "902aa821fd9b01ac7cda0b029737a2ddc1c14c1b774f0510c8175ab2b3e26a20"
+    },
+    "gcode": {
+      "path": "artifacts/ornaments/hawkeye/single-bit/review-draft.nc",
+      "sha256": "4c5bdd96e377475b139bd7524e030d137eead4bbad5294b2bd9cf627abda0a6e"
+    },
+    "sweepPreviewSvg": {
+      "path": "artifacts/ornaments/hawkeye/single-bit/cutter-sweep-preview.svg",
+      "sha256": "19b89be49a3401e5109121312d42aa6b10d0f8a047cd2a3169de78f1633ef0f3"
+    }
+  },
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolNoM3NoM6": true,
+    "oneFinalProgramEnd": true,
+    "allEmittedCutterSweepsInsideStock": true,
+    "profileAllInStockZDescentsWithinMaxStepdown": true
+  }
+}

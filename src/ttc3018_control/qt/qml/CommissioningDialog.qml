@@ -43,7 +43,7 @@ Dialog {
                     }
                 }
 
-                Label { visible: appViewModel && appViewModel.machine_capabilities.endsWith("none"); text: "No optional capabilities are enabled for this machine. Manual reference and work-zero operation remain available."; color: dialog.appPalette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                Label { visible: appViewModel && appViewModel.machine_capabilities.endsWith("none"); text: "No optional capabilities are enabled for this machine. Configure and commission all X/Y/Z homing switches before homing or setting work zero."; color: dialog.appPalette.warning; wrapMode: Text.Wrap; Layout.fillWidth: true }
 
                 Rectangle { visible: appViewModel && appViewModel.z_touch_plate_enabled; Layout.fillWidth: true; Layout.preferredHeight: probeContent.implicitHeight + 28; radius: 9; color: dialog.appPalette.raised
                     ColumnLayout { id: probeContent; anchors.fill: parent; anchors.margins: 14; spacing: 8

@@ -1,0 +1,9 @@
+{
+  "status": "offline comparison artifact manifest",
+  "generator_sha256": "9dbd23ef9915ac7a9cc18bea797f8fbe615d5f09fb6f1853855084df0341d389",
+  "comparison_json_sha256": "74928b32870a6f77e885f8025ee3286ac5a36a5ead9765603bbb2845302e38f8",
+  "preview_png_sha256": "387f1117ed0391ae49728b9264207810ecedb743c061fac83b7454b164d1b011",
+  "source_c095_report_sha256": "38e5a57e00d552e6cf4e317332ce9fa394ce0e90c420d38ac56e9e47b194456b",
+  "source_c095_program_sha256": "a94dad45d99b92577aef5ac3692f14ec8753bc0e34c00e7a6e07a88a5d803bfb",
+  "source_c091_mask_sha256": "9ca9370b589c3f54602e23c3a50bf314f82d90369b40d5a38f8844c6ecb7b70b"
+}

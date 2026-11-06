@@ -1,0 +1,443 @@
+{
+  "status": "offline review candidate; wider rays integrated; seam floor metric not assessable at adjacent external V-bit taper",
+  "source_artifact": "C095 revised geometry from C091 approved raised-plane mask",
+  "ray_geometry": {
+    "method": "straight-sided tapered wedge polygons clipped to C095 sky and aircraft exclusion",
+    "center_mm": [
+      55.0,
+      62.0
+    ],
+    "angles_deg": [
+      30,
+      45,
+      60,
+      75,
+      90,
+      105,
+      120,
+      135,
+      150
+    ],
+    "radii_mm": [
+      11.0,
+      27.0
+    ],
+    "full_widths_mm_inner_to_outer": [
+      0.8,
+      3.3
+    ],
+    "clip": "sky_zone intersected with inner circle inset by 1.2 mm",
+    "editable_helper": "C:\\Github\\3018-cnc\\artifacts\\ornaments\\hawkeye\\two-bit\\c095-ray-width-review\\tapered_rays.py"
+  },
+  "source_mask_sha256": "9ca9370b589c3f54602e23c3a50bf314f82d90369b40d5a38f8844c6ecb7b70b",
+  "baseline_program_sha256": "a94dad45d99b92577aef5ac3692f14ec8753bc0e34c00e7a6e07a88a5d803bfb",
+  "baseline_report_sha256": "38e5a57e00d552e6cf4e317332ce9fa394ce0e90c420d38ac56e9e47b194456b",
+  "output_program_sha256": "5c3c042aa126a17528277caac6c37d0326b30f6d5c5027982673453300e0eff4",
+  "design_mask_sha256": "c84237590918f92d7d636d96591e23a6e9f17c0c65ed7b301518e3fe38c6e82c",
+  "letter_mask_sha256": "79183c15d2beb21004076c34fba8ca8d255e77e5e253bd28b05fb1065a027bca",
+  "letter_centerlines_sha256": "a974038001459b259a64802eadd9c419c5824c99e232ffba4c8fe18cc0348425",
+  "font": {
+    "file": "C:\\Windows\\Fonts\\arialbd.ttf",
+    "sha256": "4d59199834e7439c67ea4949407639961060b21b173833f566eb60ac6fd8f5af",
+    "face": "Arial Bold",
+    "size_mm": 6.4,
+    "bold_expansion_mm_each_side": 0.03
+  },
+  "typography": {
+    "top": "DOME RIDERS",
+    "bottom": "VAW-120 Key West",
+    "centerline_radius_mm": 36.8,
+    "top_spread_deg": 104.0,
+    "bottom_spread_deg": 128.0,
+    "tracking_mm": 0.6,
+    "clear_annulus_mm": [
+      32.3,
+      40.5
+    ],
+    "clear_angle_ranges_deg": [
+      [
+        26.0,
+        154.0
+      ],
+      [
+        200.0,
+        340.0
+      ]
+    ]
+  },
+  "letter_tool": {
+    "angle_deg": 30,
+    "tip_mm": 0.1,
+    "depth_mm": 0.45,
+    "pass_depths_mm": [
+      0.45
+    ],
+    "maximum_stepdown_mm": 0.45,
+    "maximum_cut_width_mm": 0.34115427318801045,
+    "conservative_square_guard_mm": 0.45,
+    "line_spacing_mm": 0.05,
+    "target_mask_area_mm2": 230.99250000000004,
+    "centerline_paths": 3208,
+    "glyphs_without_paths": 0,
+    "letter_components_lost_to_tool_clearance": 0,
+    "initial_conservative_sweep_pixels_outside_mask": 0,
+    "rounded_emitted_sweep_pixels_outside_mask": 0,
+    "per_glyph": [
+      {
+        "phrase_index": 0,
+        "character_index": 0,
+        "character": "D",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 159,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 1,
+        "character": "O",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 156,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 2,
+        "character": "M",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 258,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 3,
+        "character": "E",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 110,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 5,
+        "character": "R",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 154,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 6,
+        "character": "I",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 82,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 7,
+        "character": "D",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 163,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 8,
+        "character": "E",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 132,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 9,
+        "character": "R",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 177,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 0,
+        "character_index": 10,
+        "character": "S",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 163,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 0,
+        "character": "V",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 87,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 1,
+        "character": "A",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 127,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 2,
+        "character": "W",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 221,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 3,
+        "character": "-",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 16,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 4,
+        "character": "1",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 79,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 5,
+        "character": "2",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 96,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 6,
+        "character": "0",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 158,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 8,
+        "character": "K",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 164,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 9,
+        "character": "e",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 100,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 10,
+        "character": "y",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 128,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 12,
+        "character": "W",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 225,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 13,
+        "character": "e",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 95,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 14,
+        "character": "s",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 104,
+        "components_lost_to_tool_clearance": 0
+      },
+      {
+        "phrase_index": 1,
+        "character_index": 15,
+        "character": "t",
+        "raw_components": 1,
+        "inset_components": 1,
+        "scanlines": 54,
+        "components_lost_to_tool_clearance": 0
+      }
+    ]
+  },
+  "protected_geometry": {
+    "palm_and_boat_intersection_with_clear_zone_mm2": 0.0,
+    "letter_mask_overlap_pixels": {
+      "palm": 0,
+      "sailboat": 0,
+      "inner_and_outer_borders": 0
+    },
+    "outer_border_guard_r_41p3_to_43p4_clear_zone_intersection_mm2": 0.0,
+    "inner_border_guard_r_31p95_to_32p15_clear_zone_intersection_mm2": 0.0,
+    "remaining_base_cut_area_inside_cleared_letter_band_mm2": 0.0,
+    "inner_border_nominal_radius_mm": 32.0,
+    "outer_border_nominal_radius_mm": 42.35
+  },
+  "planning": {
+    "finish_non_water": {
+      "concentric_components": 69,
+      "scanline_fallback_components": 1,
+      "component_local_stay_down_links": 1830,
+      "components": 70
+    },
+    "rough": {
+      "concentric_components": 69,
+      "scanline_fallback_components": 0,
+      "component_local_stay_down_links": 143,
+      "components": 69
+    },
+    "fine": {
+      "concentric_components": 1695,
+      "scanline_fallback_components": 0,
+      "component_local_stay_down_links": 588,
+      "components": 1695
+    },
+    "strict_water_finish": {
+      "concentric_components": 1,
+      "scanline_fallback_components": 0,
+      "component_local_stay_down_links": 98,
+      "components": 1
+    },
+    "strict_water_schedule": [
+      {
+        "primitive_scanline_spans": 243,
+        "scheduled_chains_per_pass": 107,
+        "separate_boundary_rings": 6,
+        "safe_stay_down_links": 142,
+        "safe_same_row_links": 0,
+        "safe_adjacent_row_links": 142,
+        "unsafe_transitions_retracted": 100,
+        "rows_in_strict_increasing_order": true,
+        "row_order_violations": 0,
+        "scanline_direction_uses_row_parity": true,
+        "scanline_spans_forward_x": 123,
+        "scanline_spans_reverse_x": 120,
+        "scheduler_reversed_or_reordered_spans": false,
+        "max_linked_row_gap": 1
+      }
+    ],
+    "water_nonwater_overlap_guard_mm": 0.6,
+    "water_nonwater_overlap_area_mm2": 203.38742213194925,
+    "rounded_emitted_sweep_containment": {
+      "rough_z_0p6": true,
+      "rough_z_1p2": true,
+      "deep_z_1p625": true,
+      "fine_z_0p04": true
+    },
+    "shared_water_nonwater_seam_floor_residual": {
+      "sample_count": 91458,
+      "shared_interface_length_mm": 57.607086614173234,
+      "overlap_band_each_side_mm": 0.6,
+      "p50_residual_mm": 0.012311816215515137,
+      "p95_residual_mm": 1.5760505199432373,
+      "p99_residual_mm": 1.625,
+      "max_residual_mm": 1.625,
+      "area": "shared water/non-water target interface; this interface coincides with the water-zone top clip and is adjacent to the clean-base exterior wall",
+      "depth_grid_y_alignment": "flipped image-top-origin geometry mask to physical-Y bottom-origin depth array",
+      "minimum_distance_to_clean_base_exterior_mm": 0.0,
+      "sampled_interface_distance_to_clean_base_exterior_mm": {
+        "p05": 0.0,
+        "p50": 0.32598425196850656,
+        "p95": 0.32876557059305767
+      },
+      "residual_over_0p5mm_sample_count": 31328,
+      "residual_over_0p5mm_bounds_mm": {
+        "min_x": 25.9125,
+        "max_x": 84.16250000000001,
+        "min_y": 40.8875,
+        "max_y": 42.087500000000006
+      },
+      "status": "not_assessable_external_taper"
+    }
+  },
+  "emitted_motion": {
+    "commands": 108043,
+    "bounds_mm": {
+      "min": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -1.625
+      },
+      "max": {
+        "x": 103.0359,
+        "y": 103.6595,
+        "z": 3.0
+      }
+    },
+    "feed_based_seconds": 6071.126071125619,
+    "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+    "cut_distance_mm": 38457.968094426455,
+    "feed_distance_mm": 41869.148094428194,
+    "plunge_distance_mm": 3411.1799999998952,
+    "rapid_distance_mm": 47252.50091437081,
+    "rapid_xy_distance_mm": 12685.520914364628,
+    "rapid_z_distance_mm": 34566.98000000143,
+    "rapid_segments": 16691,
+    "retract_count": 5563,
+    "nonzero_cut_segments": 85784,
+    "median_cut_segment_mm": 0.1558999999999955,
+    "p95_cut_segment_mm": 1.4814901990900968,
+    "cut_segments_at_most_0_1mm": 37299,
+    "cut_segments_at_most_0_1mm_percent": 43.480136155926516,
+    "cut_segments_at_most_0_25mm": 63967,
+    "cut_segments_at_most_0_25mm_percent": 74.56751841835307,
+    "cut_junctions": 80221,
+    "cut_junctions_at_least_90_degrees": 55864,
+    "cut_junctions_at_least_90_degrees_percent": 69.63762605801473,
+    "cut_junctions_at_least_135_degrees": 3772,
+    "cut_junctions_at_least_135_degrees_percent": 4.702010695453809,
+    "retracts_per_1000_commands": 51.48875910517109
+  },
+  "preview": {
+    "depth_grid_mm": 0.025,
+    "model": "analytic nearest-distance flat-tip V-bit envelope reconstructed from rounded emitted G-code at all 5 Z levels",
+    "file_sha256": "9e28e42d8264e3b528125a276997faac82427d8fea8966b4157ab9667b8be69a"
+  },
+  "limitations": [
+    "Mask conversion and letter raster use 0.025 mm pixels; emitted letter endpoints are rounded to 0.0001 mm.",
+    "Letter sweep containment uses a 0.225 mm square guard, larger than the true 0.171 mm cutter radius at 0.45 mm depth.",
+    "Color describes modeled depth and is not a prediction of plywood veneer color or finish.",
+    "The review-only program has no physical machine validation and is not a cutting release."
+  ]
+}

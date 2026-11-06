@@ -25,12 +25,16 @@ class LiveSettings:
 
 
 class LiveSettingsStore:
+    CURRENT_VERSION = 1
+
     def __init__(self, path: Path) -> None:
         self.path = path
 
     def load(self) -> LiveSettings:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or int(data.get("version", self.CURRENT_VERSION)) != self.CURRENT_VERSION:
+                return LiveSettings()
             settings = LiveSettings(
                 version=int(data.get("version", 1)),
                 enabled=bool(data.get("enabled", False)),

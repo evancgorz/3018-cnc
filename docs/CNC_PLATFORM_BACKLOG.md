@@ -33,6 +33,11 @@ This document is intentionally backlog-only. None of the capabilities below are 
 - Safety: an application notification is not a substitute for a safety-rated E-stop. Any uncertain signal must stop/hold and invalidate motion trust as appropriate.
 - Extension point: safety-input adapter and a first-class safety state in application state.
 - Future tests: debounce, stuck input, open/close during jog/job/probe, reconnect, and recovery authorization.
+- Planned execution: coordination task `C-013` defines the selected physical
+  architecture—hardwired dual-channel power removal plus an independent,
+  normally-closed feedback contact owned by the persistent backend. The DLC32
+  RESET header is secondary stopping/reset evidence only and must not be treated
+  as proof of E-stop state or safety.
 
 ### Spindle RPM feedback
 

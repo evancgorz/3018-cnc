@@ -1,0 +1,56 @@
+{
+  "result": "passed",
+  "scope": "offline artifact integrity, G-code parse, coordinate and command checks",
+  "tool": {
+    "type": "assumed 30 degree included-angle V-bit with 0.1 mm flat tip",
+    "includedAngleDeg": 30.0,
+    "tipDiameterMm": 0.1,
+    "tipDiameterVerified": false,
+    "runoutVerified": false,
+    "spindleStartupIncluded": true,
+    "spindleRpm": 1000,
+    "spindleRpmSource": "User confirmed saved 1000 RPM was successful previously",
+    "spindleCurrentlyVerified": false,
+    "spindleStartupDwellSeconds": 2.0,
+    "dwellDurationAssumed": true,
+    "automaticToolchangeIncluded": false
+  },
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "commands": {
+    "rebuild": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c043-runtime/v4-single-pass-1000rpm/prepare-detail-vbit30-1000rpm.py",
+    "verify": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c043-runtime/v4-single-pass-1000rpm/verify-review.py"
+  },
+  "gcodeSha256": "d8918bcadd7ac5441aa10cc1f0345e08901fcd62f00d4d4e5284b552a1fd819f",
+  "previewSvgSha256": "b66a8fa8207c3fbfcf09e238f5eda5640e2fdb1bd7cc5f10e1a3eb50794a1657",
+  "sourceSha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+  "gcodeParses": true,
+  "nonnegativeWorkXY": true,
+  "rapidXYClearanceMm": 3.0,
+  "controlCommands": {
+    "m5": 2,
+    "m3": 1,
+    "m6": 0,
+    "program_end": 1
+  },
+  "lineCount": 131973,
+  "estimatedMinutes": 122.818,
+  "availableBlackOmittedPercent": 1.706,
+  "hashesVerified": [
+    "source",
+    "gcode",
+    "preview"
+  ],
+  "generatorOfflineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolM3At1000RpmNoM6": true,
+    "spindleDwellParses": true,
+    "initialAndFinalM5": true,
+    "oneFinalProgramEnd": true,
+    "allSweepsInsideStock": true,
+    "coarseAndFineSweepsInsideApprovedBlack": true,
+    "holeKeepoutPreserved": true,
+    "fineStageTargetIsDerivedFromCoarseResidual": true
+  }
+}

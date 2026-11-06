@@ -1,8 +1,30 @@
-# Architecture Decision Record: Modular Monolith
+# Architecture Decision Record: Persistent Local Backend and Disposable Clients
 
-Status: Accepted and implemented
+Status: Accepted and observed in software-only C-007–C-012 verification
 
-## Decision
+## Current separation decision
+
+Pine runs machine control, safety state, transport ownership, jobs, and durable
+machine configuration in one persistent, Qt-free backend process. The desktop
+GUI and automation CLI are authenticated, versioned loopback clients. Backend
+startup is single-owner and owner-scoped; a client may close, crash, or
+reconnect without closing the controller or interrupting active backend work.
+
+```text
+Qt Quick/QML                  pine-cli
+       -> ControllerViewModel / typed client
+                 -> authenticated versioned loopback API
+                       -> persistent BackendRuntime
+                             -> ApplicationController and services
+                                   -> USB/TCP/digital-twin adapters
+```
+
+Raw GRBL byte injection is not part of the client contract. Physical E-stop
+power removal and commissioning remain a separately authorized hardware
+boundary; software health or controller reset is never treated as physical
+E-stop evidence.
+
+## Historical modular-monolith decision (superseded)
 
 TTC 3018 Control remains a single-process Qt Quick desktop application. The
 Qt presentation layer talks to a Qt-independent Python `ApplicationController`,

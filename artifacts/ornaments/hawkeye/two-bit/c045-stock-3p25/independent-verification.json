@@ -1,0 +1,61 @@
+{
+  "scope": "independent offline parsing and geometry comparison only; no app, backend, or hardware access",
+  "checks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ3": true,
+    "measuredThickness3p25": true,
+    "targetDepth3p40": true,
+    "sevenDepthLevelsAtMost0p5": true,
+    "tabFloorAtMinus2p45": true,
+    "fourTabIntervalsOf4mm": true,
+    "holeFinishesBeforeOuterStarts": true,
+    "sameHoleXYAsBaseline": true,
+    "sameOuterXYAsBaseline": true,
+    "sameTabXYAsBaseline": true,
+    "allParsedCutterSweepInside110mmStock": true,
+    "noSpindleOrToolchange": true,
+    "estimatedMinutesMatchesReport": true,
+    "candidateParsesWithG4Dwell": true,
+    "candidateUsesOneM3S1000": true,
+    "candidateEndsWithM5ThenM2": true,
+    "candidateHasNoToolchange": true,
+    "candidateMotionEqualsSpindleOffReview": true,
+    "candidateSweepEqualsSpindleOffReview": true,
+    "candidateRuntimeIncludesTwoSecondDwell": true,
+    "candidateRuntimeMatchesCandidateReport": true
+  },
+  "parsed": {
+    "segmentCount": 1467,
+    "depthLevelsMm": [
+      -0.486,
+      -0.971,
+      -1.457,
+      -1.943,
+      -2.429,
+      -2.914,
+      -3.4
+    ],
+    "targetDepthMm": -3.4,
+    "tabFloorMm": -2.45,
+    "tabSpansByCardinalDegreesMm": {
+      "0": 4.0,
+      "90": 4.0,
+      "180": 4.0,
+      "270": 4.0
+    },
+    "tabLiftSegmentCount": 16,
+    "maxVerticalDescentMm": 0.5,
+    "estimatedMinutes": 8.73,
+    "candidateSpindleRpm": 1000,
+    "candidateDwellSeconds": 2.0,
+    "candidateEstimatedMinutes": 8.763
+  },
+  "artifacts": {
+    "baselineGcodeSha256": "065bb7b347ac2a6edd0a448c1a8eb4b5e1e620716bd4306833eccc31c1520348",
+    "gcodeSha256": "865312c7f547156afce7fc1c0966e0af01ebe6506963afaef5f9ccb35750b46e",
+    "reportSha256": "99ce93c50b8116199eb496dbce4e3e65bff692918ca9247c0a05e0dc2eec8344",
+    "candidateGcodeSha256": "9343a56a1b72d0b6fa0be23a780e087b4228447d67e2a0bf132b08db97c335a4",
+    "candidateReportSha256": "23c8b856b33010d2fa737d39dd9208c061bd1fba174bd0459641468dbe77de42"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "status": "review_required",
+  "program_sha256": "5c3c042aa126a17528277caac6c37d0326b30f6d5c5027982673453300e0eff4",
+  "preview_sha256": "9e28e42d8264e3b528125a276997faac82427d8fea8966b4157ab9667b8be69a",
+  "depth_grid_sha256": "b21fdc93d5e410e7870d7643b1519df70ef215292b8c5e61d007da04dc4d1d87",
+  "shared_seam_floor": {
+    "sample_count": 91458,
+    "shared_interface_length_mm": 57.607086614173234,
+    "overlap_band_each_side_mm": 0.6,
+    "p50_residual_mm": 0.012311816215515137,
+    "p95_residual_mm": 1.5760505199432373,
+    "p99_residual_mm": 1.625,
+    "max_residual_mm": 1.625,
+    "area": "shared water/non-water target interface; this interface coincides with the water-zone top clip and is adjacent to the clean-base exterior wall",
+    "depth_grid_y_alignment": "flipped image-top-origin geometry mask to physical-Y bottom-origin depth array",
+    "minimum_distance_to_clean_base_exterior_mm": 0.0,
+    "sampled_interface_distance_to_clean_base_exterior_mm": {
+      "p05": 0.0,
+      "p50": 0.32598425196850656,
+      "p95": 0.32876557059305767
+    },
+    "residual_over_0p5mm_sample_count": 31328,
+    "residual_over_0p5mm_bounds_mm": {
+      "min_x": 25.9125,
+      "max_x": 84.16250000000001,
+      "min_y": 40.8875,
+      "max_y": 42.087500000000006
+    },
+    "status": "not_assessable_external_taper"
+  },
+  "checks": {
+    "emitted_program_hash_matches_report": true,
+    "shared_seam_samples_use_correct_y_orientation": true,
+    "shared_interface_identified_as_y_41p5_water_clip_edge": true,
+    "shared_interface_is_outside_vbit_taper_zone": false,
+    "shared_seam_floor_quality": "not_assessable; full interface lies within 0.35 mm of clean-base exterior, inside the 0.486 mm maximum-depth cutter radius",
+    "shared_seam_floor_within_0p1mm_p95_and_0p2mm_max": false
+  }
+}

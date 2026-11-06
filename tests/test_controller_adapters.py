@@ -30,7 +30,7 @@ def test_probe_and_tlo_reports() -> None:
 
 
 def test_adapter_builds_axis_only_work_offset() -> None:
-    assert Grbl11Adapter().work_offset_axis_command(1, "Z", 2.0) == b"G10 L20 P1 Z2\n"
+    assert Grbl11Adapter().work_offset_axis_command(1, "Z", 2.0) == b"G10 L2 P1 Z2\n"
     assert parse_tool_length_report("[TLO:-1.25]") == -1.25
 
 

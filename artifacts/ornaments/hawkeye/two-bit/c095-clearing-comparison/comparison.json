@@ -1,0 +1,314 @@
+{
+  "status": "offline strategy comparison only; no machine program emitted",
+  "generator_sha256": "9dbd23ef9915ac7a9cc18bea797f8fbe615d5f09fb6f1853855084df0341d389",
+  "source_c095_report_sha256": "38e5a57e00d552e6cf4e317332ce9fa394ce0e90c420d38ac56e9e47b194456b",
+  "source_c095_program_sha256": "a94dad45d99b92577aef5ac3692f14ec8753bc0e34c00e7a6e07a88a5d803bfb",
+  "source_c091_mask_sha256": "9ca9370b589c3f54602e23c3a50bf314f82d90369b40d5a38f8844c6ecb7b70b",
+  "settings": {
+    "tool": "assumed 30-degree included-angle V-bit, 0.1 mm flat tip",
+    "target_depth_mm": 1.625,
+    "effective_diameter_mm": 0.9708348754011488,
+    "stock_thickness_mm": 3.25,
+    "cut_feed_mm_min": 675,
+    "plunge_feed_mm_min": 120,
+    "safe_z_mm": 3,
+    "approach_z_mm": 0.2,
+    "spindle_rpm_assumed": 1000,
+    "upper_roughing_stepover_mm": 0.27,
+    "final_clearing_stepover_mm": 0.12,
+    "common_depth_levels_mm": [
+      -0.6,
+      -1.2,
+      -1.625
+    ]
+  },
+  "tool": {
+    "included_angle_deg": 30,
+    "flat_tip_mm_assumed": 0.1,
+    "depth_mm": 1.625,
+    "effective_diameter_mm": 0.9708348754011488
+  },
+  "region": {
+    "description": "C095 raised-ripple water background: its entire water_zone with five ripple islands removed",
+    "bounds_mm": [
+      25.987086452091642,
+      24.0,
+      84.01291354790834,
+      41.5
+    ],
+    "area_mm2": 674.1237717910157,
+    "connected_components": 1
+  },
+  "spacing_mm": {
+    "common_upper_roughing": 0.27,
+    "compared_final_clearing": 0.12
+  },
+  "ideal_parallel_lane_cusp_mm_at_0p12": 0.037320508075688756,
+  "planning": {
+    "concentric": {
+      "concentric_components": 1,
+      "scanline_fallback_components": 0,
+      "component_local_stay_down_links": 94,
+      "components": 1
+    },
+    "common_roughing": {
+      "concentric_components": 1,
+      "scanline_fallback_components": 0,
+      "component_local_stay_down_links": 38,
+      "components": 1
+    },
+    "optimized_alternating_scanline_schedules": [
+      {
+        "primitive_paths_before": 240,
+        "scheduled_chains_per_pass": 65,
+        "reversed_primitive_paths": 123,
+        "stay_down_link_count": 175,
+        "stay_down_link_distance_mm": 107.80064291633582,
+        "stay_down_link_max_mm": 2.97731926571539,
+        "scheduled_order_changed": true
+      }
+    ],
+    "strict_row_alternating_scanline_schedules": [
+      {
+        "primitive_scanline_spans": 234,
+        "scheduled_chains_per_pass": 103,
+        "separate_boundary_rings": 6,
+        "safe_stay_down_links": 137,
+        "safe_same_row_links": 0,
+        "safe_adjacent_row_links": 137,
+        "unsafe_transitions_retracted": 96,
+        "rows_in_strict_increasing_order": true,
+        "row_order_violations": 0,
+        "scanline_direction_uses_row_parity": true,
+        "scanline_spans_forward_x": 117,
+        "scanline_spans_reverse_x": 117,
+        "scheduler_reversed_or_reordered_spans": false,
+        "max_linked_row_gap": 1
+      }
+    ]
+  },
+  "candidates": {
+    "concentric": {
+      "final_path_count": 11,
+      "final_primitive_segments": 3669,
+      "final_xy_cut_distance_mm": 4582.749998641444,
+      "final_swept_area_mm2": 672.9446754320567,
+      "uncovered_area_mm2_conservative_sweep": 1.179096358958219,
+      "uncovered_area_percent": 0.17490799290842238,
+      "floor": {
+        "grid_mm": 0.0125,
+        "flat_core_sample_count": 3170769,
+        "flat_core_area_approx_mm2": 495.43265625000004,
+        "residual_above_target_depth_mm": {
+          "mean": 0.004550703335553408,
+          "median": 0.0,
+          "p90": 0.017603754997253418,
+          "p95": 0.030517578125,
+          "p99": 0.06337849140167234,
+          "max": 0.3105349540710449
+        },
+        "max_residual_location_mm": [
+          51.53083801269531,
+          40.51875305175781
+        ],
+        "flat_core_within_0p05mm_percent": 98.41130022401505,
+        "flat_core_within_0p075mm_percent": 99.26462634143326
+      },
+      "motion_common_roughing_plus_compared_final": {
+        "commands": 8312,
+        "bounds_mm": {
+          "min": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.625
+          },
+          "max": {
+            "x": 83.2408,
+            "y": 41.0142,
+            "z": 3.0
+          }
+        },
+        "feed_based_seconds": 820.8505689718712,
+        "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+        "cut_distance_mm": 8841.33619937133,
+        "feed_distance_mm": 8883.411199371341,
+        "plunge_distance_mm": 42.075,
+        "rapid_distance_mm": 595.8258958321323,
+        "rapid_xy_distance_mm": 377.15089583213245,
+        "rapid_z_distance_mm": 218.6750000000001,
+        "rapid_segments": 95,
+        "retract_count": 31,
+        "nonzero_cut_segments": 8181,
+        "median_cut_segment_mm": 0.42173678995316416,
+        "p95_cut_segment_mm": 3.769136996714236,
+        "cut_segments_at_most_0_1mm": 1077,
+        "cut_segments_at_most_0_1mm_percent": 13.164649798313164,
+        "cut_segments_at_most_0_25mm": 3268,
+        "cut_segments_at_most_0_25mm_percent": 39.94621684390661,
+        "cut_junctions": 8150,
+        "cut_junctions_at_least_90_degrees": 542,
+        "cut_junctions_at_least_90_degrees_percent": 6.6503067484662575,
+        "cut_junctions_at_least_135_degrees": 257,
+        "cut_junctions_at_least_135_degrees_percent": 3.1533742331288344,
+        "retracts_per_1000_commands": 3.7295476419634266
+      },
+      "parsed_check": {
+        "xy_nonnegative": true,
+        "rapid_clearance_z_mm": 3,
+        "full_cutter_sweep_contained_in_target": true,
+        "commands": 8312
+      }
+    },
+    "optimized_alternating_scanline": {
+      "final_path_count": 65,
+      "final_primitive_segments": 1608,
+      "final_xy_cut_distance_mm": 4795.2669068647,
+      "final_swept_area_mm2": 673.561081949871,
+      "uncovered_area_mm2_conservative_sweep": 0.5626898411433796,
+      "uncovered_area_percent": 0.08346981143365145,
+      "floor": {
+        "grid_mm": 0.0125,
+        "flat_core_sample_count": 3170769,
+        "flat_core_area_approx_mm2": 495.43265625000004,
+        "residual_above_target_depth_mm": {
+          "mean": 0.0030749656725674868,
+          "median": 0.0,
+          "p90": 0.01698148250579834,
+          "p95": 0.02631354331970215,
+          "p99": 0.03564572334289551,
+          "max": 0.05429565906524658
+        },
+        "max_residual_location_mm": [
+          51.18083953857422,
+          33.181251525878906
+        ],
+        "flat_core_within_0p05mm_percent": 99.9747379894278,
+        "flat_core_within_0p075mm_percent": 100.0
+      },
+      "motion_common_roughing_plus_compared_final": {
+        "commands": 6467,
+        "bounds_mm": {
+          "min": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.625
+          },
+          "max": {
+            "x": 83.2408,
+            "y": 41.0142,
+            "z": 3.0
+          }
+        },
+        "feed_based_seconds": 897.725395965216,
+        "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+        "cut_distance_mm": 9053.853107594596,
+        "feed_distance_mm": 9194.478107594607,
+        "plunge_distance_mm": 140.62500000000006,
+        "rapid_distance_mm": 1031.2976533959568,
+        "rapid_xy_distance_mm": 411.6726533959591,
+        "rapid_z_distance_mm": 619.6249999999999,
+        "rapid_segments": 257,
+        "retract_count": 85,
+        "nonzero_cut_segments": 6120,
+        "median_cut_segment_mm": 0.20794059247775842,
+        "p95_cut_segment_mm": 4.59107880677298,
+        "cut_segments_at_most_0_1mm": 1078,
+        "cut_segments_at_most_0_1mm_percent": 17.61437908496732,
+        "cut_segments_at_most_0_25mm": 3287,
+        "cut_segments_at_most_0_25mm_percent": 53.709150326797385,
+        "cut_junctions": 6035,
+        "cut_junctions_at_least_90_degrees": 459,
+        "cut_junctions_at_least_90_degrees_percent": 7.605633802816901,
+        "cut_junctions_at_least_135_degrees": 215,
+        "cut_junctions_at_least_135_degrees_percent": 3.5625517812758907,
+        "retracts_per_1000_commands": 13.14365238905211
+      },
+      "parsed_check": {
+        "xy_nonnegative": true,
+        "rapid_clearance_z_mm": 3,
+        "full_cutter_sweep_contained_in_target": true,
+        "commands": 6467
+      }
+    },
+    "strict_row_alternating_scanline": {
+      "final_path_count": 103,
+      "final_primitive_segments": 1579,
+      "final_xy_cut_distance_mm": 4730.162718056374,
+      "final_swept_area_mm2": 673.5663101378664,
+      "uncovered_area_mm2_conservative_sweep": 0.5574616531491454,
+      "uncovered_area_percent": 0.08269425830631641,
+      "floor": {
+        "grid_mm": 0.0125,
+        "flat_core_sample_count": 3170769,
+        "flat_core_area_approx_mm2": 495.43265625000004,
+        "residual_above_target_depth_mm": {
+          "mean": 0.0031126518733799458,
+          "median": 0.0,
+          "p90": 0.01698148250579834,
+          "p95": 0.02631354331970215,
+          "p99": 0.03564572334289551,
+          "max": 0.03564572334289551
+        },
+        "max_residual_location_mm": [
+          41.34333801269531,
+          26.706249237060547
+        ],
+        "flat_core_within_0p05mm_percent": 100.0,
+        "flat_core_within_0p075mm_percent": 100.0
+      },
+      "motion_common_roughing_plus_compared_final": {
+        "commands": 6590,
+        "bounds_mm": {
+          "min": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.625
+          },
+          "max": {
+            "x": 83.2408,
+            "y": 41.0142,
+            "z": 3.0
+          }
+        },
+        "feed_based_seconds": 960.5461126092152,
+        "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+        "cut_distance_mm": 8988.748918786268,
+        "feed_distance_mm": 9198.72391878627,
+        "plunge_distance_mm": 209.97499999999962,
+        "rapid_distance_mm": 2727.935435855165,
+        "rapid_xy_distance_mm": 1826.1604358551617,
+        "rapid_z_distance_mm": 901.7749999999982,
+        "rapid_segments": 371,
+        "retract_count": 123,
+        "nonzero_cut_segments": 6091,
+        "median_cut_segment_mm": 0.20512817943910255,
+        "p95_cut_segment_mm": 4.620248154590841,
+        "cut_segments_at_most_0_1mm": 1074,
+        "cut_segments_at_most_0_1mm_percent": 17.63257264816943,
+        "cut_segments_at_most_0_25mm": 3299,
+        "cut_segments_at_most_0_25mm_percent": 54.16187818092267,
+        "cut_junctions": 5968,
+        "cut_junctions_at_least_90_degrees": 389,
+        "cut_junctions_at_least_90_degrees_percent": 6.5180965147453085,
+        "cut_junctions_at_least_135_degrees": 182,
+        "cut_junctions_at_least_135_degrees_percent": 3.049597855227882,
+        "retracts_per_1000_commands": 18.66464339908953
+      },
+      "parsed_check": {
+        "xy_nonnegative": true,
+        "rapid_clearance_z_mm": 3,
+        "full_cutter_sweep_contained_in_target": true,
+        "commands": 6590
+      }
+    }
+  },
+  "model": "Continuous line-segment distance with flat-tip V-bit profile; highest material removal over every traversed path; floor sampled on a 0.0125 mm grid, excluding intentional walls within one cutter radius plus 0.1 mm.",
+  "limits": [
+    "Assumes 30-degree included angle and 0.1 mm flat tip; actual tool/runout are unverified.",
+    "A geometric floor model predicts ideal cutter scallops, not wood grain, runout, flex, chip recutting, or ply color.",
+    "Motion is parsed feed-based time at C095 settings, not measured controller throughput; it excludes acceleration and corner slowdown.",
+    "Comparison region is the C095 smooth water background only; lettering, sky, aircraft, raised rays, and fine residual are excluded.",
+    "Both programs retain identical 0.27 mm concentric roughing at Z-0.6 and -1.2; only the 0.12 mm final-depth strategy changes."
+  ],
+  "preview_sha256": "387f1117ed0391ae49728b9264207810ecedb743c061fac83b7454b164d1b011"
+}

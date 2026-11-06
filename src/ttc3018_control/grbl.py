@@ -138,17 +138,19 @@ def make_work_offset(slot: int, position: Position) -> bytes:
 
 
 def make_work_offset_axis(slot: int, axis: str, value: float) -> bytes:
-    """Build a work-offset update for exactly one axis.
+    """Set one absolute work-coordinate offset without changing other axes.
 
     This is intentionally separate from ``make_work_offset``: probing a
-    movable Z plate must never rewrite the established X/Y origin.
+    movable Z plate must never rewrite the established X/Y origin. L2 writes
+    the measured offset directly, so probe deceleration after the trigger
+    cannot shift the datum as it would with an L20 current-position command.
     """
     axis = axis.upper()
     if slot not in range(1, 7) or axis not in {"X", "Y", "Z"}:
         raise ValueError("Invalid work-offset slot or axis")
     if not math.isfinite(value):
         raise ValueError("Work offset coordinate must be finite")
-    return f"G10 L20 P{slot} {axis}{value:g}\n".encode("ascii")
+    return f"G10 L2 P{slot} {axis}{value:g}\n".encode("ascii")
 
 
 def make_tool_length_offset(z_offset: float) -> bytes:

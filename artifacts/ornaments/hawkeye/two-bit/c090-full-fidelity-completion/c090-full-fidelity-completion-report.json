@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; no machine action performed",
+  "sequence": {
+    "requiredPriorProgram": "artifacts\\ornaments\\hawkeye\\two-bit\\c084-runtime-45m\\01-detail-c084-broad-only-008-review-only.nc",
+    "requiredPriorSha256": "60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718",
+    "completionFile": "02-detail-c090-fine-residual-completion-review-only.nc",
+    "completionSha256": "fabf3a2dfb077c9c8c58cc914a34a20c3c7859176f5dd6ca0adbc73093a83a99",
+    "sameWorkFrame": "110 mm stock; 100 mm ornament; lower-left XY origin; unchanged 30 degree 0.1 mm V-bit"
+  },
+  "completion": {
+    "commands": 85494,
+    "feedBasedEstimateMinutes": 46.25926270375071,
+    "motion": {
+      "commands": 85494,
+      "bounds_mm": {
+        "min": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -0.04
+        },
+        "max": {
+          "x": 98.9343,
+          "y": 98.1448,
+          "z": 3.0
+        }
+      },
+      "feed_based_seconds": 2775.5557622250426,
+      "estimate_limits": "Excludes acceleration and junction slowing; rapid feed assumed 3000 mm/min.",
+      "cut_distance_mm": 15832.547827305105,
+      "feed_distance_mm": 16707.3478273052,
+      "plunge_distance_mm": 874.800000000027,
+      "rapid_distance_mm": 46440.90887875905,
+      "rapid_xy_distance_mm": 25151.10887875429,
+      "rapid_z_distance_mm": 21289.800000000458,
+      "rapid_segments": 10937,
+      "retract_count": 3645,
+      "nonzero_cut_segments": 70907,
+      "median_cut_segment_mm": 0.10741885309385962,
+      "p95_cut_segment_mm": 0.6458999999999975,
+      "cut_segments_at_most_0_1mm": 34262,
+      "cut_segments_at_most_0_1mm_percent": 48.31962993780586,
+      "cut_segments_at_most_0_25mm": 57807,
+      "cut_segments_at_most_0_25mm_percent": 81.52509625283822,
+      "cut_junctions": 67262,
+      "cut_junctions_at_least_90_degrees": 63175,
+      "cut_junctions_at_least_90_degrees_percent": 93.9237608159139,
+      "cut_junctions_at_least_135_degrees": 14197,
+      "cut_junctions_at_least_135_degrees_percent": 21.107014361749577,
+      "retracts_per_1000_commands": 42.634570847076986
+    },
+    "depthsMm": [
+      -0.04
+    ],
+    "effectiveFineDiameterMm": 0.12143593539448982
+  },
+  "combinedC084BroadPlusC090Fine": {
+    "omittedApprovedArtworkMm2": 23.738906461678305,
+    "omittedApprovedArtworkFraction": 0.009853347051603288,
+    "fullDiameterSweepContainedInApprovedArtwork": true
+  },
+  "checks": {
+    "parsesExactOutput": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "fineOnly": true,
+    "combinedSweepContained": true
+  },
+  "limitations": [
+    "Physical execution requires matching completed broad pass, same tool and confirmed work zero.",
+    "Nominal time excludes acceleration, connection, setup and material effects."
+  ]
+}

@@ -142,4 +142,6 @@ def test_h7_viewmodel_guards_status_and_controls_to_digital_twin(qapp, tmp_path)
     assert 'appViewModel.inject_simulation_limit("X", checked)' in qml
     assert 'appViewModel.inject_simulation_limit("Y", checked)' in qml
     assert 'appViewModel.inject_simulation_limit("Z", checked)' in qml
+    assert 'Twin switches (checked = actuated):' in qml
+    assert "declared NC/NO polarity" in qml
     assert 'visible: appViewModel && appViewModel.simulation_active' in qml

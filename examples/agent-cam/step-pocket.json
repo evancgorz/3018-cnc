@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "concept": "A shallow circular recess based on the circular STEP outline.",
+  "kind": "step-pocket",
+  "source": "../extruded-circle.step",
+  "settings": {
+    "stock_width": 80,
+    "stock_height": 80,
+    "tool_diameter": 3.175,
+    "depth": 0.5,
+    "stock_thickness": 6,
+    "max_stepdown": 0.25,
+    "safe_z": 3,
+    "cut_feed": 250,
+    "plunge_feed": 80,
+    "spindle_rpm": null
+  }
+}

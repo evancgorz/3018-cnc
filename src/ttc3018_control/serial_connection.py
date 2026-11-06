@@ -9,6 +9,8 @@ import time
 import serial
 from serial.tools import list_ports
 
+from .transport_events import TransportEventQueue
+
 
 @dataclass(frozen=True)
 class SerialEvent:
@@ -28,7 +30,7 @@ class GrblConnection:
     """One persistent, thread-safe connection to a GRBL serial endpoint."""
 
     def __init__(self) -> None:
-        self.events: queue.Queue[SerialEvent] = queue.Queue()
+        self.events: queue.Queue[SerialEvent] = TransportEventQueue()
         self._serial: serial.Serial | None = None
         self._reader: threading.Thread | None = None
         self._stop = threading.Event()

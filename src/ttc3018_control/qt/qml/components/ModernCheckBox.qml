@@ -4,15 +4,15 @@ import QtQuick.Controls
 CheckBox {
     id: root
     required property var palette
-    spacing: 9
-    implicitHeight: 28
+    spacing: 10
+    implicitHeight: 30
 
     indicator: Rectangle {
-        implicitWidth: 19
-        implicitHeight: 19
+        implicitWidth: 20
+        implicitHeight: 20
         x: root.leftPadding
         y: Math.round((root.height - height) / 2)
-        radius: 5
+        radius: 6
         color: root.checked ? root.palette.accent : root.palette.raised
         border.width: root.activeFocus ? 2 : 1
         border.color: root.activeFocus ? root.palette.accentHover : (root.checked ? root.palette.accent : root.palette.divider)

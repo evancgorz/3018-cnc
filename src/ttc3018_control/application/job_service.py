@@ -8,6 +8,7 @@ from typing import Callable, Sequence
 from pathlib import Path
 
 from ..gcode import GCodeProgram, load_gcode, parse_gcode
+from .job_provenance import load_review_bundle
 from ..grbl import GrblStatus, REALTIME_HOLD, REALTIME_RESUME, REALTIME_SOFT_RESET
 from ..job import JobStreamer
 from ..machine_state import check_job_bounds
@@ -57,6 +58,8 @@ class JobService:
         self._last_controller_activity: float | None = None
         self._controller_state: str | None = None
         self._drain_paused = False
+        self._status_sequence = 0
+        self._pause_requested_status_sequence: int | None = None
 
     @property
     def state(self) -> str:
@@ -101,24 +104,44 @@ class JobService:
         return max(0.0, self.program.estimated_seconds - self.elapsed_seconds)
 
     def load_program(self, path: Path) -> GCodeProgram:
-        program = load_gcode(path)
+        self._ensure_program_can_be_loaded()
+        program = load_review_bundle(path) if path.suffix.lower() == ".json" else load_gcode(path)
+        self._prepare_for_loaded_program()
         self.program = program
-        self._restart_requires_reload = False
         self._changed()
         return program
 
     def load_generated(self, gcode: str, filename: str) -> GCodeProgram:
+        self._ensure_program_can_be_loaded()
         program = parse_gcode(gcode, Path(filename))
+        self._prepare_for_loaded_program()
         self.program = program
-        self._restart_requires_reload = False
         self._changed()
         return program
+
+    def _ensure_program_can_be_loaded(self) -> None:
+        if self.active:
+            raise RuntimeError("Cannot load a job while a job operation is active")
+
+    def _prepare_for_loaded_program(self) -> None:
+        """Make execution state describe the newly selected program, not its predecessor."""
+        self.streamer.reset()
+        self._completion_waiting_for_idle = False
+        self._spindle_stop_pending = False
+        self._spindle_stop_acks = 0
+        self._return_waiting_for_idle = False
+        self._restart_requires_reload = False
+        self._drain_paused = False
+        self._pause_requested_status_sequence = None
+        self._timing_started_at = None
+        self._elapsed_seconds = 0.0
+        self._last_controller_activity = None
 
     def preflight(self) -> tuple[bool, str]:
         if self.program is None:
             return False, "Load a validated G-code program first."
         if not self.session.envelope.trusted or self.session.envelope.reference is None:
-            return False, "Establish the manual machine reference first."
+            return False, "Home the machine to establish its trusted reference first."
         if self.session.work_offset is None:
             return False, "A fresh GRBL work-offset report is required."
         return check_job_bounds(
@@ -136,6 +159,16 @@ class JobService:
     @property
     def return_waiting_for_idle(self) -> bool:
         return self._return_waiting_for_idle
+
+    @property
+    def pause_status_confirmed(self) -> bool:
+        """Whether a controller Hold report followed the latest pause request."""
+        return bool(
+            self.display_state == "paused"
+            and self._pause_requested_status_sequence is not None
+            and self._status_sequence > self._pause_requested_status_sequence
+            and self._controller_state in {"Hold", "Hold:0"}
+        )
 
     @property
     def restart_requires_reload(self) -> bool:
@@ -162,6 +195,7 @@ class JobService:
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
         self._drain_paused = False
+        self._pause_requested_status_sequence = None
         self._elapsed_seconds = 0.0
         self._timing_started_at = self._clock()
         self._last_controller_activity = self._clock()
@@ -177,14 +211,17 @@ class JobService:
             except RuntimeError as exc:
                 return ActionOutcome(False, f"Pause failed — {exc}")
             self._drain_paused = True
+            self._pause_requested_status_sequence = self._status_sequence
             self._freeze_timing()
             self._changed()
             return ActionOutcome(True, "Job paused")
         try:
             self._send_realtime(REALTIME_HOLD)
+            pause_status_baseline = self._status_sequence
             self.streamer.pause()
         except RuntimeError as exc:
             return ActionOutcome(False, f"Pause failed — {exc}")
+        self._pause_requested_status_sequence = pause_status_baseline
         self._freeze_timing()
         self._changed()
         return ActionOutcome(True, "Job paused")
@@ -198,6 +235,7 @@ class JobService:
             except RuntimeError as exc:
                 return ActionOutcome(False, f"Resume failed — {exc}")
             self._drain_paused = False
+            self._pause_requested_status_sequence = None
             self._timing_started_at = self._clock()
             self._changed()
             return ActionOutcome(True, "Job resumed")
@@ -206,6 +244,7 @@ class JobService:
             self.streamer.resume()
         except RuntimeError as exc:
             return ActionOutcome(False, f"Resume failed — {exc}")
+        self._pause_requested_status_sequence = None
         self._timing_started_at = self._clock()
         self._changed()
         return ActionOutcome(True, "Job resumed")
@@ -215,6 +254,7 @@ class JobService:
         self._freeze_timing()
         self._completion_waiting_for_idle = False
         self._drain_paused = False
+        self._pause_requested_status_sequence = None
         self._spindle_stop_pending = False
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
@@ -259,6 +299,7 @@ class JobService:
         return True
 
     def observe_status(self, status: GrblStatus) -> None:
+        self._status_sequence += 1
         self._controller_state = status.state
         self.note_controller_activity()
         reported_capacity = self._rx_capacity_from_status(status)
@@ -323,6 +364,7 @@ class JobService:
         self._spindle_stop_pending = False
         self._spindle_stop_acks = 0
         self._return_waiting_for_idle = False
+        self._pause_requested_status_sequence = None
         self._reported_rx_capacity = self.DEFAULT_RX_CAPACITY
         self.streamer.buffer_capacity = self.DEFAULT_RX_CAPACITY
         self._last_controller_activity = None
@@ -421,7 +463,7 @@ class JobService:
         else:
             self._on_notice(
                 f"Job failed — {reason}; motion queue reset and spindle stop requested. "
-                "Re-establish references and reload the job before restarting."
+                "Home the machine and reload the job before restarting."
             )
 
     def _request_spindle_stop(self, notice: str) -> None:

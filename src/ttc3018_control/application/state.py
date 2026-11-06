@@ -34,6 +34,7 @@ class ProgramSnapshot:
     minimum: Position | None = None
     maximum: Position | None = None
     estimated_seconds: float = 0.0
+    source_sha256: str = ""
 
 
 @dataclass(frozen=True)

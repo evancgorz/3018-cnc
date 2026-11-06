@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "selected_machine_id": "16c0f71b-f47e-52a4-8eb8-531a0f3fb157",
+  "machines": [
+    {
+      "schema_version": 1,
+      "machine_id": "16c0f71b-f47e-52a4-8eb8-531a0f3fb157",
+      "name": "Two Trees TTC 3018",
+      "controller": "grbl_1_1",
+      "travel_x": 290,
+      "travel_y": 170,
+      "travel_z": 40,
+      "safe_z": 30,
+      "axes": {
+        "X": {
+          "positive_direction": 1,
+          "switch_mode": "none",
+          "switch_end": "max",
+          "input_pin": null,
+          "active_low": false,
+          "hard_limit": false
+        },
+        "Y": {
+          "positive_direction": 1,
+          "switch_mode": "none",
+          "switch_end": "max",
+          "input_pin": null,
+          "active_low": false,
+          "hard_limit": false
+        },
+        "Z": {
+          "positive_direction": 1,
+          "switch_mode": "none",
+          "switch_end": "max",
+          "input_pin": null,
+          "active_low": false,
+          "hard_limit": false
+        }
+      },
+      "probes": [],
+      "spindle": {
+        "present": true,
+        "supports_speed_command": true,
+        "max_rpm": 12000.0
+      },
+      "steppers": {
+        "present": true,
+        "enable_control": false,
+        "disable_when_idle": false
+      },
+      "metadata": {}
+    }
+  ]
+}

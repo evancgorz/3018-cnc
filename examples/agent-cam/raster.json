@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "concept": "A shallow filled cross with an untouched rim; engraving only.",
+  "kind": "raster",
+  "source": "cross.pgm",
+  "settings": {
+    "crop": [
+      0,
+      0,
+      40,
+      40
+    ],
+    "outer_diameter": 40,
+    "art_diameter": 32,
+    "stock_margin": 2,
+    "engraving_depth": 0.3,
+    "v_angle": 30,
+    "tip_diameter": 0.1,
+    "stepover": 0.12,
+    "threshold": 128,
+    "stock_thickness": 6,
+    "max_stepdown": 0.25,
+    "safe_z": 3,
+    "cut_feed": 250,
+    "plunge_feed": 80,
+    "spindle_rpm": null
+  }
+}

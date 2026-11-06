@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "status": "offline_uncommissioned_operator_review_required",
+  "operation": "fixed_depth_raster_engraving_only",
+  "source_sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+  "settings": {
+    "crop": [
+      0,
+      0,
+      1254,
+      1254
+    ],
+    "outer_diameter": 100.0,
+    "art_diameter": 90.0,
+    "stock_thickness": 3.0,
+    "stock_margin": 5.0,
+    "engraving_depth": 0.25,
+    "v_angle": 60.0,
+    "tip_diameter": 0.1,
+    "stepover": 0.15,
+    "max_stepdown": 0.125,
+    "safe_z": 3.0,
+    "cut_feed": 300.0,
+    "plunge_feed": 80.0,
+    "spindle_rpm": null,
+    "threshold": 128
+  },
+  "effective_tool_diameter_mm": 0.38867513459481284,
+  "pixel_size_mm": 0.07177033492822966,
+  "passes": 2,
+  "paths_per_pass": 6259,
+  "source_black_area_mm2": 2413.5900048076214,
+  "inaccessible_black_area_mm2": 225.45158021593105,
+  "estimated_minutes": 625.6261704077866,
+  "bounds": {
+    "minimum": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -0.25
+    },
+    "maximum": {
+      "x": 98.8006,
+      "y": 98.0829,
+      "z": 3.0
+    }
+  },
+  "warnings": [
+    "Not physically commissioned; machine readiness is not evaluated.",
+    "Fixed-depth fill, not variable-depth V-carving; narrow detail and sharp corners can be omitted.",
+    "Preview shows top-surface cutter footprint, not floor finish, plywood tear-out or machining simulation.",
+    "No hanger or perimeter cutout is generated. Use separately reviewed compensated profile CAM.",
+    "Confirm tool angle/tip, stock flatness, feeds, spindle, clearances and work zero before machining.",
+    "Spindle startup omitted because spindle_rpm is null."
+  ]
+}

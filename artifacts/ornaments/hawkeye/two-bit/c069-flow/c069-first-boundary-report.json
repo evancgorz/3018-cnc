@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline-review-only; no machine interaction",
+  "source": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c043-runtime\\c057-fine-microsegments\\01-detail-speed-fine-simplified-450-120-review-only.nc",
+    "sha256": "fd0856cd72fcfa14fee45871f47fe5287b1a398442bc92f09937a5fbe1498995",
+    "pixelSizeMm": 0.07177033492822966
+  },
+  "candidate": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c069-flow\\01-detail-c069-first-boundary-675-120-review-only.nc",
+    "sha256": "bef0b50e8b65cd1008854b701d500b508b5ae7334267454786f6aae31372b9a8"
+  },
+  "generator": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c069-flow\\prepare-c069-first-boundary.py",
+    "sha256": "91b9c4ac9aec1fc54380c5b1fc5ce04adc3b87556aa8928b1e0f558d22c58637"
+  },
+  "tolerancesMm": {
+    "broad": 0.08,
+    "fine": 0.04
+  },
+  "toolDiametersMm": {
+    "broadAtFinalDepth": 0.9708348754011488,
+    "fine": 0.12143593539448982
+  },
+  "motion": {
+    "cutFeedMmPerMin": 675.0,
+    "plungeFeedMmPerMin": 120.0,
+    "spindleCommand": 1000,
+    "baseline": {
+      "segments": 158857,
+      "distanceMm": 35417.112140431826,
+      "medianSegmentMm": 0.07179999999999964,
+      "p95SegmentMm": 0.9841746999389916,
+      "segmentsAtMost0p1Mm": 97010,
+      "junctions": 154231,
+      "junctionsAtLeast90Deg": 121605
+    },
+    "candidate": {
+      "segments": 88070,
+      "distanceMm": 33841.742145484044,
+      "medianSegmentMm": 0.14350000000000307,
+      "p95SegmentMm": 1.4099918049407236,
+      "segmentsAtMost0p1Mm": 34940,
+      "junctions": 83444,
+      "junctionsAtLeast90Deg": 74884
+    },
+    "segmentReductionPercent": 44.56020194262764,
+    "estimatedMinutesIgnoringJunctionSlowdown": 89.60996670782428
+  },
+  "geometry": {
+    "broadPaths": 349,
+    "finePaths": 3645,
+    "broadSegmentsBeforeAfterPerPass": [
+      17822,
+      5743
+    ],
+    "fineSegmentsBeforeAfter": [
+      105457,
+      70907
+    ],
+    "broadSweepSymmetricDifferenceMm2": 33.54354685519174,
+    "fineSweepSymmetricDifferenceMm2": 17.283901532211637,
+    "combinedApprovedBlackOmittedBeforeAfterMm2": [
+      16.426446117012937,
+      24.515332500168952
+    ],
+    "combinedOmissionDeltaMm2": 8.088886383156016,
+    "fullDiameterChordContainment": true,
+    "hangerKeepoutExcluded": true,
+    "stockContained": true
+  },
+  "checks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "depthsUnchanged": true,
+    "broadRepeatedAtAllThreeDepths": true,
+    "singleM3FinalM5M2NoM6": true
+  }
+}

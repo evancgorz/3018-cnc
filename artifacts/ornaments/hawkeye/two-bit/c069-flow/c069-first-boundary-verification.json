@@ -1,0 +1,26 @@
+{
+  "result": "passed",
+  "candidateSha256": "bef0b50e8b65cd1008854b701d500b508b5ae7334267454786f6aae31372b9a8",
+  "segmentsBeforeAfter": [
+    158857,
+    88070
+  ],
+  "segmentReductionPercent": 44.56020194262764,
+  "medianSegmentBeforeAfterMm": [
+    0.07179999999999964,
+    0.14350000000000307
+  ],
+  "junctionsAtLeast90DegBeforeAfter": [
+    121605,
+    74884
+  ],
+  "combinedOmissionDeltaMm2": 8.088886383156016,
+  "checks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "depthsUnchanged": true,
+    "broadRepeatedAtAllThreeDepths": true,
+    "singleM3FinalM5M2NoM6": true
+  }
+}

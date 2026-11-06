@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "bundle": "hawkeye-two-bit-endmill-cutout-review",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "rebuildCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/prepare-cutout.py",
+  "scope": "Endmill cutout leg only; shallow V-bit artwork engraving is a separate job and is not included in this file.",
+  "geometrySourceReference": {
+    "path": "artifacts/ornaments/hawkeye/single-bit/prepare.py",
+    "sha256": "42cf77ba7a24c1be31475a5a97be745b1b7a90b6be746a99c0d137849938cba3",
+    "note": "Reuses the frozen analytic circle/hanger-loop profile geometry and shared XY placement; art-pocket generation is excluded."
+  },
+  "geometry": {
+    "units": "mm",
+    "stock": {
+      "width": 110.0,
+      "height": 110.0,
+      "origin": "lower-left",
+      "assumedThickness": 3.0,
+      "thicknessMeasured": false
+    },
+    "part": {
+      "shape": "analytic circle",
+      "nominalDiameter": 100.0,
+      "centerWorkXY": [
+        55.0,
+        55.0
+      ]
+    },
+    "hangerHole": {
+      "centerWorkXY": [
+        55.0,
+        100.0
+      ],
+      "nominalDiameter": 4.0,
+      "outerRimWebMm": 3.0,
+      "toolCenterlineDiameterMm": 0.8237,
+      "toolSweepDiameterMm": 3.9987,
+      "toolSweepDeviationFromNominalMm": -0.0013,
+      "nominalAreaMm2": 12.5664
+    },
+    "outerContour": {
+      "nominalDiameter": 100.0,
+      "toolCenterlineRadiusWorkMm": 51.5879,
+      "fullDepthSweepBoundsWorkXY": [
+        1.825,
+        1.825,
+        108.175,
+        108.175
+      ],
+      "tabs": {
+        "count": 4,
+        "widthMm": 4.0,
+        "heightMm": 0.8
+      }
+    },
+    "sharedPlacement": {
+      "modelOffsetXY": [
+        5.0,
+        5.0
+      ],
+      "holeAndOuterUseSameOffset": true,
+      "partCenterTransform": "local(50,50) + (5,5) = work(55,55)"
+    }
+  },
+  "tool": {
+    "type": "assumed flat endmill",
+    "reportedModel": "SHARPRO SPMS200-2ES-1/8",
+    "cuttingDiameterMm": 3.175,
+    "diameterVerified": false,
+    "fluteLengthVerified": false
+  },
+  "operations": [
+    {
+      "order": 1,
+      "kind": "hanger hole",
+      "diameterMm": 4.0,
+      "passes": 7,
+      "targetDepthMm": -3.15,
+      "maxStepdownMm": 0.5
+    },
+    {
+      "order": 2,
+      "kind": "tabbed outside profile",
+      "nominalDiameterMm": 100.0,
+      "passes": 7,
+      "targetDepthMm": -3.15,
+      "maxStepdownMm": 0.5,
+      "tabs": {
+        "count": 4,
+        "widthMm": 4.0,
+        "heightMm": 0.8
+      }
+    }
+  ],
+  "toolpathReview": {
+    "stockWorkBoundsMm": [
+      0.0,
+      0.0,
+      110.0,
+      110.0
+    ],
+    "safeZMm": 3.0,
+    "cutFeedMmPerMin": 300.0,
+    "plungeFeedMmPerMin": 80.0,
+    "spindleStartIncluded": false,
+    "automaticToolchangeIncluded": false,
+    "feedDepthLevelsMm": [
+      -0.45,
+      -0.9,
+      -1.35,
+      -1.8,
+      -2.25,
+      -2.7,
+      -3.15
+    ],
+    "measuredMaxStepdownIncludingVerticalMovesMm": 0.5,
+    "inStockVerticalDescentCount": 16,
+    "largestInStockVerticalDescentMm": 0.5,
+    "insertedTabExitStepdownMoves": 4,
+    "holePassesCompleteBeforeOuterContour": true,
+    "tabLiftFeedSegmentCount": 24,
+    "holeCutterSweepAreaMm2": 12.5161,
+    "outerFullDepthCutterSweepAreaMm2": 1029.0336,
+    "exactCombinedProgramEstimatedMinutes": 8.713,
+    "estimateSource": "parse_gcode(complete combined file).estimated_seconds; linear distance/feed model, not an observed cycle time",
+    "gcodeLineCount": 1495,
+    "m5Count": 2,
+    "initialM5": true,
+    "finalM5BeforeM2": true,
+    "m3Count": 0,
+    "m6Count": 0,
+    "programEndCount": 1
+  },
+  "unknownsBlockingProduction": [
+    "actual SPMS200 cutting diameter, runout and flute length",
+    "measured stock thickness, flatness, veneer and spoilboard condition",
+    "validated feed, plunge, RPM and cut-depth settings for this machine/material",
+    "fixture, clamp, spoilboard and full tool-clearance review",
+    "physical coupon, hole size, retained tabs and breakout results"
+  ],
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolNoM3NoM6": true,
+    "oneFinalProgramEnd": true,
+    "allEmittedCutterSweepsInsideStock": true,
+    "holeFinishesBeforeOuterStarts": true,
+    "sevenDepthLevelsAndMaxStepdownIncludingTabReentry": true
+  },
+  "artifacts": {
+    "source": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/prepare-cutout.py",
+      "sha256": "b52475f294677d175d01b4a9f363dd4f4359fba74ad45855dd90b92559d7143a"
+    },
+    "gcode": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/02-cutout-review.nc",
+      "sha256": "065bb7b347ac2a6edd0a448c1a8eb4b5e1e620716bd4306833eccc31c1520348"
+    },
+    "preview": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/cutout-preview.svg",
+      "sha256": "5bd8f815dc98eca503952a37c48fc0a302e689c3e500678bcdde22cd330de411"
+    }
+  }
+}

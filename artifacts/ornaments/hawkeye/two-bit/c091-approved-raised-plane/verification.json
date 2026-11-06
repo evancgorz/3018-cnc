@@ -1,0 +1,23 @@
+{
+  "output_sha256": "2cba53849eeb5e7b255fdeb1d7fd332c71205d2b3c710882260f3fe9a85583e9",
+  "checks": "pass",
+  "commands": 77893,
+  "depth_sweeps": {
+    "-0.6": {
+      "verified_continuous_paths": 240,
+      "excess_mm2": 0.0
+    },
+    "-1.2": {
+      "verified_continuous_paths": 240,
+      "excess_mm2": 0.0
+    },
+    "-1.625": {
+      "verified_continuous_paths": 240,
+      "excess_mm2": 0.0
+    },
+    "-0.04": {
+      "verified_continuous_paths": 2119,
+      "excess_mm2": 0.0
+    }
+  }
+}

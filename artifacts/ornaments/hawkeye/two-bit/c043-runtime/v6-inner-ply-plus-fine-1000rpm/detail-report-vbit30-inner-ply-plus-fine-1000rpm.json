@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "bundle": "hawkeye-two-bit-vbit30-inner-ply-plus-fine-review",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "scope": "Deep broad V-bit engraving to nominal half-thickness plus a shallow pass over the approved-art residual. Hanger hole and outside cut are not included.",
+  "depthAssumption": "Target depth 1.625 mm is half the nominal 3.25 mm sheet thickness; actual contrasting-ply boundary is unknown.",
+  "source": {
+    "path": "artifacts/ornaments/hawkeye/approved-artwork-reference.png",
+    "sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "imageSizePx": [1254, 1254],
+    "threshold": 128,
+    "pixelSizeMm": 0.07177033492822966,
+    "method": "Thresholded approved source black pixels mapped proportionally to 90 mm; no redraw."
+  },
+  "geometry": {
+    "units": "mm",
+    "stock": {
+      "width": 110.0,
+      "height": 110.0,
+      "assumedThickness": 3.25,
+      "thicknessMeasured": false,
+      "origin": "lower-left"
+    },
+    "part": {
+      "diameter": 100.0,
+      "centerWorkXY": [55.0, 55.0]
+    },
+    "artwork": {
+      "diameter": 90.0,
+      "placementOriginWorkXY": [10.0, 10.0]
+    },
+    "hangerKeepout": {
+      "holeCenterWorkXY": [55.0, 100.0],
+      "noEngraveRadiusMm": 3.0,
+      "sourceBlackRemovedMm2": 4.3673987880937855
+    }
+  },
+  "tool": {
+    "type": "assumed 30 degree included-angle V-bit with 0.1 mm flat tip",
+    "includedAngleDeg": 30.0,
+    "tipDiameterMm": 0.1,
+    "tipDiameterVerified": false,
+    "runoutVerified": false,
+    "spindleRpm": 1000,
+    "spindleCurrentlyVerified": false,
+    "spindleStartupDwellSeconds": 2.0,
+    "dwellDurationAssumed": true
+  },
+  "broadStage": {
+    "targetDepthMm": 1.625,
+    "depthPassesMm": [-0.6, -1.2, -1.625],
+    "maximumStepdownMm": 0.6,
+    "effectiveDiameterAtFinalDepthMm": 0.9708348754011488,
+    "stepoverMm": 0.27,
+    "stepoverWithin80PercentAtEveryPass": true,
+    "pathCount": 349,
+    "optimization": {
+      "enabled": true,
+      "applied": true,
+      "initialPathCount": 2186,
+      "finalPathCount": 349,
+      "initialEstimatedMinutes": 116.81601732318134,
+      "finalEstimatedMinutes": 46.216073412935486
+    },
+    "fineDetailPassIncluded": true
+  },
+  "fineStage": {
+    "targetDepthMm": 0.04,
+    "maximumStepdownMm": 0.04,
+    "effectiveDiameterMm": 0.12143593539448982,
+    "stepoverMm": 0.06,
+    "residualGrowthMm": 0.08,
+    "pathCount": 3645,
+    "optimization": {
+      "enabled": true,
+      "applied": true,
+      "initialPathCount": 25489,
+      "finalPathCount": 3645,
+      "initialEstimatedMinutes": 141.73127825921412,
+      "finalEstimatedMinutes": 48.10418433360304
+    },
+    "depthBehavior": "Fixed shallow depth of 0.04 mm. At 30 degrees with a 0.1 mm tip, the modeled cut width is 0.1214 mm; lines too narrow for that footprint remain uncut and are counted in combined omitted coverage."
+  },
+  "coverage": {
+    "availableApprovedBlackMm2": 2409.2226060195076,
+    "broadSweepMm2": 1741.942184414549,
+    "broadSweepInsideApprovedBlackMm2": 1741.942184414531,
+    "approvedBlackOmittedAfterBroadMm2": 667.280421604955,
+    "fineSweepMm2": 785.3981982014557,
+    "fineSweepInsideApprovedBlackMm2": 785.3981982014473,
+    "fineTargetMm2": 835.6194115584068,
+    "fineTargetNotCoveredMm2": 50.22121335696521,
+    "fineSweepOverlapWithBroadMm2": 134.12040312869436,
+    "approvedBlackOmittedMm2": 16.00262653217294,
+    "approvedBlackOmittedPercent": 0.6642236583780157,
+    "allSourceBlackNotSweptIncludingHangerKeepoutMm2": 20.370025320266585,
+    "conservativeQuantizedSweepContainedInApprovedBlack": true,
+    "conservativeQuantizedSweepRespectsHangerKeepout": true,
+    "conservativeFineSweepContainedInApprovedBlack": true,
+    "conservativeFineSweepRespectsHangerKeepout": true,
+    "note": "Combined broad and shallow residual sweeps are checked against the approved black source; remaining omission reflects artwork narrower than the modeled cutter or intentionally reserved by the hanger keepout."
+  },
+  "motion": {
+    "spindleRpm": 1000,
+    "spindleStartupDwellSeconds": 2.0,
+    "cutFeedMmPerMin": 600.0,
+    "plungeFeedMmPerMin": 160.0,
+    "safeZMm": 3.0,
+    "approachZMm": 0.2,
+    "depthPassesMm": [-0.6, -1.2, -1.625],
+    "finePassDepthMm": -0.04,
+    "measuredMaximumStepdownMm": 0.6,
+    "parserBoundsMm": {
+      "minimum": [0.0, 0.0, -1.625],
+      "maximum": [98.9343, 98.1448, 3.0]
+    },
+    "xyRapidsAtSafeZ": true,
+    "estimatedMinutes": 94.36347042014411,
+    "estimateSource": "Complete NC parsed by parse_gcode; linear distance/feed estimate with rapid feed 3000 mm/min and dwell, not observed cycle time.",
+    "gcodeLineCount": 265593,
+    "machineCommands": {
+      "m5": 1,
+      "m3": 1,
+      "m6": 0,
+      "program_end": 1
+    }
+  },
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "parserBoundsWithinStockAndTargetDepth": true,
+    "allSweepsInsideApprovedBlackAndOutsideHangerKeepout": true,
+    "allSweepsInsideStock": true,
+    "threeIncrementalPassesAtOrBelow0p6mm": true,
+    "oneM3At1000RpmNoM6": true,
+    "finalM5AndM2": true,
+    "spindleDwellParses": true,
+    "cutFeed600Plunge160": true,
+    "fineDetailPassIncluded": true
+  },
+  "unknownsBlockingProduction": [
+    "actual plywood ply interface and contrast boundary",
+    "measured stock thickness, flatness and exact Z0",
+    "actual V-bit geometry, tip, runout and condition",
+    "validated 600/160 mm/min feeds, 0.6 mm pass depth and 1.625 mm total depth",
+    "fixture, workholding, spindle state and coupon result"
+  ],
+  "artifacts": {
+    "baseCandidate": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c043-runtime/v5-inner-ply-1p625mm-1000rpm/01-detail-stream-compatible-inner-ply-1p625mm-600-160.nc",
+      "sha256": "2b1489bb011e52ddc9b34e4cb5167dc413dadfcca9f8c3dbb19c145269607df3"
+    },
+    "gcode": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/01-detail-stream-compatible-inner-ply-plus-fine-600-160.nc",
+      "sha256": "c632b8e2e1e87633968b9383c4df1b7f5254cc6bca2af27fba61935ab3dbfab1"
+    },
+    "preview": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/detail-preview-vbit30-inner-ply-plus-fine-1000rpm.svg",
+      "sha256": "63a552455da2cdabeae06c7b87dfecc39c1891f97bf3c9556751fed26c4ab9c9"
+    },
+    "previewPng": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/detail-preview-vbit30-inner-ply-plus-fine-1000rpm.png",
+      "sha256": "ef696db808b00e55538af83a672714b0d5b650711fb772ef559b5317877492c6"
+    },
+    "generator": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/prepare-detail-vbit30-plus-fine.py",
+      "sha256": "3dcc1fa513176e3c86b849e932bd8dabe11686d7c142aaf67f23ad0466084b85"
+    }
+  },
+  "rebuildCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/prepare-detail-vbit30-plus-fine.py",
+  "verifyCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c043-runtime/v6-inner-ply-plus-fine-1000rpm/verify-review.py"
+}

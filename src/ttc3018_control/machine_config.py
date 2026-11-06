@@ -44,6 +44,49 @@ DEFAULT_Z_TOUCH_PLATE_THICKNESS = 19.37
 
 
 @dataclass(frozen=True)
+class InstalledHardwareDeclaration:
+    """Versioned facts for the one supported owner's TTC 3018 machine.
+
+    This declaration is descriptive evidence, not commissioning evidence:
+    switch and E-stop presence never enables physical homing or hard limits.
+    """
+
+    schema_version: int = 1
+    machine: str = "Two Trees TTC 3018"
+    controller: str = "MKS DLC32 (GRBL-compatible)"
+    nominal_travel_mm: tuple[float, float, float] = (290.0, 170.0, 40.0)
+    safe_z_mm: float = 30.0
+    connector_labels: tuple[str, str, str] = ("X", "Y", "Z")
+    limit_inputs: tuple[str, str, str] = ("installed_or_planned", "installed_or_planned", "installed_or_planned")
+    movable_z_plate: str = "installed"
+    spindle_rpm: int = 12000
+    estop: str = "installed_uncommissioned"
+    homing_commissioned: bool = False
+
+    def validate(self) -> None:
+        if self.schema_version != 1 or self.machine != "Two Trees TTC 3018":
+            raise ValueError("unsupported installed TTC 3018 declaration")
+        if self.connector_labels != ("X", "Y", "Z"):
+            raise ValueError("TTC 3018 connector labels are fixed to X, Y, and Z")
+        if self.nominal_travel_mm != (290.0, 170.0, 40.0) or self.safe_z_mm != 30.0:
+            raise ValueError("TTC 3018 nominal envelope is immutable")
+        if self.estop != "installed_uncommissioned" or self.homing_commissioned:
+            raise ValueError("physical E-stop/homing commissioning requires external evidence")
+
+    def to_dict(self) -> dict[str, object]:
+        self.validate()
+        data = asdict(self)
+        data["nominal_travel_mm"] = dict(zip("XYZ", self.nominal_travel_mm))
+        data["connector_labels"] = list(self.connector_labels)
+        data["limit_inputs"] = dict(zip("XYZ", self.limit_inputs))
+        return data
+
+
+TTC3018_HARDWARE = InstalledHardwareDeclaration()
+TTC3018_HARDWARE.validate()
+
+
+@dataclass(frozen=True)
 class AxisDefinition:
     positive_direction: int = 1
     switch_mode: SwitchMode = SwitchMode.NONE
@@ -56,6 +99,15 @@ class AxisDefinition:
     # measured maximum without changing the nominal machine travel.
     max_override: float | None = None
     debounce_ms: float = 5.0
+
+    @property
+    def wiring(self) -> str:
+        """Human-facing contact convention retained by legacy active_low data."""
+        return "nc_open_on_trigger" if self.active_low else "no_close_on_trigger"
+
+    @property
+    def wiring_label(self) -> str:
+        return "NC — normally closed / open on trigger" if self.active_low else "NO — normally open / close on trigger"
 
     def validate(self, axis: str) -> None:
         if self.positive_direction not in (-1, 1):
@@ -136,6 +188,32 @@ class MachineDefinition:
         stable_id = machine_id or str(uuid5(NAMESPACE_URL, "ttc3018-control/legacy/Two Trees TTC 3018"))
         return cls(machine_id=stable_id, name=profile.name, travel_x=profile.travel_x, travel_y=profile.travel_y,
                    travel_z=profile.travel_z, safe_z=profile.safe_z)
+
+    @classmethod
+    def dedicated_ttc3018(cls, *, profile: MachineProfile | None = None) -> "MachineDefinition":
+        """Build the fixed installed-machine declaration with measured values.
+
+        A legacy profile is accepted only for the editable usable envelope;
+        capability claims from that profile are intentionally not imported.
+        """
+        profile = profile or MachineProfile(travel_x=290.0, travel_y=170.0, travel_z=40.0, safe_z=30.0)
+        machine = cls.legacy_3018(profile=profile)
+        return cls(
+            schema_version=machine.schema_version, machine_id=machine.machine_id,
+            name="Two Trees TTC 3018", controller=ControllerKind.GRBL11,
+            travel_x=profile.travel_x, travel_y=profile.travel_y,
+            travel_z=profile.travel_z, safe_z=profile.safe_z,
+            axes={axis: AxisDefinition() for axis in "XYZ"},
+            probes=(ProbeDefinition(ProbeKind.MOVABLE_Z_PLATE, enabled=True,
+                                    plate_thickness=DEFAULT_Z_TOUCH_PLATE_THICKNESS),),
+            spindle=SpindleDefinition(max_rpm=12000.0),
+            metadata={"installed_hardware_schema": str(TTC3018_HARDWARE.schema_version),
+                      "commissioning": "uncommissioned"},
+        )
+
+    @property
+    def installed_hardware(self) -> InstalledHardwareDeclaration:
+        return TTC3018_HARDWARE
 
     def to_profile(self) -> MachineProfile:
         return MachineProfile(self.name, self.travel_x, self.travel_y, self.travel_z, self.safe_z)

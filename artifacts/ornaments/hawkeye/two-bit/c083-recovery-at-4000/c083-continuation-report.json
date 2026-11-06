@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "offline review only; no machine interaction",
+  "source": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c069-flow\\01-detail-c069-flow-675-120-review-only.nc",
+    "sha256": "f38e959b21c83df37ca339e011a7d347516e2d3acccf41299060352bd2fa730b",
+    "executableCommands": 107517
+  },
+  "candidate": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c083-recovery-at-4000\\01-detail-c083-continuation-after-4000-review-only.nc",
+    "sha256": "0006af35317b3c4ec700a7cee4ef452bc0cd6ac171675e1ab59367ffbc045b9a",
+    "executableCommands": 103459
+  },
+  "generator": {
+    "path": "artifacts\\ornaments\\hawkeye\\two-bit\\c083-recovery-at-4000\\prepare-c083-continuation.py",
+    "sha256": "a68dc6e09de95f53e85f47aab5bcc73a49cb4b01f2dc847f850496ed2834b686",
+    "command": ".\\.venv\\Scripts\\python.exe artifacts\\ornaments\\hawkeye\\two-bit\\c083-recovery-at-4000\\prepare-c083-continuation.py"
+  },
+  "requestedSkipThroughCommand": 4000,
+  "selectedSafeBoundary": {
+    "firstIncludedSourceExecutableCommand": 4063,
+    "sourcePhysicalLine": 4076,
+    "sourceCommandsOmitted": 4062,
+    "boundaryCommands": [
+      "G0 Z3.0000",
+      "G0 X30.6532 Y24.1635",
+      "G0 Z0.2000",
+      "G1 Z-0.6000 F120.0000"
+    ],
+    "reason": "First next complete stroke boundary after command 4000; the preceding stroke is finished before retract and restart."
+  },
+  "setup": {
+    "workFrame": "G54; original shared lower-left XY work origin",
+    "stockFrameMm": [
+      110.0,
+      110.0
+    ],
+    "ornamentDiameterMm": 100.0,
+    "tool": "30 degree included-angle V-bit, 0.1 mm tip (assumption; physical cutter unverified)",
+    "spindleCommandRpm": 1000,
+    "safeZMm": 3.0,
+    "approachZMm": 0.2,
+    "depthsMm": [
+      -1.625,
+      -1.2,
+      -0.6,
+      -0.04
+    ],
+    "prologue": [
+      "G21 G17 G90 G94 G54",
+      "G0 Z3.0000",
+      "M3 S1000",
+      "G4 P2.000"
+    ],
+    "terminalCommands": [
+      "M5",
+      "M2"
+    ]
+  },
+  "parsedBoundsMm": {
+    "minimum": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -1.625
+    },
+    "maximum": {
+      "x": 98.9343,
+      "y": 98.1448,
+      "z": 3.0
+    }
+  },
+  "nominalEstimateMinutes": 83.02541646106157,
+  "checks": {
+    "sourceHashMatchesReleasedC069": true,
+    "selectedStartIsRetractXYRapidApproachPlunge": true,
+    "freshMetricAbsoluteG54Prologue": true,
+    "exactOriginalExecutableSuffixPreserved": true,
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "depthsRetained": true,
+    "singleM3FinalM5M2NoM6": true
+  },
+  "limitations": [
+    "The continuation omits source commands 1 through the command preceding the selected boundary; their physical completion is not proven by a command count.",
+    "This is a full suffix from a safe source boundary, not a controller position bookmark. Recut overlap may occur where physical motion was buffered or uncertain.",
+    "The SVG is a physical-size XY centerline preview and does not show the V-bit's depth-dependent cutter sweep.",
+    "The modeled work zero, cutter, spindle speed and material boundary are not physically verified by this offline generator.",
+    "Never jog from an arbitrary location into the first move; restore the saved G54 work zero so the opening G0 Z3 move has the intended surface reference."
+  ]
+}

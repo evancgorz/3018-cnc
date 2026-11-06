@@ -11,6 +11,11 @@ test = ["coverage==7.10.6"]
 [project.scripts]
 ttc3018-control = "ttc3018_control.qt.main:main"
 pine-cnc = "ttc3018_control.qt.main:main"
+pine-backend = "ttc3018_control.backend.main:main"
+pine-cli = "ttc3018_control.backend.cli:main"
+pine-migrate-data = "ttc3018_control.backend.data_migration:main"
+pine-cam = "ttc3018_control.agent_cam:main"
+pine-cam-worker = "ttc3018_control.cam_worker:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

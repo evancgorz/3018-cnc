@@ -186,3 +186,30 @@ remain unobserved coverage gaps. This correction does not approve Pine for
 physical commissioning or hardware-connected operation; that boundary remains
 intentionally deferred and requires separate explicit authorization and
 physical evidence.
+
+## C-014 homing-first follow-up (2026-09-13)
+
+The current operator workflow supersedes the historical GUI-015 wording:
+successful guarded X/Y/Z homing establishes the session machine reference;
+the manual Set/Establish Reference control is no longer exposed. A later
+operator-directed refinement removed the close-time homing prompt entirely:
+closing the main window now closes the frontend immediately without motion,
+while the persistent backend/controller session remains alive. Incomplete or
+partial switch declarations remain visibly blocked for explicit homing rather
+than falling back to manual position trust. Digital-twin and backend regression
+evidence is recorded in the C-014/C-015 execution handoffs.
+
+## C-015 unified workspace and startup follow-up (2026-09-14)
+
+The shell now presents four rounded primary workspaces: **Machine**, **Prepare**,
+**Review**, and **Run**. Connection recovery, contextual safety, homing, jog,
+work-zero, and supported probing/calibration live in Machine; Configure and the
+expert Console are bottom utilities. Healthy connection/safety state is quiet,
+while actionable safety attention is shown in Machine and Run. The Machine
+envelope preview uses fresh backend `MPos` and marks stale, unknown, session
+changed, and out-of-bounds states without pretending an out-of-envelope point is
+safe. Automatic startup connection policy is backend-owned and bounded; the
+digital twin remains explicit.
+
+This is a source/headless verification follow-up. No running GUI was captured or
+interacted with and no physical motion was issued.

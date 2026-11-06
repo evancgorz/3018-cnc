@@ -7,10 +7,10 @@ Rectangle {
     property string status: "required"
     property var palette
     implicitWidth: badgeLabel.implicitWidth + 22
-    implicitHeight: 28
-    radius: 14
-    color: Qt.rgba(tone.r, tone.g, tone.b, 0.14)
-    border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.42)
+    implicitHeight: 26
+    radius: 13
+    color: Qt.rgba(tone.r, tone.g, tone.b, 0.12)
+    border.color: Qt.rgba(tone.r, tone.g, tone.b, 0.30)
     border.width: 1
 
     readonly property color tone: status === "complete" ? palette.success

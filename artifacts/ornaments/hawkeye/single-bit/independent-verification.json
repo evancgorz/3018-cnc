@@ -1,0 +1,36 @@
+{
+  "status": "offline_review_only",
+  "parse_and_clearance": "passed",
+  "hole_complete_before_outer": true,
+  "maximum_profile_stepdown_mm": 0.5,
+  "depth_levels_mm": {
+    "hole": [
+      0.45,
+      0.9,
+      1.35,
+      1.8,
+      2.25,
+      2.7,
+      3.15
+    ],
+    "outer": [
+      0.45,
+      0.9,
+      1.35,
+      1.8,
+      2.2,
+      2.25,
+      2.7,
+      3.15
+    ]
+  },
+  "estimated_minutes_exact_program": 22.059954108251485,
+  "command_count": 4053,
+  "sha256": {
+    "prepare.py": "889a665ba475e06b898825bfe53ca9ca8b4e1771b9e6a7becd368994db8bc951",
+    "review-draft.nc": "5b646e248062004661a7dfafb7aa2bfc24de7d9699ba5b42ee8ed4e67d081d66",
+    "artwork-reference.svg": "1b3f61a141089870b882848f5ee7d0f6416e943d2bb490d718c49fb7406799e7",
+    "cutter-sweep-preview.svg": "2ced441ed7c02b4970ac33e8b2dce73485dce2956075e6050f0bb80b381f078e"
+  },
+  "note": "No spindle start. Does not verify physical tooling, stock or fixturing."
+}

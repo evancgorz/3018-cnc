@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "status": "offline_uncommissioned_operator_review_required",
+  "operation": "fixed_depth_raster_engraving_only",
+  "source_sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+  "settings": {
+    "crop": [
+      0,
+      0,
+      1254,
+      1254
+    ],
+    "outer_diameter": 100.0,
+    "art_diameter": 90.0,
+    "stock_thickness": 3.0,
+    "stock_margin": 5.0,
+    "engraving_depth": 0.25,
+    "v_angle": 60.0,
+    "tip_diameter": 0.1,
+    "stepover": 0.15,
+    "max_stepdown": 0.125,
+    "safe_z": 3.0,
+    "cut_feed": 300.0,
+    "plunge_feed": 80.0,
+    "spindle_rpm": null,
+    "threshold": 128,
+    "optimize_paths": true,
+    "approach_z": 0.2
+  },
+  "effective_tool_diameter_mm": 0.38867513459481284,
+  "pixel_size_mm": 0.07177033492822966,
+  "passes": 2,
+  "paths_per_pass": 2834,
+  "source_black_area_mm2": 2413.5900048076214,
+  "inaccessible_black_area_mm2": 225.45158021593105,
+  "inaccessible_black_fraction": 0.09340922847992196,
+  "fully_omitted_black_components": 8,
+  "estimated_minutes": 146.94355984189318,
+  "motion_metrics": {
+    "cutting_minutes": 104.26603332689976,
+    "plunge_minutes": 27.454375,
+    "rapid_minutes": 15.223151515030862,
+    "estimated_minutes": 146.9435598419306,
+    "cutting_distance_mm": 31279.809998069926,
+    "rapid_xy_distance_mm": 11729.304545092584,
+    "retract_count": 5668,
+    "plunge_count": 5668
+  },
+  "optimization": {
+    "enabled": true,
+    "applied": true,
+    "baseline_paths_per_pass": 6259,
+    "baseline_motion_metrics": {
+      "cutting_minutes": 91.81202733333335,
+      "plunge_minutes": 60.634062500000006,
+      "rapid_minutes": 46.733547240979874,
+      "estimated_minutes": 199.17963707431323,
+      "cutting_distance_mm": 27543.608200000002,
+      "rapid_xy_distance_mm": 65246.11672293962,
+      "retract_count": 12518,
+      "plunge_count": 12518
+    },
+    "saved_minutes": 52.23607723238263,
+    "same_compensated_primitives": true
+  },
+  "bounds": {
+    "minimum": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -0.25
+    },
+    "maximum": {
+      "x": 98.8006,
+      "y": 98.0829,
+      "z": 3.0
+    }
+  },
+  "warnings": [
+    "Not physically commissioned; machine readiness is not evaluated.",
+    "Fixed-depth fill, not variable-depth V-carving; narrow detail and sharp corners can be omitted.",
+    "Preview shows top-surface cutter footprint, not floor finish, plywood tear-out or machining simulation.",
+    "V-bit raster floors are scalloped; this is not a flat-bottom pocketing operation.",
+    "No hanger or perimeter cutout is generated. Use separately reviewed compensated profile CAM.",
+    "Confirm tool angle/tip, stock flatness, feeds, spindle, clearances and work zero before machining.",
+    "Reduced vertical approach clearance assumes verified stock flatness and no obstruction at cut starts; XY rapids still use safe_z.",
+    "Spindle startup omitted because spindle_rpm is null."
+  ]
+}

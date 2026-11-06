@@ -122,7 +122,7 @@ streaming pipeline.
 - [x] Virtual machine envelope and work-zero safety checks.
 - [x] Acknowledged, one-command-at-a-time GRBL job streaming.
 - [x] Text engraving and plaque-builder generators use the shared pipeline.
-- [x] Manual reference and persistent work-zero workflow.
+- [x] Guarded homing reference and persistent work-zero workflow.
 
 ## Implementation milestones
 

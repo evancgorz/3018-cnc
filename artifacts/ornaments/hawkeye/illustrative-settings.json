@@ -1,0 +1,22 @@
+{
+  "crop": [
+    0,
+    0,
+    1254,
+    1254
+  ],
+  "outer_diameter": 100.0,
+  "art_diameter": 90.0,
+  "stock_thickness": 3.0,
+  "stock_margin": 5.0,
+  "engraving_depth": 0.25,
+  "v_angle": 60.0,
+  "tip_diameter": 0.1,
+  "stepover": 0.15,
+  "max_stepdown": 0.125,
+  "safe_z": 3.0,
+  "cut_feed": 300.0,
+  "plunge_feed": 80.0,
+  "spindle_rpm": null,
+  "threshold": 128
+}

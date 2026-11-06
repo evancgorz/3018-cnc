@@ -47,6 +47,10 @@ class ProbePlan:
     offset_value: float | None = None
     purpose: str = "generic"
     transaction_id: str = ""
+    # Search distances carry their signed probe direction. Retraction travels
+    # away from the contact point, so this sign supports either direction
+    # without changing the public positive retract distances.
+    retract_direction: int = 1
 
     def validate(self) -> None:
         if self.axis.upper() not in {"X", "Y", "Z"}:
@@ -55,6 +59,8 @@ class ProbePlan:
             raise ValueError("Probe search distances cannot be zero")
         if self.retract_distance <= 0 or self.safe_retract_distance <= 0:
             raise ValueError("Probe retract distances must be positive")
+        if self.retract_direction not in (-1, 1):
+            raise ValueError("Probe retract direction must be 1 or -1")
         if not all(value > 0 for value in (self.fast_feed, self.slow_feed, self.retract_feed)):
             raise ValueError("Probe feeds must be positive")
         if self.final_work_offset is not None and self.wcs_slot is None:
@@ -91,6 +97,7 @@ class ProbingService:
         self._probe_report_seen = False
         self._offset_status_seen = False
         self.expected_offset_z: float | None = None
+        self.failure_reason = ""
 
     @property
     def active(self) -> bool:
@@ -117,6 +124,7 @@ class ProbingService:
         self.fast_report = None
         self.slow_report = None
         self._probe_report_seen = False
+        self.failure_reason = ""
         try:
             self._send_line(self.adapter.probe_command(plan.axis, plan.fast_distance, plan.fast_feed))
         except (RuntimeError, ValueError) as exc:
@@ -137,7 +145,7 @@ class ProbingService:
         if report is not None:
             position, success = report
             if not success or self._probe_report_seen:
-                self._fail("Probe did not produce a fresh successful touch.")
+                self._fail("Probe did not produce a fresh successful touch; inspect the clip and plate, verify the input test, then retry.")
                 return True
             self._probe_report_seen = True
             if self.state is ProbeState.FAST:
@@ -153,7 +161,7 @@ class ProbingService:
             self._ack_pending = False
             if self.state is ProbeState.FAST:
                 if not self._probe_report_seen:
-                    self._fail("Fast probe completed without a fresh successful report.")
+                    self._fail("Fast probe completed without a fresh successful report; verify the probe wiring and retry from Idle.")
                 else:
                     self.state = ProbeState.RETRACT
                     self._send_retract()
@@ -161,7 +169,7 @@ class ProbingService:
                 self.state = ProbeState.WAIT_RELEASE
             elif self.state is ProbeState.SLOW:
                 if not self._probe_report_seen:
-                    self._fail("Slow probe completed without a fresh successful report.")
+                    self._fail("Slow probe completed without a fresh successful report; inspect the contact and retry from Idle.")
                 else:
                     self.state = ProbeState.APPLY_OFFSET if self.plan and (self.plan.final_work_offset or self.plan.offset_axis) else ProbeState.SAFE_RETRACT
                     if self.state is ProbeState.APPLY_OFFSET:
@@ -186,7 +194,7 @@ class ProbingService:
     def observe_status(self, status: GrblStatus) -> bool:
         if self.state is ProbeState.WAIT_RELEASE:
             if status.state in {"Alarm", "Door"}:
-                self._fail(f"Probe failed — GRBL reported {status.state}.")
+                self._fail(f"Probe failed — GRBL reported {status.state}; inspect the machine, recover to Idle, and retry.")
                 return True
             if status.can_jog and "P" not in status.pins.upper():
                 assert self.plan is not None
@@ -201,13 +209,13 @@ class ProbingService:
                 return True
         elif self.state is ProbeState.CONFIRM_OFFSET:
             if status.state in {"Alarm", "Door"}:
-                self._fail(f"Probe offset failed — GRBL reported {status.state}.")
+                self._fail(f"Probe offset failed — GRBL reported {status.state}; inspect the machine, recover to Idle, and retry.")
                 return True
             if status.work_offset is None:
                 return False
             self._offset_status_seen = True
             if self.expected_offset_z is not None and abs(status.work_offset.z - self.expected_offset_z) > 0.001:
-                self._fail("Probe offset confirmation did not match the fresh GRBL work offset.")
+                self._fail("Probe offset confirmation did not match the fresh GRBL work offset; do not machine, re-establish work zero, and retry.")
                 return True
             self._send_safe_retract()
             return True
@@ -217,7 +225,7 @@ class ProbingService:
         self.state = ProbeState.FAILED
         self.plan = None
         self._ack_pending = False
-        self._on_notice("Probe cancelled; no work offset was changed.")
+        self._on_notice("Probe cancelled; no work offset was changed. Retract safely, confirm Idle, and retry after checking the input.")
 
     def reset(self) -> None:
         self.state = ProbeState.IDLE
@@ -228,11 +236,15 @@ class ProbingService:
         self._probe_report_seen = False
         self._offset_status_seen = False
         self.expected_offset_z = None
+        self.failure_reason = ""
 
     def _send_retract(self) -> None:
         assert self.plan is not None
         try:
-            self._send_line(self.adapter.retract_command(self.plan.axis, self.plan.retract_distance, self.plan.retract_feed))
+            self._send_line(self.adapter.retract_command(
+                self.plan.axis, self.plan.retract_direction * self.plan.retract_distance,
+                self.plan.retract_feed,
+            ))
             self._ack_pending = True
         except (RuntimeError, ValueError) as exc:
             self._fail(f"Probe retract was not sent — {exc}")
@@ -242,10 +254,18 @@ class ProbingService:
         try:
             if self.plan.offset_axis is not None:
                 assert self.plan.offset_value is not None
-                if self.plan.offset_axis.upper() == "Z" and self.slow_report is not None:
-                    self.expected_offset_z = self.slow_report.z - self.plan.offset_value
+                if self.slow_report is None:
+                    self._fail("Probe offset was not sent because the slow-touch position is missing.")
+                    return
+                axis = self.plan.offset_axis.upper()
+                contact_position = getattr(self.slow_report, axis.lower())
+                # L2 takes an absolute WCS offset. Derive it from the probe
+                # trigger coordinate, not the later decelerated stop position.
+                offset = contact_position - self.plan.offset_value
+                if axis == "Z":
+                    self.expected_offset_z = offset
                 self._send_line(self.adapter.work_offset_axis_command(
-                    self.plan.wcs_slot, self.plan.offset_axis, self.plan.offset_value
+                    self.plan.wcs_slot, axis, offset
                 ))
             else:
                 assert self.plan.final_work_offset is not None
@@ -258,7 +278,10 @@ class ProbingService:
         assert self.plan is not None
         try:
             self.state = ProbeState.SAFE_RETRACT
-            self._send_line(self.adapter.retract_command(self.plan.axis, self.plan.safe_retract_distance, self.plan.retract_feed))
+            self._send_line(self.adapter.retract_command(
+                self.plan.axis, self.plan.retract_direction * self.plan.safe_retract_distance,
+                self.plan.retract_feed,
+            ))
             self._ack_pending = True
         except (RuntimeError, ValueError) as exc:
             self._fail(f"Probe safe retract was not sent — {exc}")
@@ -266,5 +289,6 @@ class ProbingService:
     def _fail(self, message: str) -> ActionOutcome:
         self.state = ProbeState.FAILED
         self._ack_pending = False
+        self.failure_reason = message
         self._on_notice(message)
         return ActionOutcome(False, message)

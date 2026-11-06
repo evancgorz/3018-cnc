@@ -114,6 +114,25 @@ class VirtualGrblController:
         profile.validate()
         self.homing_profile = profile
         self.sensor_bank = HomingSensorBank(profile)
+        # Keep the twin's GRBL settings aligned with the declared hardware.
+        # The physical application writes these four settings through the
+        # serial boundary; the twin has no serial round-trip, so configure the
+        # same logical state locally.  Explicit test commands may still
+        # override these values afterward.
+        polarity = {bool(item.active_low) for item in profile.axes}
+        if len(polarity) == 1:
+            # Match the physical GRBL adapter: $5=1 is the active-low/NC
+            # convention, while normally-open inputs use the non-inverted
+            # status polarity.
+            self.settings[5] = float(1 if next(iter(polarity)) else 0)
+        enabled = all(bool(item.input_pin) for item in profile.axes)
+        self.settings[22] = 1.0 if enabled else 0.0
+        self.settings[21] = 1.0 if enabled and all(item.hard_limit for item in profile.axes) else 0.0
+        # ``HomingLimitProfile`` stores the effective, commissioned switch
+        # end.  The physical adapter translates that declaration to GRBL's
+        # machine-specific $23 direction mask; the twin can target the
+        # declared end directly and must not invert it a second time.
+        self.settings[23] = 0.0
 
     def configure_probe_corner_circle(self, circle: ProbeCornerCircle | None) -> None:
         """Configure optional simulation-only conductive XY probe geometry."""
@@ -536,19 +555,19 @@ class VirtualGrblController:
                             start[2] + (end[2] - start[2]) * n / count)) for n in range(1, count + 1))
 
     def _set_offset(self, parsed: ParsedLine) -> None:
-        if 20 not in [int(round(value)) for value in parsed.values("L")]:
-            raise ProtocolError("only G10 L20 is supported")
-        # G10 L20 receives the desired work-coordinate values at the current
-        # machine pose.  GRBL stores WCO as MPos - WPos, rather than copying
-        # the command words into WCO.  This is especially important for the
-        # normal ``G10 ... X0 Y0 Z0`` work-zero command after jogging.
+        modes = [int(round(value)) for value in parsed.values("L")]
+        if not modes or modes[-1] not in {2, 20}:
+            raise ProtocolError("only G10 L2 and L20 are supported")
+        mode = modes[-1]
+        # L20 receives desired work coordinates at the current machine pose.
+        # L2 writes absolute offsets, which preserves probe-trigger datums.
         machine_position = self.plant.machine_position
         values = list(self.plant.work_offset)
         axes = ""
         for index, axis in enumerate("XYZ"):
             if parsed.values(axis):
-                requested_work = parsed.values(axis)[-1]
-                values[index] = machine_position[index] - requested_work
+                requested = parsed.values(axis)[-1]
+                values[index] = machine_position[index] - requested if mode == 20 else requested
                 axes += axis
         self.plant.set_work_offset(tuple(values), axes)
 

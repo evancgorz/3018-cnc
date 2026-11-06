@@ -114,6 +114,8 @@ def test_arcs_both_directions_zero_radius_and_partial_offsets():
     assert send(controller, "G2 X11 Y0 F100")[0].startswith("error:1")
     assert send(controller, "G10 L20 P1 X3")[0] == "ok"
     assert controller.plant.work_offset == [-3.0, 0.0, 0.0]
+    assert send(controller, "G10 L2 P1 Z-21.653")[0] == "ok"
+    assert controller.plant.work_offset == [-3.0, 0.0, -21.653]
     assert send(controller, "G10 L10 X1")[0].startswith("error:1")
     assert send(controller, "G10 L20 P1")[0] == "ok"
 

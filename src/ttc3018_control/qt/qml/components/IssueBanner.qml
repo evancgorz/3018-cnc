@@ -14,19 +14,20 @@ Rectangle {
     property var actions: []
     signal actionRequested(string action)
     visible: active
-    implicitHeight: 68
-    radius: 10
+    implicitHeight: Math.max(72, issueContent.implicitHeight + 26)
+    radius: 14
     color: Qt.rgba(dangerColor.r, dangerColor.g, dangerColor.b, 0.12)
     border.color: Qt.rgba(dangerColor.r, dangerColor.g, dangerColor.b, 0.48)
     border.width: 1
     RowLayout {
+        id: issueContent
         anchors.fill: parent
-        anchors.margins: 11
-        spacing: 10
+        anchors.margins: 13
+        spacing: 12
         Label { text: "!"; color: root.dangerColor; font.pixelSize: 21; font.bold: true }
         ColumnLayout { Layout.fillWidth: true; spacing: 2
-            Label { text: root.title; color: root.textColor; font.weight: Font.DemiBold }
-            Label { text: root.explanation; color: root.mutedColor; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true; maximumLineCount: 2; elide: Text.ElideRight }
+            Label { text: root.title; color: root.textColor; font.pixelSize: 13; font.weight: Font.DemiBold }
+            Label { text: root.explanation; color: root.mutedColor; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
         }
         Repeater { model: root.actions.slice(0, 2); delegate: Button { required property string modelData; text: modelData; font.pixelSize: 11; onClicked: root.actionRequested(modelData) } }
     }

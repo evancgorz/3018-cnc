@@ -51,7 +51,15 @@ class TraceRecorder:
             if self.max_events is not None and len(self._events) >= self.max_events:
                 self.truncated = True
                 return self._events[-1]
-            event = TraceEvent(len(self._events) + 1, int(time_ns), kind.strip(), _canonical_value(payload or {}, normalize=False), source or self.source)
+            # Producers are independent queues (backend, supervisor, and
+            # application).  Preserve their source order when a late event
+            # carries an older virtual timestamp; otherwise a valid evidence
+            # export can become impossible to reload merely because of queue
+            # scheduling.
+            event_time = int(time_ns)
+            if self._events:
+                event_time = max(event_time, self._events[-1].time_ns)
+            event = TraceEvent(len(self._events) + 1, event_time, kind.strip(), _canonical_value(payload or {}, normalize=False), source or self.source)
             self._events.append(event)
             return event
 

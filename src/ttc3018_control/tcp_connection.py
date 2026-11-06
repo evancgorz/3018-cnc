@@ -6,13 +6,14 @@ import socket
 import threading
 
 from .serial_connection import SerialEvent
+from .transport_events import TransportEventQueue
 
 
 class TcpGrblConnection:
     """Persistent raw TCP connection to a network-enabled GRBL controller."""
 
     def __init__(self) -> None:
-        self.events: queue.Queue[SerialEvent] = queue.Queue()
+        self.events: queue.Queue[SerialEvent] = TransportEventQueue()
         self._socket: socket.socket | None = None
         self._reader: threading.Thread | None = None
         self._stop = threading.Event()

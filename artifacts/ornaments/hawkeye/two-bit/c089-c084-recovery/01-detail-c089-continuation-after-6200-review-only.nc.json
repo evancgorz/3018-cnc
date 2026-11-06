@@ -1,0 +1,19 @@
+{
+  "source_sha256": "60d6405c0fc7556f90807fd00932a95ef7c4ff64113464efcb6f18581bee0718",
+  "output_sha256": "95dd7a3c2f73efee326ec96c8cb682f0c978e55591fa358d5f43c5bee23a9fc6",
+  "requested_before_command": 6200,
+  "first_included_command": 6347,
+  "commands": 13402,
+  "bounds": {
+    "min": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": -1.625
+    },
+    "max": {
+      "x": 98.5095,
+      "y": 97.72,
+      "z": 3.0
+    }
+  }
+}

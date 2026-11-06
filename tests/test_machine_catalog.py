@@ -41,3 +41,26 @@ def test_controller_saves_optional_capability_declarations(tmp_path: Path) -> No
     assert outcome.accepted
     assert all(axis.switch_mode.value == "single" for axis in controller.machine_definition.axes.values())
     assert [probe.kind.value for probe in controller.machine_definition.probes] == ["movable_z_plate"]
+
+
+def test_probe_editor_capabilities_preserve_detailed_axis_declarations(tmp_path: Path) -> None:
+    controller = ApplicationController(tmp_path)
+    declarations = {
+        axis: {
+            "enabled": True,
+            "end": "max",
+            "pin": f"P{axis}",
+            "active_low": axis == "Z",
+            "hard_limit": axis != "Y",
+            "debounce_ms": 7.5,
+            "max_override": 123.0,
+        }
+        for axis in "XYZ"
+    }
+    assert controller.save_homing_limit_declarations(declarations).accepted
+    before = controller.homing_limit_declarations
+    assert controller.save_probe_capabilities(z_plate=True, tool_setter=True, movable_xyz=True, fixed_xyz=True).accepted
+    assert controller.homing_limit_declarations == before
+    assert {probe.kind.value for probe in controller.machine_definition.probes if probe.enabled} == {
+        "movable_z_plate", "fixed_tool_setter", "movable_xyz", "fixed_xyz"
+    }

@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "bundle": "hawkeye-two-bit-vbit30-detail-review",
+  "releaseStatus": "offline-review-only; not verified or authorized for cutting",
+  "rebuildCommand": ".\\.venv\\Scripts\\python.exe artifacts/ornaments/hawkeye/two-bit/c039-vbit30/prepare-detail-vbit30.py",
+  "scope": "Approved-artwork shallow V-bit detail only; hanger-hole and outer cutout are separate endmill operation 02.",
+  "source": {
+    "path": "artifacts/ornaments/hawkeye/approved-artwork-reference.png",
+    "sha256": "fd616748113aea108e3f90b4f9d150a9f9e9e9779c8a788adafc4927989ccffc",
+    "imageSizePx": [
+      1254,
+      1254
+    ],
+    "threshold": 128,
+    "pixelSizeMm": 0.07177033492822966,
+    "method": "Thresholded source black pixels mapped proportionally to 90 mm; no redraw, contour reconstruction or generated artwork."
+  },
+  "geometry": {
+    "units": "mm",
+    "stock": {
+      "width": 110.0,
+      "height": 110.0,
+      "origin": "lower-left",
+      "assumedThickness": 3.0,
+      "thicknessMeasured": false
+    },
+    "part": {
+      "shape": "analytic 100 mm circle",
+      "diameter": 100.0,
+      "centerWorkXY": [
+        55.0,
+        55.0
+      ]
+    },
+    "artwork": {
+      "diameter": 90.0,
+      "placementOriginWorkXY": [
+        10.0,
+        10.0
+      ],
+      "sameXYAsCutout": true,
+      "outerRimClearanceMm": 5.0
+    },
+    "hangerKeepout": {
+      "holeCenterWorkXY": [
+        55.0,
+        100.0
+      ],
+      "assumedHoleRadiusMm": 2.0,
+      "engravingClearanceMm": 1.0,
+      "noEngraveRadiusMm": 3.0,
+      "sourceBlackRemovedMm2": 4.3673987880937855,
+      "clippedBoundsWorkXY": [
+        52.59572209361433,
+        97.0,
+        57.40427790638567,
+        98.27751196172248
+      ],
+      "warning": "Keepout trims source black near the top-center emblem; inspect preview for impact on the outer ring/title."
+    }
+  },
+  "tool": {
+    "type": "assumed 30 degree included-angle V-bit with 0.1 mm flat tip",
+    "includedAngleDeg": 30.0,
+    "tipDiameterMm": 0.1,
+    "tipDiameterVerified": false,
+    "runoutVerified": false,
+    "spindleStartupIncluded": false,
+    "automaticToolchangeIncluded": false
+  },
+  "stages": [
+    {
+      "order": 1,
+      "name": "broad filled black regions",
+      "sourceTarget": "approved black regions reachable at max depth",
+      "maximumDepthMm": 0.45,
+      "depthPassesMm": [
+        -0.25,
+        -0.45
+      ],
+      "maximumStepdownMm": 0.25,
+      "stepoverMm": 0.25,
+      "effectiveDiameterAtMaxDepthMm": 0.34115427318801045,
+      "pathCount": 2148,
+      "optimization": {
+        "enabled": true,
+        "applied": true,
+        "initialPathCount": 3999,
+        "finalPathCount": 2148,
+        "initialEstimatedMinutes": 155.0614457645611,
+        "finalEstimatedMinutes": 119.92983636450798
+      },
+      "floor": "V-shaped and scalloped; not a flat-bottom pocket"
+    },
+    {
+      "order": 2,
+      "name": "approved-art variable-depth centerlines",
+      "sourceTarget": "medial axes of all approved black art; broad fill supplies area clearing",
+      "maximumDepthMm": 0.45,
+      "depthPassesMm": "local V-bit depth; paths above 0.25 mm use two passes, with each step <= 0.25 mm",
+      "maximumStepdownMm": 0.25,
+      "effectiveDiameterRangeMm": [
+        0.1,
+        0.34115427318801045
+      ],
+      "pathCount": 1198,
+      "planning": {
+        "method": "residual medial-axis centerlines with local V-bit width-to-depth mapping",
+        "skeletonGridScale": 2,
+        "skeletonNodeCount": 52890,
+        "skeletonNodesOutsideResidualFiltered": 7,
+        "skeletonNodesTooNarrowForTipFiltered": 1796,
+        "pathCount": 1198,
+        "maximumDepthMm": 0.45,
+        "minimumDepthMm": 0.0415,
+        "clearanceGuardMm": 0.015,
+        "widthEstimate": "exact vector distance to the approved black-region boundary"
+      },
+      "normalCutterRadiusErosionApplied": false
+    }
+  ],
+  "sweepReview": {
+    "sourceBlackAreaBeforeHangerKeepoutMm2": 2413.5900048076214,
+    "sourceBlackRemovedByHangerKeepoutMm2": 4.3673987880937855,
+    "availableSourceBlackAreaMm2": 2409.2226060195076,
+    "broadActualSweepAreaMm2": 2261.7498415415057,
+    "broadSweepInsideAvailableBlackMm2": 2261.7498415413756,
+    "residualAfterBroadSweepMm2": 147.4727644779578,
+    "residualComponentsBelow0_1Mm2": 8,
+    "residualAreaIntentionallyDroppedBelow0_1Mm2": 0.5087016849698632,
+    "residualComponentsRetainedForFinePlanning": 71,
+    "fineTargetApprovedBlackAreaMm2": 2409.2226060195076,
+    "fineActualSweepAreaMm2": 628.4444497043137,
+    "fineSweepInsideAvailableBlackMm2": 628.4444497042557,
+    "approvedBlackNotCoveredByFineCenterlinesMm2": 1780.7781563152012,
+    "combinedSweepInsideAvailableBlackMm2": 2305.612358580142,
+    "availableSourceBlackOmittedByBothStagesMm2": 103.61024743923664,
+    "availableSourceBlackOmittedPercent": 4.300567626269306,
+    "allSourceBlackNotSweptIncludingHangerKeepoutMm2": 107.9776462273303,
+    "fineSweepOverlapWithBroadSweepMm2": 584.5819326656085,
+    "conservativeQuantizedSweepContainedInOriginalBlack": true,
+    "conservativeQuantizedSweepRespectsHangerKeepout": true,
+    "coarseBufferMethod": "LineString cutter-radius sweep with 32 quadrant segments; containment verified using the planner's radius/cos(pi/128) envelope. The planner adds its 0.0002 mm inset guard before 0.0001 mm output quantization.",
+    "fineResidualMethod": "Rasterize all available thresholded source black at 2x source resolution, Zhang-Suen thin it, trace graph paths, and set V-bit depth from each point's distance to the original approved-black boundary. This variable-depth pass supplements broad filled-region clearing. Conservative swept envelopes of emitted linear XY/Z moves are verified inside the approved black region and outside the hanger keepout."
+  },
+  "motionReview": {
+    "approachZMm": 0.2,
+    "safeZMm": 3.0,
+    "cutFeedMmPerMin": 300.0,
+    "plungeFeedMmPerMin": 80.0,
+    "xyRapidsRemainAtSafeZ": true,
+    "exactCombinedProgramEstimatedMinutes": 151.76074889948902,
+    "estimateSource": "parse_gcode(complete emitted NC).estimated_seconds; linear distance/feed model, not measured cycle time.",
+    "gcodeLineCount": 197121,
+    "m5Count": 2,
+    "m3Count": 0,
+    "m6Count": 0,
+    "programEndCount": 1
+  },
+  "unknownsBlockingProduction": [
+    "actual V-bit included angle, tip diameter, runout and condition",
+    "measured stock thickness, flatness, finish and exact Z0",
+    "validated spindle RPM, cut feed, plunge feed and V-bit depth limits",
+    "fixture, clamp, spoilboard and full tool-clearance review",
+    "manual two-tool change, XY preservation, re-probeZ and fresh authorization workflow",
+    "physical coupon, fine-line fidelity, floor scalloping, tear-out and hanger-hole overlap review"
+  ],
+  "offlineChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "oneToolNoM3NoM6": true,
+    "initialAndFinalM5": true,
+    "oneFinalProgramEnd": true,
+    "allSweepsInsideStock": true,
+    "coarseAndFineSweepsInsideApprovedBlack": true,
+    "holeKeepoutPreserved": true,
+    "fineStageCenterlinesAreDerivedFromApprovedBlack": true,
+    "fineStageUsesLocalVBitDepth": true,
+    "fineStageSweepsVerifiedAgainstApprovedBlack": true
+  },
+  "artifacts": {
+    "source": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c039-vbit30/prepare-detail-vbit30.py",
+      "sha256": "718a75715a24b7d0fadb6d7217fb3cea37583d39c7aacda6a0944868c2cc5fdb"
+    },
+    "gcode": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c039-vbit30/01-detail-review-vbit30.nc",
+      "sha256": "6941e03d48e23d04171a4660caa7810f1433d618fb80c790f558fba4629b7e8f"
+    },
+    "preview": {
+      "path": "artifacts/ornaments/hawkeye/two-bit/c039-vbit30/detail-preview-vbit30.svg",
+      "sha256": "a95c8c713595e76761c1d9ed76ffbad913e76edbf89fb648b78fee70fd224993"
+    }
+  }
+}

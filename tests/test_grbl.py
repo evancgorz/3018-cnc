@@ -44,7 +44,7 @@ def test_make_work_zero() -> None:
 
 
 def test_make_work_offset_axis_never_emits_other_axes() -> None:
-    assert make_work_offset_axis(1, "z", 1.5) == b"G10 L20 P1 Z1.5\n"
+    assert make_work_offset_axis(1, "z", 1.5) == b"G10 L2 P1 Z1.5\n"
 
 
 def test_commissioning_settings() -> None:

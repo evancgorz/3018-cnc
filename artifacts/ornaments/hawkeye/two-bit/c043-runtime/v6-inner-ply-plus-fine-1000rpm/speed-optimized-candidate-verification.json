@@ -1,0 +1,23 @@
+{
+  "result": "passed",
+  "candidateSha256": "6f0ea17df84e2173e9d254cde1114e5fd0058d5ad8f8586aa8589682aef14c62",
+  "parserAndGeometryChecks": {
+    "gcodeParses": true,
+    "nonnegativeWorkXY": true,
+    "rapidXYAtSafeZ": true,
+    "broadDepthGeometryRepeatedAtEachDepth": true,
+    "fineGeometryUnchanged": true,
+    "allConservativeSweepsContained": true,
+    "depthsUnchanged": true,
+    "cutFeed450Plunge120": true,
+    "spindleUnchangedAt1000Rpm": true,
+    "singleM3FinalM5M2NoM4M6": true
+  },
+  "broadXyVerticesPerPassBeforeAfter": [
+    22635,
+    18171
+  ],
+  "broadSweepLostMm2": 5.929608019279594,
+  "combinedOmissionChangeMm2": 0.42381304058998737,
+  "estimatedMinutes": 118.18117340369902
+}
